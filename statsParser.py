@@ -95,7 +95,8 @@ def main_and_args():
 	stats_df = stats_table(df)
 
 	tprint("Parsing stats table to html")
-	html_stats_df = stats_df.to_html()
+
+	html_stats_df = make_html_table(stats_df)
 
 	with open("test.html", 'w') as outfile:
 		print(html_stats_df, file=outfile)
@@ -110,105 +111,73 @@ def tprint(*args, **kwargs):
 		print("["+strftime("%H:%M:%S", gmtime())+"]"+" ".join(map(str,args)), **kwargs)
 
 def stats_table(df):
-	grouped = df.groupby(['barcode', 'filter'])
+	subgrouped = df.groupby(['barcode', 'subset'])
 
-	#groups = list(pd.DataFrame(grouped['kb'].count()).index)
+	#groups = list(pd.DataFrame(subgrouped['kb'].count()).index)
+	#df_reindexed = df.reindex()
+	grouped = df.groupby(['barcode'])
 
 	data = OrderedDict()
 	# keys equal headers in html
-	output_df = pd.DataFrame(OrderedDict((('reads' ,				grouped['kb'].count()), 
-							 			 ('kbs' ,					grouped['kb'].sum()), 
-							 			 ('mean quality' ,			grouped['qual'].mean()), 
-							 			 ('mean GC' ,				grouped['gc'].mean()),
-							 			 ('avg length' ,			grouped['kb'].mean()),
-							 			 ('median length' ,			grouped['kb'].median()),
-							 			 ('mean length longest N50',grouped['kb'].agg(avgN50longest)),
-							 			 ('longest' ,				grouped['kb'].max())
-							 			 )))
-	#tprint("\n",output_df.round(2))
-	return output_df.round(2)
+	subgrouped_output_df = pd.DataFrame(OrderedDict((('reads' ,					subgrouped['kb'].count()), 
+							 			 			 ('kbs' ,					subgrouped['kb'].sum()), 
+							 			 			 ('mean quality' ,			subgrouped['qual'].mean()), 
+							 			 			 ('mean GC' ,				subgrouped['gc'].mean()),
+							 			 			 ('avg length' ,			subgrouped['kb'].mean()),
+							 			 			 ('median length' ,			subgrouped['kb'].median()),
+							 			 			 ('mean length longest N50',subgrouped['kb'].agg(avgN50longest)),
+							 			 			 ('longest' ,				subgrouped['kb'].max())
+							 			 			 )))
+	grouped_output_df = pd.DataFrame(OrderedDict((('reads' ,					grouped['kb'].count()), 
+							 			 		  ('kbs' ,						grouped['kb'].sum()), 
+							 			 		  ('mean quality' ,				grouped['qual'].mean()), 
+							 			 		  ('mean GC' ,					grouped['gc'].mean()),
+							 			 		  ('avg length' ,				grouped['kb'].mean()),
+							 			 		  ('median length' ,			grouped['kb'].median()),
+							 			 		  ('mean length longest N50',	grouped['kb'].agg(avgN50longest)),
+							 			 		  ('longest' ,					grouped['kb'].max())
+							 			 		  )))
+	#print(pd.concat([subgrouped_output_df,grouped_output_df]))
+	#print(grouped_output_df)
+	#print(grouped_output_df.reindex([(index, 'all') for index in list(grouped_output_df.index)]))
+	#grouped_output_df = grouped_output_df.reindex([(index, 'all') for index in list(grouped_output_df.index)])
+	#print(pd.concat([subgrouped_output_df,grouped_output_df]))
+
+	#print(list(zip(list(grouped_output_df.index), ['all' for i in grouped_output_df.index])))
+	index = pd.MultiIndex.from_tuples(list(zip(list(grouped_output_df.index), ['all' for i in grouped_output_df.index])), names=['barcode', 'subset'])
+	#print(index)
+	#mod_grouped_output_df = pd.Series(grouped_output_df, index=index)
+	grouped_output_df.index = index
+	#print(grouped_output_df)
+	concat_res = pd.concat([subgrouped_output_df,grouped_output_df])
+	#print(concat_res)
+	#index = pd.MultiIndex.from_tuples(list(concat_res.index))
+	#concat_res = concat_res.reindex(['Passed','tooShort','BadQual','all'], level='subset')
+	concat_res = concat_res.sort_index(level=['barcode', 'subset'])
+	concat_res = concat_res.reindex(['Passed','tooShort','BadQual','all'], level='subset')
+	#print(concat_res)
+
+
+	return concat_res
+
+def make_html_table(df):
+	df = df.round(2)
+	#df = df.reindex(['Passed','tooShort','BadQual','all'], level='subset')
+	
+	return df.to_html()
 
 def parse_stats(fp):
 	df = pd.read_csv(fp, 
 					 sep='\t', 
 					 header=None, 
-					 names="id kb qual gc filter pore_num pore time barcode".split(" "), 
+					 names="id kb qual gc subset pore_num pore time barcode".split(" "), 
 					 index_col=[5,3], 
 					 usecols=[1,2,3,4,7,8],
 					 converters={'time':(lambda x: pd.Timestamp(x)), 'kb':(lambda x: float(x)/1000)}, 
-					 dtype={'qual':np.float32, 'gc':np.float32})
+					 dtype={'qual':float, 'gc':float})
 	start_time = df['time'].min(axis=1)
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
-	#tprint(df) 
 	return df
-
-#def parse_stats(fp, quiet):
-#	start_time = None
-#	stop_time = None
-#
-#	data = {}
-#	tot_reads = 0
-#	with open(fp, 'rU') as statsf:
-#		for line in statsf.readlines():
-#			r_id, r_len, r_q, r_gc, r_pass, r_num, p_ind, r_time, r_bar = line.strip().split('\t')
-#			#       ok    ok   ok     ok                    ok     ok 
-#
-#			r_len = int(r_len)
-#			r_q = float(r_q)
-#			r_gc = float(r_gc)
-#			#r_num = int(r_num)
-#			#p_ind = int(p_ind)
-#			r_time = dateutil.parser.parse(r_time)
-#
-#			# find first and last read
-#			if not start_time:
-#				start_time = r_time
-#				stop_time = r_time
-#			if start_time > r_time:
-#				start_time = r_time
-#			if stop_time < r_time:
-#				stop_time = r_time
-#
-#			if r_bar not in data:
-#				data[r_bar] = {'pass' : [], 'fail' : []}
-#			if (r_pass == "Passed" or r_pass == "passed"):
-#				data[r_bar]['pass'].append( [r_time, r_len, r_q, r_gc] )
-#			else:
-#				data[r_bar]['fail'].append( [r_time, r_len, r_q, r_gc] )
-#
-#			tot_reads += 1
-#			if not quiet:
-#				if tot_reads % 50000 == 0:
-#					print("|", end="")
-#					sys.stdout.flush()
-#
-#	tprint("\nParsed data of {} reads".format(tot_reads))
-#	tprint("Converting time to seconds since run started")
-#	
-#	tot_reads = 0
-#	for bc in data:
-#		for tag in ['pass', 'fail']:
-#			for i,read in enumerate(data[bc][tag]):
-#				read[0]	= int((r_time - start_time).total_seconds())
-#				data[bc][tag][i] = tuple(read)
-#
-#				tot_reads += 1
-#				if not quiet:
-#					if tot_reads % 50000 == 0:
-#						print("|", end="")
-#						sys.stdout.flush()
-#
-#			dt = np.dtype=[('seconds', 'u8'), ('length', 'u4'), ('quality', 'f4'), ('gc', 'f4')]
-#			data[bc][tag] = np.array(data[bc][tag],
-#									 dtype=dt)
-#			tprint(np.shape(data[bc][tag]))
-#
-#
-#
-#	return data
-
-
-
 
 if __name__ == '__main__':
 	QUIET = False
