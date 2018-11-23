@@ -54,7 +54,7 @@ class parse_kb_intervals(argparse.Action):
 		setattr(namespace,self.dest,intervals)
 
 def main_and_args():
-	
+
 	#### args #####
 	argument_parser = argparse.ArgumentParser(description='''Parses a stats file containing information
 													 about a nanopore sequencing run and creates
@@ -89,8 +89,8 @@ def main_and_args():
 
 	argument_parser.add_argument('--kb_intervals',
 						action=parse_kb_intervals,
-						default=[0.1,0.5,1.0,2.0],
-						help='kb intervals in minutes available for binning. (default: 0.1,0.5,1.0,2.0)')
+						default=[0.5,1.0,2.0],
+						help='kb intervals in minutes available for binning. (default: 0.5,1.0,2.0)')
 
 	args = argument_parser.parse_args()
 
@@ -103,6 +103,8 @@ def main_and_args():
 
 	if not os.path.isdir(os.path.join(args.outdir, 'plots')):
 		os.makedirs(os.path.join(args.outdir, 'plots'))
+
+	args.time_intervals = [i*60 for i in args.time_intervals]
 
 	global QUIET
 	QUIET = args.quiet
@@ -121,32 +123,88 @@ def main_and_args():
 	#with open("test.html", 'w') as outfile:
 	#	print(html_stats_df, file=outfile)
 
+	subgrouped = df.groupby(['barcode', 'subset'])
+	indexes = list(pd.DataFrame(subgrouped['kb'].count()).index)
+
 	tprint("Creating boxplots")
 	interval, num_bins = get_lowest_possible_interval(args.time_intervals,
 												 args.max_bins, 
 												 df['time'].max())
 	tprint(interval, num_bins)
-	subgrouped = df.groupby(['barcode', 'subset'])
-	indexes = list(pd.DataFrame(subgrouped['kb'].count()).index)
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('time', axis=0, ascending=True)
-		#print(sub_df)
 		bin_edges = get_bin_edges(sub_df['time'], interval)
-		#time_bins = get_bins(sub_df['time'], bin_edges)
 		for col in sub_df:
 			if col != 'time':
 				tprint("plotting {}, {}: {}".format(bc, subset, col))
 				bins = get_bins(sub_df[col], bin_edges)
-				#print([len(bin) for bin in bins])
-				intervals = [i*interval for i in range(num_bins)]
-				#print(bins)
-				#print(intervals)
-				boxplot(bins, intervals, col, os.path.join(args.outdir, "plots", "{}_{}_{}_boxplot".format(bc, subset, col)))
+				intervals = [i*interval for i in range(len(bins))]
+				boxplot(bins, intervals, interval, col, os.path.join(args.outdir, "plots", "{}_{}_{}_boxplot".format(bc, subset, col)))
 
-	
+	tprint("Creating barplots")
+	interval, num_bins = get_lowest_possible_interval(args.kb_intervals,
+												 args.max_bins, 
+												 df['kb'].max())
+	tprint(interval, num_bins)
+	for bc, subset in indexes:
+		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('kb', axis=0, ascending=True)
+		bin_edges = get_bin_edges(sub_df['kb'], interval)
+		tprint("plotting {}, {}".format(bc, subset))
+		bins = get_bins(sub_df['kb'], bin_edges)
+		intervals = [i*interval for i in range(len(bins))]
+		barplot(bins, intervals, interval, os.path.join(args.outdir, "plots", "{}_{}_barplot".format(bc, subset)))
 
 
-def boxplot(bins, intervals, ylabel, dest):
+def barplot(bins, intervals, interval, dest):
+	f = plt.figure()
+	fig = plt.gcf()
+
+	gs0 = gridspec.GridSpec(1, 1)#, width_ratios=[1], height_ratios=[0.3,1])
+	#gs0.update(wspace=0.01, hspace=0.01)
+
+	ax1 = plt.subplot(gs0[0, 0])
+	ax2 = ax1.twinx()
+
+	ax1.set_ylabel('reads')
+	ax2.set_ylabel('bases [KB]')
+	#ax1 = plt.subplot(gs0[1, 0])
+
+	reads = [len(i) for i in bins]
+	bases = [sum(i) for i in bins]
+
+	x = np.array(list(range(len(intervals)))) + 0.5
+
+	bar1 = ax1.bar(x-0.15, reads, width=0.3, color='b', align='center', label = 'reads')
+	bar2 = ax2.bar(x+0.15, bases, width=0.3, color='r', align='center', label = 'bases')
+
+	bars = [b for b in bar1+bar2]
+	#labs = [b.get_label() for b in bars]
+	ax1.legend(loc=1, bbox_to_anchor=(0.98, 0.98))
+	ax2.legend(loc=1, bbox_to_anchor=(0.98, 0.90))
+
+	#leg = plt.legend()
+	#
+	#ax1.yaxis.get_label().set_color('b')
+	#leg.texts[0].set_color('b')
+	#
+	#ax2.yaxis.get_label().set_color('r')
+	#leg.texts[1].set_color('r')
+
+	ax1.set_xticks(list(range(len(intervals)+1)))
+	xticklabels = ["{0:.1f}".format(i) for i in intervals]
+	xticklabels.append("{0:.1f}".format(intervals[-1]+interval))
+	for i in range(1,len(xticklabels), 2):
+		xticklabels[i] = ""
+	ax1.set_xticklabels(xticklabels)
+	ax1.set_xlabel("{} KB bins".format(interval))
+
+	fig.tight_layout()
+	#plt.show()
+	plt.savefig(dest)
+
+
+
+def boxplot(bins, intervals, interval, ylabel, dest):
 	f = plt.figure()
 	fig = plt.gcf()
 
@@ -161,8 +219,9 @@ def boxplot(bins, intervals, ylabel, dest):
 	ax1.boxplot(bins, showfliers=False)
 	ax1.set_xlabel("sequencing time [h]")
 	ax1.set_ylabel(ylabel)
-	ax1.set_xticks([i+0.5 for i in range(len(intervals))])
+	ax1.set_xticks([i+0.5 for i in range(len(intervals)+1)])
 	xticklabels = ["{0:.1f}".format(i/3600) for i in intervals]
+	xticklabels.append("{0:.1f}".format((intervals[-1]+interval)/3600))
 	for i in range(1,len(xticklabels), 2):
 		xticklabels[i] = ""
 	ax1.set_xticklabels(xticklabels)
@@ -189,17 +248,17 @@ def boxplot(bins, intervals, ylabel, dest):
 	plt.savefig(dest)
 
 
-def get_lowest_possible_interval(time_intervals, max_bins, max_seconds):
-	time_interval = None
+def get_lowest_possible_interval(intervals, max_bins, max_seconds):
+	interval = None
 	num_bins = None
-	for interval in time_intervals:
-		num_bins = (max_seconds // (interval*60))+1
+	for interval in intervals:
+		num_bins = (max_seconds // interval)+1
 		if num_bins <= max_bins:
-			time_interval = interval*60
+			interval = interval
 			break
-	if not time_interval:
-		time_interval = time_intervals[-1]
-	return time_interval, int(num_bins)
+	if not interval:
+		interval = intervals[-1]
+	return interval, int(num_bins)
 
 def avgN50longest(series):
 	#return series.sort_values(0, ascending=False)[:int(series.size/2)].mean()
