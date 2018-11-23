@@ -92,6 +92,10 @@ def main_and_args():
 						default=[0.5,1.0,2.0],
 						help='kb intervals in minutes available for binning. (default: 0.5,1.0,2.0)')
 
+	argument_parser.add_argument('--matplotlib_style',
+						default='default',
+						help='matplotlib style string that influences all colors and plot appearances. (default: default')
+
 	args = argument_parser.parse_args()
 
 	if not args.outdir:
@@ -105,6 +109,11 @@ def main_and_args():
 		os.makedirs(os.path.join(args.outdir, 'plots'))
 
 	args.time_intervals = [i*60 for i in args.time_intervals]
+
+	try:
+		matplotlib.style.use(args.matplotlib_style)
+	except:
+		raise argparse.ArgumentTypeError('ERR: {} is not a valid matplotlib style'.format(args.matplotlib_style))
 
 	global QUIET
 	QUIET = args.quiet
@@ -126,6 +135,8 @@ def main_and_args():
 	subgrouped = df.groupby(['barcode', 'subset'])
 	indexes = list(pd.DataFrame(subgrouped['kb'].count()).index)
 
+	#######
+
 	tprint("Creating boxplots")
 	interval, num_bins = get_lowest_possible_interval(args.time_intervals,
 												 args.max_bins, 
@@ -140,6 +151,8 @@ def main_and_args():
 				intervals = [i*interval for i in range(len(bins))]
 				boxplot(bins, intervals, interval, col, os.path.join(args.outdir, "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
 	
+	#######
+	
 	tprint("Creating barplots")
 	interval, num_bins = get_lowest_possible_interval(args.kb_intervals,
 												 args.max_bins, 
@@ -151,21 +164,74 @@ def main_and_args():
 		bins = get_bins(sub_df['kb']/1000., bin_edges)
 		intervals = [i*interval for i in range(len(bins))]
 		barplot(bins, intervals, interval, os.path.join(args.outdir, "plots", "barplot_{}_{}".format(bc, subset)))
-
-	tprint("Creating lineplots")
+	
+	#######
+	
+	tprint("Creating lineplots with two y-axes")
 	subset_grouped = df.groupby(['subset'])
-
+	
 	tprint("...plotting {}".format('all'))
 	sorted_df = df.sort_values('time', axis=0, ascending=True)
-	lineplot(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format('all')))
-
+	lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format('all')))
+	
 	for subset in set([j for i,j in indexes]):
 		tprint("...plotting {}".format(subset))
 		sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
-		lineplot(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format(subset)) )
+		lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format(subset)) )
+
+	#######
+
+	tprint("Creating multi lineplots with one y-axis")
+	subset_grouped = df.groupby(['subset'])
+
+	reads_dfs = []
+	bases_dfs = []
+
+	sorted_df = df.sort_values('time', axis=0, ascending=True)
+	reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
+					  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
+					  'all') )
+	bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
+					  (sorted_df['kb']/1000.).expanding(1).sum(),
+					  'all') )
+	for subset in set([j for i,j in indexes]):
+		sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
+		reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
+						  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
+						  subset) )
+		bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
+						  (sorted_df['kb']/1000.).expanding(1).sum(),
+						  subset) )
+	tprint("...plotting {}".format('reads'))
+	lineplot_multi(reads_dfs, "reads", os.path.join(args.outdir, "plots", "multi_lineplot_{}".format('reads')))
+	tprint("...plotting {}".format('bases'))
+	lineplot_multi(bases_dfs, "bases [Mb]", os.path.join(args.outdir, "plots", "multi_lineplot_{}".format('bases')))
 
 
-def lineplot(time, bases, dest):
+def lineplot_multi(time_dfs_lbls, y_label, dest):
+	f = plt.figure()
+	fig = plt.gcf()
+
+	gs0 = gridspec.GridSpec(1, 1)
+
+	ax1 = plt.subplot(gs0[0, 0])
+
+	ax1.set_ylabel(y_label)
+
+	for i, (time, df, lbl) in enumerate(time_dfs_lbls):
+		ax1.plot(time, df, color='C{}'.format(i), label=lbl)
+
+	ax1.legend(loc=2)
+
+	ax1.yaxis.grid(color="black", alpha=0.1)
+
+	ax1.set_xlabel('sequencing time [h]')
+
+	fig.tight_layout()
+	#plt.show()
+	plt.savefig(dest)
+
+def lineplot_2y(time, bases, dest):
 
 	#y_bases = [bases[0]]
 	#for i in range(1,len(bases)):
@@ -185,8 +251,8 @@ def lineplot(time, bases, dest):
 	ax1.set_ylabel('reads')
 	ax2.set_ylabel('bases [Mb]')
 
-	line1 = ax1.plot(time, y_reads, color='b', label='reads')
-	line2 = ax2.plot(time, y_bases, color='r', label='bases')
+	line1 = ax1.plot(time, y_reads, color='C1', label='reads')
+	line2 = ax2.plot(time, y_bases, color='C2', label='bases')
 
 	ax1.legend(loc=2, bbox_to_anchor=(0., 1.))
 	ax2.legend(loc=2, bbox_to_anchor=(0., 0.92))
@@ -217,21 +283,12 @@ def barplot(bins, intervals, interval, dest):
 
 	x = np.array(list(range(len(intervals)))) + 0.5
 
-	bar1 = ax1.bar(x-0.15, reads, width=0.3, color='b', align='center', label = 'reads')
-	bar2 = ax2.bar(x+0.15, bases, width=0.3, color='r', align='center', label = 'bases')
+	bar1 = ax1.bar(x-0.15, reads, width=0.3, color='C1', align='center', label = 'reads')
+	bar2 = ax2.bar(x+0.15, bases, width=0.3, color='C2', align='center', label = 'bases')
 
 	bars = [b for b in bar1+bar2]
-	#labs = [b.get_label() for b in bars]
 	ax1.legend(loc=1, bbox_to_anchor=(1., 1.))
 	ax2.legend(loc=1, bbox_to_anchor=(1., 0.92))
-
-	#leg = plt.legend()
-	#
-	#ax1.yaxis.get_label().set_color('b')
-	#leg.texts[0].set_color('b')
-	#
-	#ax2.yaxis.get_label().set_color('r')
-	#leg.texts[1].set_color('r')
 
 	ax1.set_xticks(list(range(len(intervals)+1)))
 	xticklabels = ["" for i in intervals]
@@ -240,6 +297,8 @@ def barplot(bins, intervals, interval, dest):
 	for i in range(0,len(xticklabels)-tickspace, max(tickspace,1)):
 		try: # fails if only one bin
 			xticklabels[i] = "{0:.1f}".format(intervals[i])
+		except:
+			pass
 	ax1.set_xticklabels(xticklabels)
 	ax1.set_xlabel("{} kb bins".format(interval))
 
@@ -271,6 +330,8 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 	for i in range(0,len(xticklabels)-tickspace, max(tickspace,1)):
 		try: # fails if only one bin
 			xticklabels[i] = "{0:.1f}".format(intervals[i]/SECS_TO_HOURS)
+		except:
+			pass
 	ax1.tick_params(top=False, bottom=True, left=True, right=False,
 				   labeltop=False, labelbottom=True)
 	ax1.yaxis.grid(color="black", alpha=0.1)
