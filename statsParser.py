@@ -130,30 +130,73 @@ def main_and_args():
 	interval, num_bins = get_lowest_possible_interval(args.time_intervals,
 												 args.max_bins, 
 												 df['time'].max())
-	tprint(interval, num_bins)
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('time', axis=0, ascending=True)
 		bin_edges = get_bin_edges(sub_df['time'], interval)
 		for col in sub_df:
 			if col != 'time':
-				tprint("plotting {}, {}: {}".format(bc, subset, col))
+				tprint("...plotting {}, {}: {}".format(bc, subset, col))
 				bins = get_bins(sub_df[col], bin_edges)
 				intervals = [i*interval for i in range(len(bins))]
-				boxplot(bins, intervals, interval, col, os.path.join(args.outdir, "plots", "{}_{}_{}_boxplot".format(bc, subset, col)))
-
+				boxplot(bins, intervals, interval, col, os.path.join(args.outdir, "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
+	
 	tprint("Creating barplots")
 	interval, num_bins = get_lowest_possible_interval(args.kb_intervals,
 												 args.max_bins, 
 												 df['kb'].max())
-	tprint(interval, num_bins)
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('kb', axis=0, ascending=True)
 		bin_edges = get_bin_edges(sub_df['kb'], interval)
-		tprint("plotting {}, {}".format(bc, subset))
-		bins = get_bins(sub_df['kb'], bin_edges)
+		tprint("...plotting {}, {}".format(bc, subset))
+		bins = get_bins(sub_df['kb']/1000., bin_edges)
 		intervals = [i*interval for i in range(len(bins))]
-		barplot(bins, intervals, interval, os.path.join(args.outdir, "plots", "{}_{}_barplot".format(bc, subset)))
+		barplot(bins, intervals, interval, os.path.join(args.outdir, "plots", "barplot_{}_{}".format(bc, subset)))
 
+	tprint("Creating lineplots")
+	subset_grouped = df.groupby(['subset'])
+
+	tprint("...plotting {}".format('all'))
+	sorted_df = df.sort_values('time', axis=0, ascending=True)
+	lineplot(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format('all')))
+
+	for subset in set([j for i,j in indexes]):
+		tprint("...plotting {}".format(subset))
+		sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
+		lineplot(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format(subset)) )
+
+
+def lineplot(time, bases, dest):
+
+	#y_bases = [bases[0]]
+	#for i in range(1,len(bases)):
+	#	y_bases.append(y_bases[i-1] + bases[i])
+	y_bases = bases.expanding(1).sum()
+
+	y_reads = pd.DataFrame({'count':range(1,bases.size+1)})
+
+	f = plt.figure()
+	fig = plt.gcf()
+
+	gs0 = gridspec.GridSpec(1, 1)
+
+	ax1 = plt.subplot(gs0[0, 0])
+	ax2 = ax1.twinx()
+
+	ax1.set_ylabel('reads')
+	ax2.set_ylabel('bases [Mb]')
+
+	line1 = ax1.plot(time, y_reads, color='b', label='reads')
+	line2 = ax2.plot(time, y_bases, color='r', label='bases')
+
+	ax1.legend(loc=2, bbox_to_anchor=(0., 1.))
+	ax2.legend(loc=2, bbox_to_anchor=(0., 0.92))
+
+	#ax1.set_xticks()
+	ax1.set_xlabel('sequencing time [h]')
+
+	fig.tight_layout()
+	#plt.show()
+	plt.savefig(dest)
 
 def barplot(bins, intervals, interval, dest):
 	f = plt.figure()
@@ -166,7 +209,7 @@ def barplot(bins, intervals, interval, dest):
 	ax2 = ax1.twinx()
 
 	ax1.set_ylabel('reads')
-	ax2.set_ylabel('bases [KB]')
+	ax2.set_ylabel('bases [Mb]')
 	#ax1 = plt.subplot(gs0[1, 0])
 
 	reads = [len(i) for i in bins]
@@ -179,8 +222,8 @@ def barplot(bins, intervals, interval, dest):
 
 	bars = [b for b in bar1+bar2]
 	#labs = [b.get_label() for b in bars]
-	ax1.legend(loc=1, bbox_to_anchor=(0.98, 0.98))
-	ax2.legend(loc=1, bbox_to_anchor=(0.98, 0.90))
+	ax1.legend(loc=1, bbox_to_anchor=(1., 1.))
+	ax2.legend(loc=1, bbox_to_anchor=(1., 0.92))
 
 	#leg = plt.legend()
 	#
@@ -191,12 +234,14 @@ def barplot(bins, intervals, interval, dest):
 	#leg.texts[1].set_color('r')
 
 	ax1.set_xticks(list(range(len(intervals)+1)))
-	xticklabels = ["{0:.1f}".format(i) for i in intervals]
+	xticklabels = ["" for i in intervals]
 	xticklabels.append("{0:.1f}".format(intervals[-1]+interval))
-	for i in range(1,len(xticklabels), 2):
-		xticklabels[i] = ""
+	tickspace = len(intervals)//TICKLBLS
+	for i in range(0,len(xticklabels)-tickspace, max(tickspace,1)):
+		try: # fails if only one bin
+			xticklabels[i] = "{0:.1f}".format(intervals[i])
 	ax1.set_xticklabels(xticklabels)
-	ax1.set_xlabel("{} KB bins".format(interval))
+	ax1.set_xlabel("{} kb bins".format(interval))
 
 	fig.tight_layout()
 	#plt.show()
@@ -220,11 +265,12 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 	ax1.set_xlabel("sequencing time [h]")
 	ax1.set_ylabel(ylabel)
 	ax1.set_xticks([i+0.5 for i in range(len(intervals)+1)])
-	xticklabels = ["{0:.1f}".format(i/3600) for i in intervals]
-	xticklabels.append("{0:.1f}".format((intervals[-1]+interval)/3600))
-	for i in range(1,len(xticklabels), 2):
-		xticklabels[i] = ""
-	ax1.set_xticklabels(xticklabels)
+	xticklabels = ["" for i in intervals]
+	xticklabels.append("{0:.1f}".format((intervals[-1]+interval)/SECS_TO_HOURS))
+	tickspace = len(intervals)//TICKLBLS
+	for i in range(0,len(xticklabels)-tickspace, max(tickspace,1)):
+		try: # fails if only one bin
+			xticklabels[i] = "{0:.1f}".format(intervals[i]/SECS_TO_HOURS)
 	ax1.tick_params(top=False, bottom=True, left=True, right=False,
 				   labeltop=False, labelbottom=True)
 	ax1.yaxis.grid(color="black", alpha=0.1)
@@ -339,4 +385,6 @@ def get_bins(df, bin_edges):
 
 if __name__ == '__main__':
 	QUIET = False
+	TICKLBLS = 6
+	SECS_TO_HOURS = 3600.
 	main_and_args()
