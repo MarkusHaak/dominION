@@ -137,75 +137,101 @@ def main_and_args():
 
 	#######
 
-	tprint("Creating boxplots")
-	interval, num_bins = get_lowest_possible_interval(args.time_intervals,
-												 args.max_bins, 
-												 df['time'].max())
-	for bc, subset in indexes:
-		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('time', axis=0, ascending=True)
-		bin_edges = get_bin_edges(sub_df['time'], interval)
-		for col in sub_df:
-			if col != 'time':
-				tprint("...plotting {}, {}: {}".format(bc, subset, col))
-				bins = get_bins(sub_df[col], bin_edges)
-				intervals = [i*interval for i in range(len(bins))]
-				boxplot(bins, intervals, interval, col, os.path.join(args.outdir, "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
-	
-	#######
-	
-	tprint("Creating barplots")
-	interval, num_bins = get_lowest_possible_interval(args.kb_intervals,
-												 args.max_bins, 
-												 df['kb'].max())
-	for bc, subset in indexes:
-		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('kb', axis=0, ascending=True)
-		bin_edges = get_bin_edges(sub_df['kb'], interval)
-		tprint("...plotting {}, {}".format(bc, subset))
-		bins = get_bins(sub_df['kb']/1000., bin_edges)
-		intervals = [i*interval for i in range(len(bins))]
-		barplot(bins, intervals, interval, os.path.join(args.outdir, "plots", "barplot_{}_{}".format(bc, subset)))
-	
-	#######
-	
-	tprint("Creating lineplots with two y-axes")
-	subset_grouped = df.groupby(['subset'])
-	
-	tprint("...plotting {}".format('all'))
-	sorted_df = df.sort_values('time', axis=0, ascending=True)
-	lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format('all')))
-	
-	for subset in set([j for i,j in indexes]):
-		tprint("...plotting {}".format(subset))
-		sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
-		lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format(subset)) )
+	#tprint("Creating boxplots")
+	#interval, num_bins = get_lowest_possible_interval(args.time_intervals,
+	#											 args.max_bins, 
+	#											 df['time'].max())
+	#for bc, subset in indexes:
+	#	sub_df = subgrouped.get_group( (bc, subset) ).sort_values('time', axis=0, ascending=True)
+	#	bin_edges = get_bin_edges(sub_df['time'], interval)
+	#	for col in sub_df:
+	#		if col != 'time':
+	#			tprint("...plotting {}, {}: {}".format(bc, subset, col))
+	#			bins = get_bins(sub_df[col], bin_edges)
+	#			intervals = [i*interval for i in range(len(bins))]
+	#			boxplot(bins, intervals, interval, col, os.path.join(args.outdir, "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
+	#
+	########
+	#
+	#tprint("Creating barplots")
+	#interval, num_bins = get_lowest_possible_interval(args.kb_intervals,
+	#											 args.max_bins, 
+	#											 df['kb'].max())
+	#for bc, subset in indexes:
+	#	sub_df = subgrouped.get_group( (bc, subset) ).sort_values('kb', axis=0, ascending=True)
+	#	bin_edges = get_bin_edges(sub_df['kb'], interval)
+	#	tprint("...plotting {}, {}".format(bc, subset))
+	#	bins = get_bins(sub_df['kb']/1000., bin_edges)
+	#	intervals = [i*interval for i in range(len(bins))]
+	#	barplot(bins, intervals, interval, os.path.join(args.outdir, "plots", "barplot_{}_{}".format(bc, subset)))
+	#
+	########
+	#
+	#tprint("Creating lineplots with two y-axes")
+	#subset_grouped = df.groupby(['subset'])
+	#
+	#tprint("...plotting {}".format('all'))
+	#sorted_df = df.sort_values('time', axis=0, ascending=True)
+	#lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format('all')))
+	#
+	#for subset in set([j for i,j in indexes]):
+	#	tprint("...plotting {}".format(subset))
+	#	sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
+	#	lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format(subset)) )
+	#
+	########
+	#
+	#tprint("Creating multi lineplots with one y-axis")
+	#subset_grouped = df.groupby(['subset'])
+	#
+	#reads_dfs = []
+	#bases_dfs = []
+	#
+	#sorted_df = df.sort_values('time', axis=0, ascending=True)
+	#reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
+	#				  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
+	#				  'all') )
+	#bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
+	#				  (sorted_df['kb']/1000.).expanding(1).sum(),
+	#				  'all') )
+	#for subset in set([j for i,j in indexes]):
+	#	sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
+	#	reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
+	#					  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
+	#					  subset) )
+	#	bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
+	#					  (sorted_df['kb']/1000.).expanding(1).sum(),
+	#					  subset) )
+	#tprint("...plotting {}".format('reads'))
+	#lineplot_multi(reads_dfs, "reads", os.path.join(args.outdir, "plots", "multi_lineplot_{}".format('reads')))
+	#tprint("...plotting {}".format('bases'))
+	#lineplot_multi(bases_dfs, "bases [Mb]", os.path.join(args.outdir, "plots", "multi_lineplot_{}".format('bases')))
 
 	#######
 
-	tprint("Creating multi lineplots with one y-axis")
-	subset_grouped = df.groupby(['subset'])
+	exit()
 
-	reads_dfs = []
-	bases_dfs = []
+	tprint("Creating pore heatmap")
+	pore_grouped = df.groupby(['pore'])
+	#pore_indexes = list(pd.DataFrame(pore_grouped['kb'].count()).index)
+	pore_bases = pore_grouped['kb'].sum()
+	pore_indexes = list(pore_bases.index)
+	#print(pore_bases)
+	#print(pore_bases.index)
+	#print(pore_indexes)
+	max_pore_index = max(pore_indexes)
 
-	sorted_df = df.sort_values('time', axis=0, ascending=True)
-	reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
-					  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
-					  'all') )
-	bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
-					  (sorted_df['kb']/1000.).expanding(1).sum(),
-					  'all') )
-	for subset in set([j for i,j in indexes]):
-		sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
-		reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
-						  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
-						  subset) )
-		bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
-						  (sorted_df['kb']/1000.).expanding(1).sum(),
-						  subset) )
-	tprint("...plotting {}".format('reads'))
-	lineplot_multi(reads_dfs, "reads", os.path.join(args.outdir, "plots", "multi_lineplot_{}".format('reads')))
-	tprint("...plotting {}".format('bases'))
-	lineplot_multi(bases_dfs, "bases [Mb]", os.path.join(args.outdir, "plots", "multi_lineplot_{}".format('bases')))
+
+def pore_heatmap(max_pore_index, pore_bases, pore_indexes, dest):
+	f = plt.figure()
+	fig = plt.gcf()
+	gs0 = gridspec.GridSpec(1, 1)
+	ax1 = plt.subplot(gs0[0, 0])
+
+	x_dim = 32
+	data = []
+	#for 
+
 
 
 def lineplot_multi(time_dfs_lbls, y_label, dest):
@@ -406,7 +432,7 @@ def stats_table(df):
 	grouped_output_df.index = index
 	concat_res = pd.concat([subgrouped_output_df,grouped_output_df])
 	concat_res = concat_res.sort_index(level=['barcode', 'subset'])
-	concat_res = concat_res.reindex(['Passed','tooShort','BadQual','all'], level='subset')
+	concat_res = concat_res.reindex(['Passed','tooShort','BadQual','all'], level='subset') #TODO
 
 	return concat_res
 
@@ -420,12 +446,19 @@ def parse_stats(fp):
 					 sep='\t', 
 					 header=None, 
 					 names="id kb qual gc subset pore_num pore time barcode".split(" "), 
-					 index_col=[5,3], 
-					 usecols=[1,2,3,4,7,8],
+					 usecols=[1,2,3,4,5,6,7,8],
+					 index_col=[7,3,5], # referes to usecols
 					 converters={'time':(lambda x: pd.Timestamp(x)), 'kb':(lambda x: float(x)/1000)}, 
 					 dtype={'qual':float, 'gc':float})
+
+	print(df.sort_values('time', axis=0, ascending=True))
+
 	start_time = df['time'].min(axis=1)
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
+	
+	#exit()
+	print(df.groupby(['pore'])['pore_num'].count().sort_values(ascending=True))
+	print(df.groupby(['pore'])['pore_num'].count().sort_index(ascending=True))
 	return df
 
 def get_bin_edges(sorted_df, interval):
