@@ -65,13 +65,14 @@ def main_and_args():
 			time.sleep(1)
 	except KeyboardInterrupt:
 		for watcher in watchers:
+			print(watcher.channel_report.mux_scans)
 			watcher.observer.stop()
 	for watcher in watchers:
 		watcher.observer.join()
 
 
 class ChannelReport():
-	data = OrderedDict([
+	run_data = OrderedDict([
 		('run_id', None),
 		('user_filename_input', None), # user Run title
 		('protocol_id', None),
@@ -80,25 +81,50 @@ class ChannelReport():
 		('stop time', None),
 		('asic_id_eeprom', None),
 		('asic_id', None),
-		('acquisition_run_id', None)
+		('acquisition_run_id', None),
 		])
 
+	empty_mux = OrderedDict([('1',[]), ('2',[]), ('3',[]), ('4',[])])
+
 	def __init__(self, minion_id):
-		self.data = copy.deepcopy(self.data)
-		self.data['minion_id'] = minion_id
+		self.run_data = copy.deepcopy(self.run_data)
+		self.mux_scans = []
+		self.run_data['minion_id'] = minion_id
 
 	def update(self, content, overwrite=False):
 		for key in content:
-			if key in self.data:
-				if self.data[key]:
+			if key in self.run_data:
+				if self.run_data[key]:
 					if overwrite:
-						logging.info("changing the current value of {} ({}) to {}".format(key, self.data[key], content[key]))
-						self.data[key] = content[key]
+						logging.info("changing the current value of {} ({}) to {}".format(key, self.run_data[key], content[key]))
+						self.run_data[key] = content[key]
 					else:
-						if VERBOSE: logging.info("not changing the current value of {} ({}) to {}".format(key, self.data[key], content[key]))
+						if VERBOSE: logging.info("not changing the current value of {} ({}) to {}".format(key, self.run_data[key], content[key]))
 					continue
-			self.data[key] = content[key]
+			self.run_data[key] = content[key]
 			logging.info("new value for {} : {}".format(key, content[key]))
+
+	def update_mux(self, group, channels, mux, timestamp):
+		if self.mux_scans:
+			if len(self.mux_scans[-1][group]) < 4:
+				self.mux_scans[-1][group].append(int(channels))
+				if VERBOSE: logging.info("update mux: group {} has {} active channels in mux {}".format(group, channels, mux))
+		#if group == "4" and mux == "4":
+		#	self.mux_scans[-1]['total'] = sum([sum(self.mux_scans[-1][i]) for i in "1234"])
+		#	logging.info("calculated mux total")
+		#	self.mux_scans[-1]['timestamp'] = timestamp
+		#	self.mux_scans[-1]['total'] = sum([sum(self.mux_scans[-1][i]) for i in "1234"])
+		#	self.mux_scans.append(copy.deepcopy(empty_mux))
+
+	def new_mux(self, timestamp):
+		if self.mux_scans:
+			self.mux_scans[-1]['total'] = sum([sum(self.mux_scans[-1][i]) for i in "1234"])
+			logging.info("calculated mux total")
+		self.mux_scans.append(copy.deepcopy(self.empty_mux))
+		self.mux_scans[-1]['timestamp'] = timestamp
+		logging.info("added new mux result")
+
+
 
 
 
@@ -129,6 +155,20 @@ class Watcher():
 			# case content is new data for channel report
 			if isinstance(content[0], dict):
 				self.channel_report.update(content[0], content[1])
+
+			# case timestamped information
+			else:
+				timestamp = content[0]
+				# case content is mux information
+				if isinstance(content[1], tuple):
+					self.channel_report.update_mux(content[1][0], content[1][1], content[1][2], timestamp)
+				elif content[1] == "Finished Mux Scan":
+					self.channel_report.new_mux(timestamp)
+				elif content[1] == "sequencing start":
+					#TODO: start porechop & filter & rsync
+					logging.info("SEQUENCING STARTS")
+					pass
+
 
 			#print(self.channel_report.data)
 
@@ -246,7 +286,7 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 		if 		"[mgmt/info]: : active_device_set" 						in line or \
 		   		"[engine/info]: : flowcell_discovered" 					in line or \
 		   		"[script/info]: : protocol_started"						in line:
-		   	for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
+			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 				dict_content[m.group(1)] = m.group(2)
 
 		elif   	"[engine/info]: : data_acquisition_started"				in line or \
@@ -270,6 +310,17 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 				"INFO - Context tags set to"							in line:
 			for m in re.finditer("'([^\s,]+)': u?'([^\s,]+)'", line):
 				dict_content[m.group(1)] = m.group(2)
+
+		elif	"bream.core.base.database - INFO - group"				in line:
+			for m in re.finditer("group ([0-9]+) has ([0-9]+) channels in mux ([0-9]+)", line):
+				self.q.put( (line[:23], (m.group(1), m.group(2), m.group(3))) )
+
+		elif	"INFO - [user message]--> Finished Mux Scan"			in line:
+			self.q.put( (line[:23], "Finished Mux Scan") )
+
+		elif	"INFO - STARTING MAIN LOOP"								in line:
+			dict_content["sequencing_start_time"] = line[:23]
+			self.q.put( (line[:23], "sequencing start") )
 
 		if dict_content:
 			self.q.put( (dict_content, overwrite) )
