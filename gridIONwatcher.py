@@ -65,8 +65,12 @@ def main_and_args():
 			time.sleep(1)
 	except KeyboardInterrupt:
 		for watcher in watchers:
-			print(watcher.channel_report.mux_scans)
 			watcher.observer.stop()
+			print('')
+			print('')
+			for key in watcher.channel_report.run_data:
+				if watcher.channel_report.run_data[key]:
+					print(key, ":\t\t", watcher.channel_report.run_data[key])
 	for watcher in watchers:
 		watcher.observer.join()
 
@@ -81,6 +85,7 @@ class ChannelReport():
 		('stop time', None),
 		('asic_id_eeprom', None),
 		('asic_id', None),
+		('flowcell_id', None),
 		('acquisition_run_id', None),
 		])
 
@@ -119,10 +124,10 @@ class ChannelReport():
 	def new_mux(self, timestamp):
 		if self.mux_scans:
 			self.mux_scans[-1]['total'] = sum([sum(self.mux_scans[-1][i]) for i in "1234"])
-			logging.info("calculated mux total")
+			logging.info("calculated mux total to {}".format(self.mux_scans[-1]['total']))
 		self.mux_scans.append(copy.deepcopy(self.empty_mux))
 		self.mux_scans[-1]['timestamp'] = timestamp
-		logging.info("added new mux result")
+		if VERBOSE: logging.info("added new mux result")
 
 
 
@@ -168,6 +173,8 @@ class Watcher():
 					#TODO: start porechop & filter & rsync
 					logging.info("SEQUENCING STARTS")
 					pass
+				elif content[1] == "flowcell discovered":
+					logging.info("FLOWCELL DISCOVERED")
 
 
 			#print(self.channel_report.data)
@@ -284,10 +291,15 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 		overwrite = False
 
 		if 		"[mgmt/info]: : active_device_set" 						in line or \
-		   		"[engine/info]: : flowcell_discovered" 					in line or \
 		   		"[script/info]: : protocol_started"						in line:
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 				dict_content[m.group(1)] = m.group(2)
+
+		elif	"[engine/info]: : flowcell_discovered" 					in line:
+			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
+				dict_content[m.group(1)] = m.group(2)
+				overwrite = True
+			self.q.put( (line[:23], "flowcell discovered") )
 
 		elif   	"[engine/info]: : data_acquisition_started"				in line or \
 		   		"[saturation_control/info]: : saturation_mode_changed" 	in line:
@@ -310,6 +322,8 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 				"INFO - Context tags set to"							in line:
 			for m in re.finditer("'([^\s,]+)': u?'([^\s,]+)'", line):
 				dict_content[m.group(1)] = m.group(2)
+			if 'filename' in dict_content:
+				dict_content['flowcell_id'] = dict_content['filename'].split("_")[2]
 
 		elif	"bream.core.base.database - INFO - group"				in line:
 			for m in re.finditer("group ([0-9]+) has ([0-9]+) channels in mux ([0-9]+)", line):
