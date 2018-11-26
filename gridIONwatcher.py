@@ -31,13 +31,18 @@ def main_and_args():
 						default='/var/log/MinKNOW',
 						help='Path to the base directory of GridIONs log files, contains the manager log files. (default: /var/log/MinKNOW)')
 
+	argument_parser.add_argument('-m', '--modified_as_created',
+						action='store_true',
+						help='''Handle file modifications as if the file was created, meaning that the latest changed file is seen as the current 
+								log file.''')
+
 	argument_parser.add_argument('-v', '--verbose',
 						action='store_true',
-						help='No status information is printed to stdout.')
+						help='Additional status information is printed to stdout.')
 
-	argument_parser.add_argument('-q', '--quiet',
+	argument_parser.add_argument('-q', '--quiet', #TODO: implement
 						action='store_true',
-						help='No status information is printed to stdout.')
+						help='No prints to stdout.')
 
 
 	args = argument_parser.parse_args()
@@ -55,7 +60,7 @@ def main_and_args():
 
 	logging.info("starting watchers")
 	for channel in range(5):
-		watchers.append(Watcher(args.log_basedir, channel))
+		watchers.append(Watcher(args.log_basedir, channel, args.modified_as_created))
 
 	logging.info("entering endless loop")
 	try:
@@ -63,14 +68,21 @@ def main_and_args():
 			for watcher in watchers:
 				watcher.check_q()
 			time.sleep(1)
-	except KeyboardInterrupt:
+	except:
+		logging.info("### Collected information ###")
 		for watcher in watchers:
 			watcher.observer.stop()
-			print('')
 			print('')
 			for key in watcher.channel_report.run_data:
 				if watcher.channel_report.run_data[key]:
 					print(key, ":\t\t", watcher.channel_report.run_data[key])
+			print('')
+			for i,mux_scan in enumerate(watcher.channel_report.mux_scans):
+				print("mux_scan {}:".format(i))
+				for key in mux_scan:
+					print(key, ":\t\t", mux_scan[key])
+			#print(watcher.channel_report.mux_scans)
+			print('')
 	for watcher in watchers:
 		watcher.observer.join()
 
@@ -114,12 +126,12 @@ class ChannelReport():
 			if len(self.mux_scans[-1][group]) < 4:
 				self.mux_scans[-1][group].append(int(channels))
 				if VERBOSE: logging.info("update mux: group {} has {} active channels in mux {}".format(group, channels, mux))
-		#if group == "4" and mux == "4":
-		#	self.mux_scans[-1]['total'] = sum([sum(self.mux_scans[-1][i]) for i in "1234"])
-		#	logging.info("calculated mux total")
-		#	self.mux_scans[-1]['timestamp'] = timestamp
-		#	self.mux_scans[-1]['total'] = sum([sum(self.mux_scans[-1][i]) for i in "1234"])
-		#	self.mux_scans.append(copy.deepcopy(empty_mux))
+
+	def update_mux_group_totals(self, group, channels, timestamp):
+		if not self.mux_scans:
+			self.new_mux(timestamp)
+		self.mux_scans[-1]['group {} total'.format(group)] = channels
+		if VERBOSE: logging.info("update mux group totals: group {} has a total of {} active channels".format(group, channels))
 
 	def new_mux(self, timestamp):
 		if self.mux_scans:
@@ -135,11 +147,11 @@ class ChannelReport():
 
 class Watcher():
 
-	def __init__(self, log_basedir, channel):
+	def __init__(self, log_basedir, channel, modified_as_created):
 		self.q = mp.SimpleQueue()
 		self.channel = channel
 		self.observed_dir = os.path.join(log_basedir, "GA{}0000".format(channel+1))
-		self.event_handler = StatsFilesEventHandler(self.q)
+		self.event_handler = StatsFilesEventHandler(self.q, modified_as_created)
 		self.observer = Observer()
 		self.observer.schedule(self.event_handler, 
 							   self.observed_dir, 
@@ -166,11 +178,15 @@ class Watcher():
 				timestamp = content[0]
 				# case content is mux information
 				if isinstance(content[1], tuple):
-					self.channel_report.update_mux(content[1][0], content[1][1], content[1][2], timestamp)
+					if len(content[1]) == 3:
+						self.channel_report.update_mux(content[1][0], content[1][1], content[1][2], timestamp)
+					elif len(content[1]) == 2:
+						self.channel_report.update_mux_group_totals(content[1][0], content[1][1], timestamp)
 				elif content[1] == "Finished Mux Scan":
 					self.channel_report.new_mux(timestamp)
 				elif content[1] == "sequencing start":
 					#TODO: start porechop & filter & rsync
+					#TODO: start regular creation of plots
 					logging.info("SEQUENCING STARTS")
 					pass
 				elif content[1] == "flowcell discovered":
@@ -222,9 +238,10 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 	control_server_log = None
 	bream_log = None
 
-	def __init__(self, q):
+	def __init__(self, q, modified_as_created):
 		super(StatsFilesEventHandler, self).__init__()
 		self.q = q
+		self.modified_as_created = modified_as_created
 
 	def on_moved(self, event):
 	    pass
@@ -236,18 +253,18 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 			if basename.startswith("control_server_log"):
 				if self.control_server_log:
 					self.file_handler.close_file(event.src_path)
-					if VERBOSE: logging.info("Replacing current control_server_log file {} with {}".format(self.control_server_log, event.src_path))
-					#TODO: sent report
+					logging.info("Replacing current control_server_log file {} with {}".format(self.control_server_log, event.src_path))
+					#TODO: sent report, ( and reset all opened files ? )
 				self.control_server_log = event.src_path
-				if VERBOSE: logging.info("New control_server_log file {}".format(self.control_server_log))
+				logging.info("New control_server_log file {}".format(self.control_server_log))
 				process_function = self.parse_server_log_line
 			elif basename.startswith("bream"):
-				#TODO: handle new Experiment?
 				if self.bream_log:
 					self.file_handler.close_file(event.src_path)
-					if VERBOSE: logging.info("Replacing current bream_log file {} with {}".format(self.bream_log, event.src_path))
+					logging.info("Replacing current bream_log file {} with {}".format(self.bream_log, event.src_path))
+					#TODO: Find out if more than one bream log file can belong to a running experiment (probably not)
 				self.bream_log = event.src_path
-				if VERBOSE: logging.info("New bream_log file {}".format(self.bream_log))
+				logging.info("New bream_log file {}".format(self.bream_log))
 				process_function = self.parse_bream_log_line
 			else:
 				if VERBOSE: logging.info("File {} is not of concern for this tool".format(event.src_path))
@@ -284,7 +301,10 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 					return
 				self.file_handler.process_lines_until_EOF(process_function, event.src_path)
 			else:
-				if VERBOSE: logging.info("File {} existed before this script was started".format(event.src_path))
+				if self.modified_as_created:
+					self.on_created(event)
+				else:
+					if VERBOSE: logging.info("File {} existed before this script was started".format(event.src_path))
 
 	def parse_server_log_line(self, line):
 		dict_content = {}
@@ -320,7 +340,7 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 
 		elif 	"INFO - Adding the following context_tags:" 			in line or \
 				"INFO - Context tags set to"							in line:
-			for m in re.finditer("'([^\s,]+)': u?'([^\s,]+)'", line):
+			for m in re.finditer("'([^\s,]+)'[:,] u?'([^\s,]+)'", line):
 				dict_content[m.group(1)] = m.group(2)
 			if 'filename' in dict_content:
 				dict_content['flowcell_id'] = dict_content['filename'].split("_")[2]
@@ -328,6 +348,10 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 		elif	"bream.core.base.database - INFO - group"				in line:
 			for m in re.finditer("group ([0-9]+) has ([0-9]+) channels in mux ([0-9]+)", line):
 				self.q.put( (line[:23], (m.group(1), m.group(2), m.group(3))) )
+
+		elif	"[user message]--> group "						in line.lower():
+			for m in re.finditer("roup ([0-9]+) has ([0-9]+) active", line):
+				self.q.put( (line[:23], (m.group(1), m.group(2))) )
 
 		elif	"INFO - [user message]--> Finished Mux Scan"			in line:
 			self.q.put( (line[:23], "Finished Mux Scan") )

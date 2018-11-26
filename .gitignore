@@ -3,4 +3,5 @@ plots
 *.txt
 *test*
 MinKNOW
+*.log
 minknow*
