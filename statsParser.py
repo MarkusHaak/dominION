@@ -363,9 +363,9 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 	ax1.yaxis.grid(color="black", alpha=0.1)
 	ax1.set_axisbelow(True)
 
-	ax0.bar([i for i in range(len(bins))], [len(i) for i in bins], align='center', color='grey')
-	ax0.set_xlim([0.5, len(bins)+0.5])
-	ax0.set_ylim([0,max([len(i) for i in bins])])
+	ax0.bar([i for i in range(len(bins))], [len(i) for i in bins], align='center', color='grey', width=0.4)
+	ax0.set_xlim([-0.5, len(bins)-0.5])
+	ax0.set_ylim([0,max([len(i) for i in bins])*1.2])
 	ax0.tick_params(top=False, bottom=False, left=True, right=False,
 				   labeltop=False, labelbottom=False)
 	#for edge, spine in ax0.spines.items():
@@ -448,8 +448,13 @@ def parse_stats(fp):
 					 names="id kb qual gc subset pore_num pore time barcode".split(" "), 
 					 usecols=[1,2,3,4,5,6,7,8],
 					 index_col=[7,3,5], # referes to usecols
-					 converters={'time':(lambda x: pd.Timestamp(x)), 'kb':(lambda x: float(x)/1000)}, 
-					 dtype={'qual':float, 'gc':float})
+					 #converters={'time':(lambda x: pd.Timestamp(x)), 'kb':(lambda x: float(x)/1000)}, 
+					 converters={'time':(lambda x: pd.Timestamp(x))},
+					 dtype={'qual':float, 'gc':float, 'kb':float})
+	#print(df)
+	df['kb'] = df['kb']/1000
+	#print(df)
+	#exit()
 
 	print(df.sort_values('time', axis=0, ascending=True))
 
@@ -457,8 +462,8 @@ def parse_stats(fp):
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
 	
 	#exit()
-	print(df.groupby(['pore'])['pore_num'].count().sort_values(ascending=True))
-	print(df.groupby(['pore'])['pore_num'].count().sort_index(ascending=True))
+	#print(df.groupby(['pore'])['pore_num'].count().sort_values(ascending=True))
+	#print(df.groupby(['pore'])['pore_num'].count().sort_index(ascending=True))
 	return df
 
 def get_bin_edges(sorted_df, interval):
