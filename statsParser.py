@@ -107,7 +107,7 @@ def get_argument_parser():
 						default=[.5,1.,2.,5.],
 						help='kb intervals available for binning. (default: .5,1.,2.,5.)')
 
-	argument_parser.add_argument('--qc_intervals',
+	argument_parser.add_argument('--gc_intervals',
 						action=parse_kb_intervals,
 						default=[.2,.5,1.,2.,5.],
 						help='kb intervals available for binning. (default: .2,.5,1.,2.,5.)')
@@ -203,46 +203,61 @@ def main(args):
 	#######
 
 	tprint("Creating boxplots")
-	interval, num_bins = get_lowest_possible_interval(args.time_intervals,
-												 args.max_bins, 
-												 df['time'].max())
+	#interval, offset, num_bins = get_lowest_possible_interval(args.time_intervals,
+	#											 args.max_bins, 
+	#											 df['time'].min(), 
+	#											 df['time'].max())
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('time', axis=0, ascending=True)
-		bin_edges = get_bin_edges(sub_df['time'], interval)
+		interval, offset, num_bins = get_lowest_possible_interval(args.time_intervals,
+																  args.max_bins, 
+																  sub_df['time'].min(), 
+																  sub_df['time'].max())
+		bin_edges, offsetti = get_bin_edges(sub_df['time'], interval)
 		for col in sub_df:
 			if col != 'time':
 				tprint("...plotting {}, {}: {}".format(bc, subset, col))
 				bins = get_bins(sub_df[col], bin_edges)
-				intervals = [i*interval for i in range(len(bins))]
+				intervals = [(offset+i)*interval for i in range(len(bins))]
 				boxplot(bins, intervals, interval, col, os.path.join(args.outdir, 'res', "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
 	
 	#######
 	
 	tprint("Creating kb-bins barplots")
-	interval, num_bins = get_lowest_possible_interval(list(np.array(args.kb_intervals)*1000),
-												 args.max_bins, 
-												 df['bases'].max())
+	#interval, offset, num_bins = get_lowest_possible_interval(list(np.array(args.kb_intervals)*1000),
+	#											 args.max_bins, 
+	#											 df['bases'].min(), 
+	#											 df['bases'].max())
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('bases', axis=0, ascending=True)
-		bin_edges = get_bin_edges(sub_df['bases'], interval)
+		interval, offset, num_bins = get_lowest_possible_interval(list(np.array(args.kb_intervals)*1000),
+																  args.max_bins, 
+																  sub_df['bases'].min(), 
+																  sub_df['bases'].max())
+		bin_edges, offsetti = get_bin_edges(sub_df['bases'], interval)
 		tprint("...plotting {}, {}".format(bc, subset))
 		bins = get_bins(sub_df['bases']/1000000., bin_edges)
-		intervals = [(i*interval)/1000. for i in range(len(bins))]
+		intervals = [((offset+i)*interval)/1000. for i in range(len(bins))]
 		barplot(bins, intervals, interval/1000., 'kb', 'Mb', os.path.join(args.outdir, 'res', "plots", "barplot_kb-bins_{}_{}".format(bc, subset)))
 
 	tprint("Creating qc-bins barplots")
 
 	#######
 
-	interval, num_bins = get_lowest_possible_interval(args.qc_intervals,
-												 args.max_bins, 
-												 df['gc'].max())
+	#interval, offset, num_bins = get_lowest_possible_interval(args.gc_intervals,
+	#											 args.max_bins, 
+	#											 df['gc'].min(), 
+	#											 df['gc'].max())
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('gc', axis=0, ascending=True)
-		bin_edges = get_bin_edges(sub_df['gc'], interval)
+		interval, offset, num_bins = get_lowest_possible_interval(args.gc_intervals,
+												 				  args.max_bins, 
+												 				  sub_df['gc'].min(), 
+												 				  sub_df['gc'].max())
+		bin_edges, offsetti = get_bin_edges(sub_df['gc'], interval)
 		tprint("...plotting {}, {}".format(bc, subset))
 		bins = get_bins(sub_df['bases']/1000000., bin_edges)
-		intervals = [i*interval for i in range(len(bins))]
+		intervals = [(offset+i)*interval for i in range(len(bins))]
 		barplot(bins, intervals, interval, '%', 'Mb', os.path.join(args.outdir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
 	
 	#######
@@ -505,6 +520,7 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 	ax1.set_xlabel("sequencing time [h]")
 	ax1.set_ylabel(ylabel)
 	ax1.set_xticks([i+0.5 for i in range(len(intervals)+1)])
+	#print([i+0.5 for i in range(len(intervals)+1)])
 	xticklabels = ["" for i in intervals]
 	xticklabels.append("{0:.1f}".format((intervals[-1]+interval)/SECS_TO_HOURS))
 	tickspace = len(intervals)//TICKLBLS
@@ -513,10 +529,15 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 			xticklabels[i] = "{0:.1f}".format(intervals[i]/SECS_TO_HOURS)
 		except:
 			pass
+	ax1.set_xticklabels(xticklabels)
+	ax1.set_xlim([0.5, len(bins)+0.5])
 	ax1.tick_params(top=False, bottom=True, left=True, right=False,
 				   labeltop=False, labelbottom=True)
 	ax1.yaxis.grid(color="black", alpha=0.1)
 	ax1.set_axisbelow(True)
+
+
+
 
 	ax0.bar([i for i in range(len(bins))], [len(i) for i in bins], align='center', color='grey', width=0.4)
 	ax0.set_xlim([-0.5, len(bins)-0.5])
@@ -534,19 +555,6 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 
 	fig.tight_layout()
 	plt.savefig(dest)
-
-
-def get_lowest_possible_interval(intervals, max_bins, max_seconds):
-	interval = None
-	num_bins = None
-	for interval in intervals:
-		num_bins = (max_seconds // interval)+1
-		if num_bins <= max_bins:
-			interval = interval
-			break
-	if not interval:
-		interval = intervals[-1]
-	return interval, int(num_bins)
 
 def avgN50longest(series):
 	#return series.sort_values(0, ascending=False)[:int(series.size/2)].mean()
@@ -621,15 +629,29 @@ def parse_stats(fp):
 	#print(df.groupby(['pore'])['pore_num'].count().sort_index(ascending=True))
 	return df
 
+def get_lowest_possible_interval(intervals, max_bins, min_value, max_value):
+	interval = None
+	num_bins = None
+	for interval in intervals:
+		offset = min_value // interval
+		num_bins = ((max_value-(offset*interval)) // interval)+1
+		if num_bins <= max_bins:
+			interval = interval
+			break
+	if not interval:
+		interval = intervals[-1]
+	return interval, offset, int(num_bins)
+
 def get_bin_edges(sorted_df, interval):
-	edge = interval
+	offset = sorted_df[0] // interval
+	edge = sorted_df[0] + interval
 	edges = [0]
 	for i,val in enumerate(sorted_df):
 		if val > edge:
 			edges.append( i )
 			edge += interval
 	edges.append(sorted_df.size)
-	return edges
+	return edges, offset
 
 def get_bins(df, bin_edges):
 	bins = []
