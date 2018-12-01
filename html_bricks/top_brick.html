@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+      <meta charset="UTF-8">
+      <meta http-equiv="refresh" content="{4}">
+      <title>{0}_{1}</title>
+      <link rel="stylesheet" type="text/css" href="res/style.css">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  </head>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script>
+    $(document).ready(function() {{
+      $(".seperator").click(function() {{
+        $title = $(this);
+        $content = $title.next();
+        $content.slideToggle(250, function() {{
+          if (!$content.is(":visible")) {{
+            $title.css("zIndex", "0");
+          }}
+        }});
+      }});
+    }});
+  </script>
+
+  <body>
+    <div class="container">
+
+      <div class="contentbox title {5}">
+        <h1>{0}</h1>
+        <h2>{1}, {2}</h2>
+        <h3>{3}</h3>
+      </div>

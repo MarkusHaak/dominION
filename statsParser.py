@@ -15,15 +15,31 @@ import matplotlib.lines as mlines
 import copy
 from mpl_toolkits import axes_grid1
 import matplotlib.gridspec as gridspec
+import re
+from shutil import copyfile
 
 import warnings
 warnings.filterwarnings("ignore")
+
+QUIET = False
+TICKLBLS = 6
+SECS_TO_HOURS = 3600.
+VERSION = "v2.0"
 
 class readable_file(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
 		to_test=values
 		if not os.path.isfile(to_test):
 			raise argparse.ArgumentTypeError('ERR: {} is not a file'.format(to_test))
+		if not os.access(to_test, os.R_OK):
+			raise argparse.ArgumentTypeError('ERR: {} is not readable'.format(to_test))
+		setattr(namespace,self.dest,to_test)
+
+class readable_dir(argparse.Action):
+	def __call__(self, parser, namespace, values, option_string=None):
+		to_test=values
+		if not os.path.isdir(to_test):
+			raise argparse.ArgumentTypeError('ERR: {} is not a directory'.format(to_test))
 		if not os.access(to_test, os.R_OK):
 			raise argparse.ArgumentTypeError('ERR: {} is not readable'.format(to_test))
 		setattr(namespace,self.dest,to_test)
@@ -53,20 +69,19 @@ class parse_kb_intervals(argparse.Action):
 			raise argparse.ArgumentTypeError('ERR: {} is not in a valid format for a time interval'.format(intervals))
 		setattr(namespace,self.dest,intervals)
 
-def main_and_args():
-
-	#### args #####
+def get_argument_parser():
 	argument_parser = argparse.ArgumentParser(description='''Parses a stats file containing information
 													 about a nanopore sequencing run and creates
 													 an in-depth report file including informative plots.''')
 
-	argument_parser.add_argument('statsfile',
-						action=readable_file,
-						help='''Path to the stats file containing all necessary information
-								 about the sequencing run. Requires a CSV file with "\t" as 
-								 seperator, no header and the following columns in given order:
-								 read_id, length, qscore, mean_gc, Passed/tooShort, 
-								 read_number, pore_index, timestamp, barcode''')
+	if __name__ == '__main__':
+		argument_parser.add_argument('statsfile',
+							action=readable_file,
+							help='''Path to the stats file containing all necessary information
+									about the sequencing run. Requires a CSV file with "\t" as 
+									seperator, no header and the following columns in given order:
+									read_id, length, qscore, mean_gc, Passed/tooShort, 
+									read_number, pore_index, timestamp, barcode''')
 
 	argument_parser.add_argument('-o', '--outdir',
 						action=writeable_dir,
@@ -84,19 +99,54 @@ def main_and_args():
 
 	argument_parser.add_argument('--time_intervals',
 						action=parse_time_intervals,
-						default=[30,60,90,120,240],
-						help='time intervals in minutes available for binning. (default: 30,60,90,120,240)')
+						default=[1,2,5,10,20,30,60,90,120,240],
+						help='time intervals in minutes available for binning. (default: 1,2,5,10,20,30,60,90,120,240)')
 
 	argument_parser.add_argument('--kb_intervals',
 						action=parse_kb_intervals,
-						default=[0.5,1.0,2.0],
-						help='kb intervals in minutes available for binning. (default: 0.5,1.0,2.0)')
+						default=[.5,1.,2.,5.],
+						help='kb intervals available for binning. (default: .5,1.,2.,5.)')
+
+	argument_parser.add_argument('--qc_intervals',
+						action=parse_kb_intervals,
+						default=[.2,.5,1.,2.,5.],
+						help='kb intervals available for binning. (default: .2,.5,1.,2.,5.)')
 
 	argument_parser.add_argument('--matplotlib_style',
 						default='default',
-						help='matplotlib style string that influences all colors and plot appearances. (default: default')
+						help='matplotlib style string that influences all colors and plot appearances. (default: default)')
 
-	args = argument_parser.parse_args()
+	argument_parser.add_argument('--website_refresh_rate',
+						type=int,
+						default=60,
+						help='refresh rate in seconds. (default: 60)')
+
+	argument_parser.add_argument('--html_bricks_dir',
+						action=readable_dir,
+						default='html_bricks')
+
+	# the following should only be set if statsParser is called directly:
+	if __name__ == '__main__':
+		argument_parser.add_argument('--user_filename_input',
+							default='Run#####_MIN###_KIT###')
+
+		argument_parser.add_argument('--minion_id',
+							default='GA#0000')
+
+		argument_parser.add_argument('--flowcell_id',
+							default='FAK#####')
+
+		argument_parser.add_argument('--protocol_start',
+							default='YYYY-MM-DD hh:mm:ss.ms')
+
+	return argument_parser
+
+def parse_args(argument_parser, ext_args=None):
+
+	if ext_args:
+		args = argument_parser.parse_args(ext_args)
+	else:
+		args = argument_parser.parse_args()
 
 	if not args.outdir:
 		args.outdir = os.path.abspath(os.path.dirname(args.statsfile))
@@ -105,8 +155,17 @@ def main_and_args():
 		if not os.access(args.outdir, os.W_OK):
 			raise argparse.ArgumentTypeError('ERR: {} is not writeable'.format(to_test))
 
-	if not os.path.isdir(os.path.join(args.outdir, 'plots')):
-		os.makedirs(os.path.join(args.outdir, 'plots'))
+	if not os.path.isdir(os.path.join(args.outdir, 'res', 'plots')):
+		os.makedirs(os.path.join(args.outdir, 'res', 'plots'))
+
+	if not os.path.exists('html_bricks') or not os.path.isdir('html_bricks'):
+		raise argparse.ArgumentTypeError('ERR: directory "html_bricks" does not exist'.format(args.outdir))
+		for brick in ["barcode_brick.html",
+					  "bottom_brick.html",
+					  "overview_brick.html",
+					  "top_brick.html"]:
+			if not os.path.isfile(os.path.join('html_bricks', 'html_bricks')):
+				raise argparse.ArgumentTypeError('ERR: file {} does not exist'.format(os.path.join('html_bricks', 'html_bricks')))
 
 	args.time_intervals = [i*60 for i in args.time_intervals]
 
@@ -115,10 +174,19 @@ def main_and_args():
 	except:
 		raise argparse.ArgumentTypeError('ERR: {} is not a valid matplotlib style'.format(args.matplotlib_style))
 
+	#args.kb_intervals = list(np.array(args.kb_intervals)*1000)
+
+	return args
+
+def main(args):
+	#### main #####
 	global QUIET
 	QUIET = args.quiet
 
-	#### main #####
+	if not QUIET: print("#######################################")
+	if not QUIET: print("#########   statsParser {}  #########".format(VERSION))
+	if not QUIET: print("#######################################")
+	if not QUIET: print("")
 
 	tprint("Parsing stats file")
 	df = parse_stats(args.statsfile)
@@ -126,14 +194,11 @@ def main_and_args():
 	tprint("Creating stats table")
 	stats_df = stats_table(df)
 
-	tprint("Parsing stats table to html")
-	html_stats_df = make_html_table(stats_df)
-
-	#with open("test.html", 'w') as outfile:
+	#with open(os.path.join(args.outdir, "results.html"), 'w') as outfile:
 	#	print(html_stats_df, file=outfile)
 
 	subgrouped = df.groupby(['barcode', 'subset'])
-	indexes = list(pd.DataFrame(subgrouped['kb'].count()).index)
+	indexes = list(pd.DataFrame(subgrouped['bases'].count()).index)
 
 	#######
 
@@ -149,35 +214,50 @@ def main_and_args():
 				tprint("...plotting {}, {}: {}".format(bc, subset, col))
 				bins = get_bins(sub_df[col], bin_edges)
 				intervals = [i*interval for i in range(len(bins))]
-				boxplot(bins, intervals, interval, col, os.path.join(args.outdir, "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
+				boxplot(bins, intervals, interval, col, os.path.join(args.outdir, 'res', "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
 	
 	#######
 	
-	tprint("Creating barplots")
-	interval, num_bins = get_lowest_possible_interval(args.kb_intervals,
+	tprint("Creating kb-bins barplots")
+	interval, num_bins = get_lowest_possible_interval(list(np.array(args.kb_intervals)*1000),
 												 args.max_bins, 
-												 df['kb'].max())
+												 df['bases'].max())
 	for bc, subset in indexes:
-		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('kb', axis=0, ascending=True)
-		bin_edges = get_bin_edges(sub_df['kb'], interval)
+		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('bases', axis=0, ascending=True)
+		bin_edges = get_bin_edges(sub_df['bases'], interval)
 		tprint("...plotting {}, {}".format(bc, subset))
-		bins = get_bins(sub_df['kb']/1000., bin_edges)
+		bins = get_bins(sub_df['bases']/1000000., bin_edges)
+		intervals = [(i*interval)/1000. for i in range(len(bins))]
+		barplot(bins, intervals, interval/1000., 'kb', 'Mb', os.path.join(args.outdir, 'res', "plots", "barplot_kb-bins_{}_{}".format(bc, subset)))
+
+	tprint("Creating qc-bins barplots")
+
+	#######
+
+	interval, num_bins = get_lowest_possible_interval(args.qc_intervals,
+												 args.max_bins, 
+												 df['gc'].max())
+	for bc, subset in indexes:
+		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('gc', axis=0, ascending=True)
+		bin_edges = get_bin_edges(sub_df['gc'], interval)
+		tprint("...plotting {}, {}".format(bc, subset))
+		bins = get_bins(sub_df['bases']/1000000., bin_edges)
 		intervals = [i*interval for i in range(len(bins))]
-		barplot(bins, intervals, interval, os.path.join(args.outdir, "plots", "barplot_{}_{}".format(bc, subset)))
+		barplot(bins, intervals, interval, '%', 'Mb', os.path.join(args.outdir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
 	
 	#######
 	
-	tprint("Creating lineplots with two y-axes")
-	subset_grouped = df.groupby(['subset'])
-	
-	tprint("...plotting {}".format('all'))
-	sorted_df = df.sort_values('time', axis=0, ascending=True)
-	lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format('all')))
-	
-	for subset in set([j for i,j in indexes]):
-		tprint("...plotting {}".format(subset))
-		sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
-		lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['kb']/1000., os.path.join(args.outdir, "plots", "lineplot_{}".format(subset)) )
+	#tprint("Creating lineplots with two y-axes")
+	#subset_grouped = df.groupby(['subset'])
+	#
+	#tprint("...plotting {}".format('all'))
+	#sorted_df = df.sort_values('time', axis=0, ascending=True)
+	#lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['bases']/1000000., os.path.join(args.outdir, 'res', "plots", "lineplot_{}".format('all')))
+	#
+	#for subset in set([j for i,j in indexes]):
+	#	tprint("...plotting {}".format(subset))
+	#	sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
+	#	lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['bases']/1000000., os.path.join(args.outdir, 'res', "plots", "lineplot_{}".format(subset)) )
 	
 	#######
 	
@@ -192,7 +272,7 @@ def main_and_args():
 					  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
 					  'all') )
 	bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
-					  (sorted_df['kb']/1000.).expanding(1).sum(),
+					  (sorted_df['bases']/1000000000.).expanding(1).sum(),
 					  'all') )
 	for subset in set([j for i,j in indexes]):
 		sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
@@ -200,26 +280,101 @@ def main_and_args():
 						  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
 						  subset) )
 		bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
-						  (sorted_df['kb']/1000.).expanding(1).sum(),
+						  (sorted_df['bases']/1000000000.).expanding(1).sum(),
 						  subset) )
 	tprint("...plotting {}".format('reads'))
-	lineplot_multi(reads_dfs, "reads", os.path.join(args.outdir, "plots", "multi_lineplot_{}".format('reads')))
+	lineplot_multi(reads_dfs, "reads", os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('reads')))
 	tprint("...plotting {}".format('bases'))
-	lineplot_multi(bases_dfs, "bases [Mb]", os.path.join(args.outdir, "plots", "multi_lineplot_{}".format('bases')))
+	lineplot_multi(bases_dfs, "bases [Gb]", os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('bases')))
 
-	#######
-
-	#exit()
-	#
+	######
+	
 	#tprint("Creating pore heatmap")
 	#pore_grouped = df.groupby(['pore'])
-	##pore_indexes = list(pd.DataFrame(pore_grouped['kb'].count()).index)
-	#pore_bases = pore_grouped['kb'].sum()
+	##pore_indexes = list(pd.DataFrame(pore_grouped['bases'].count()).index)
+	#pore_bases = pore_grouped['bases'].sum()
 	#pore_indexes = list(pore_bases.index)
 	##print(pore_bases)
 	##print(pore_bases.index)
 	##print(pore_indexes)
 	#max_pore_index = max(pore_indexes)
+
+	tprint("Creating html file")
+
+	subset_grouped = df.groupby(['subset'])
+	subsets = list(pd.DataFrame(subset_grouped['bases'].count()).index)
+	tprint(subsets)
+
+	barcode_grouped = df.groupby(['barcode'])
+	barcodes = list(pd.DataFrame(barcode_grouped['bases'].count()).index)
+	tprint(barcodes)
+
+	create_html(args.outdir, 
+				stats_df, 
+				args.user_filename_input, 
+				args.minion_id, 
+				args.flowcell_id, 
+				args.protocol_start, 
+				args.website_refresh_rate, 
+				barcodes, 
+				subsets, 
+				args.html_bricks_dir)
+
+def create_html(outdir, 
+				stats_df, 
+				user_filename_input, 
+				minion_id, 
+				flowcell_id, 
+				protocol_start, 
+				website_refresh_rate, 
+				barcodes, 
+				subsets, 
+				html_bricks_dir):
+	#def dashrepl(matchobj):
+	#	return '<a href="#{0}">{0}</a>'.format(matchobj.group(1))
+	#	#if matchobj.group(0) == '-': return ' '
+	#	#else: return '-'
+	tprint("Parsing stats table to html")
+	html_stats_df = make_html_table(stats_df).replace('valign="top"', 'valign="center"')
+	#for m in re.finditer(">(BC[0-9][0-9])<", html_stats_df):
+	#	print("x")
+	for bc in barcodes:
+		tprint(bc)
+		html_stats_df = html_stats_df.replace(bc, '<a href="#{0}">{0}</a>'.format(bc))
+	#html_stats_df = html_stats_df.replace("BC01", '<a href="BC01">BC01</a>')
+
+
+	with open(os.path.join(html_bricks_dir, 'barcode_brick.html'), 'r') as f:
+		barcode_brick = f.read()
+	with open(os.path.join(html_bricks_dir, 'bottom_brick.html'), 'r') as f:
+		bottom_brick = f.read()
+	with open(os.path.join(html_bricks_dir, 'overview_brick.html'), 'r') as f:
+		overview_brick = f.read()
+	with open(os.path.join(html_bricks_dir, 'top_brick.html'), 'r') as f:
+		top_brick = f.read()
+
+	minion_id_to_css = {"GA10000":"one",
+						"GA20000":"two",
+						"GA30000":"three",
+						"GA40000":"four",
+						"GA50000":"five"}
+
+	html_content = top_brick.format(user_filename_input, minion_id, flowcell_id, protocol_start, website_refresh_rate, minion_id_to_css[minion_id]) + \
+				   overview_brick.format(html_stats_df)
+
+	for barcode in barcodes:
+		html_content = html_content + barcode_brick.format(barcode, subsets[0], subsets[2], subsets[1])
+
+	html_content = html_content + bottom_brick
+
+	with open(os.path.join(outdir, "results.html"), 'w') as outfile:
+		print(html_content, file=outfile)
+
+	copyfile(os.path.join(html_bricks_dir, 'style.css'), os.path.join(outdir, 'res', 'style.css'))
+
+
+
+
 
 
 def pore_heatmap(max_pore_index, pore_bases, pore_indexes, dest):
@@ -290,7 +445,7 @@ def lineplot_2y(time, bases, dest):
 	#plt.show()
 	plt.savefig(dest)
 
-def barplot(bins, intervals, interval, dest):
+def barplot(bins, intervals, interval, x_unit, y_unit, dest):
 	f = plt.figure()
 	fig = plt.gcf()
 
@@ -301,7 +456,7 @@ def barplot(bins, intervals, interval, dest):
 	ax2 = ax1.twinx()
 
 	ax1.set_ylabel('reads')
-	ax2.set_ylabel('bases [Mb]')
+	ax2.set_ylabel('bases [{}]'.format(y_unit))
 	#ax1 = plt.subplot(gs0[1, 0])
 
 	reads = [len(i) for i in bins]
@@ -326,7 +481,7 @@ def barplot(bins, intervals, interval, dest):
 		except:
 			pass
 	ax1.set_xticklabels(xticklabels)
-	ax1.set_xlabel("{} kb bins".format(interval))
+	ax1.set_xlabel("{} {} bins".format(interval, x_unit))
 
 	fig.tight_layout()
 	#plt.show()
@@ -404,27 +559,27 @@ def tprint(*args, **kwargs):
 def stats_table(df):
 	subgrouped = df.groupby(['barcode', 'subset'])
 
-	#groups = list(pd.DataFrame(subgrouped['kb'].count()).index)
+	#groups = list(pd.DataFrame(subgrouped['bases'].count()).index)
 	grouped = df.groupby(['barcode'])
 
 	# keys equal headers in html
-	subgrouped_output_df = pd.DataFrame(OrderedDict((('reads' ,					subgrouped['kb'].count()), 
-							 			 			 ('kbs' ,					subgrouped['kb'].sum()), 
-							 			 			 ('mean quality' ,			subgrouped['qual'].mean()), 
-							 			 			 ('mean GC' ,				subgrouped['gc'].mean()),
-							 			 			 ('avg length' ,			subgrouped['kb'].mean()),
-							 			 			 ('median length' ,			subgrouped['kb'].median()),
-							 			 			 ('mean length longest N50',subgrouped['kb'].agg(avgN50longest)),
-							 			 			 ('longest' ,				subgrouped['kb'].max())
+	subgrouped_output_df = pd.DataFrame(OrderedDict((('reads' ,							subgrouped['bases'].count()), 
+							 			 			 ('Mb' ,							subgrouped['bases'].sum()/1000000.), 
+							 			 			 ('mean quality' ,					subgrouped['qual'].mean()), 
+							 			 			 ('mean GC [%]' ,					subgrouped['gc'].mean()),
+							 			 			 ('avg length [kb]' ,				subgrouped['bases'].mean()/1000.),
+							 			 			 ('median length [kb]' ,			subgrouped['bases'].median()/1000.),
+							 			 			 ('mean length longest N50 [kb]',	subgrouped['bases'].agg(avgN50longest)/1000.),
+							 			 			 ('longest [kb]' ,					subgrouped['bases'].max()/1000.)
 							 			 			 )))
-	grouped_output_df = pd.DataFrame(OrderedDict((('reads' ,					grouped['kb'].count()), 
-							 			 		  ('kbs' ,						grouped['kb'].sum()), 
-							 			 		  ('mean quality' ,				grouped['qual'].mean()), 
-							 			 		  ('mean GC' ,					grouped['gc'].mean()),
-							 			 		  ('avg length' ,				grouped['kb'].mean()),
-							 			 		  ('median length' ,			grouped['kb'].median()),
-							 			 		  ('mean length longest N50',	grouped['kb'].agg(avgN50longest)),
-							 			 		  ('longest' ,					grouped['kb'].max())
+	grouped_output_df = pd.DataFrame(OrderedDict((('reads' ,							grouped['bases'].count()), 
+							 			 		  ('Mb' ,								grouped['bases'].sum()/1000000.), 
+							 			 		  ('mean quality' ,						grouped['qual'].mean()), 
+							 			 		  ('mean GC [%]' ,						grouped['gc'].mean()),
+							 			 		  ('avg length [kb]' ,					grouped['bases'].mean()/1000.),
+							 			 		  ('median length [kb]' ,				grouped['bases'].median()/1000.),
+							 			 		  ('mean length longest N50 [kb]',		grouped['bases'].agg(avgN50longest)/1000.),
+							 			 		  ('longest [kb]' ,						grouped['bases'].max()/1000.)
 							 			 		  )))
 
 	# concat both to one DataFrame, sorted by the indexes
@@ -445,18 +600,18 @@ def parse_stats(fp):
 	df = pd.read_csv(fp, 
 					 sep='\t', 
 					 header=None, 
-					 names="id kb qual gc subset pore_num pore time barcode".split(" "), 
+					 names="id bases qual gc subset pore_num pore time barcode".split(" "), 
 					 usecols=[1,2,3,4,5,6,7,8],
 					 index_col=[7,3,5], # referes to usecols
-					 #converters={'time':(lambda x: pd.Timestamp(x)), 'kb':(lambda x: float(x)/1000)}, 
+					 #converters={'time':(lambda x: pd.Timestamp(x)), 'bases':(lambda x: float(x)/1000000)}, 
 					 converters={'time':(lambda x: pd.Timestamp(x))},
-					 dtype={'qual':float, 'gc':float, 'kb':float})
+					 dtype={'qual':float, 'gc':float, 'bases':float})
 	#print(df)
-	df['kb'] = df['kb']/1000
+	#df['bases'] = df['bases']/1000000
 	#print(df)
 	#exit()
 
-	print(df.sort_values('time', axis=0, ascending=True))
+	#tprint(df.sort_values('time', axis=0, ascending=True))
 
 	start_time = df['time'].min(axis=1)
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
@@ -483,7 +638,6 @@ def get_bins(df, bin_edges):
 	return bins
 
 if __name__ == '__main__':
-	QUIET = False
-	TICKLBLS = 6
-	SECS_TO_HOURS = 3600.
-	main_and_args()
+	argument_parser = get_argument_parser()
+	args = parse_args(argument_parser)
+	main(args)

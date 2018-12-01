@@ -10,6 +10,18 @@ from collections import OrderedDict
 import re
 import copy
 import json
+import subprocess
+import sched
+import statsParser
+import webbrowser
+from shutil import copyfile
+import dateutil
+
+VERBOSE = False
+QUIET = False
+VERSION = "v2.0"
+ALL_RUNS = {}
+UPDATE_STATUS_PAGE = False
 
 class readable_dir(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
@@ -33,6 +45,14 @@ class readable_writeable_dir(argparse.Action):
 			raise argparse.ArgumentTypeError('ERR: {} is not writeable'.format(to_test))
 		setattr(namespace,self.dest,to_test)
 
+class parse_statsParser_args(argparse.Action):
+	def __call__(self, parser, namespace, values, option_string=None):
+		to_test = values.split(' ')
+		argument_parser = statsParser.get_argument_parser()
+		args = statsParser.parse_args(argument_parser, to_test)
+		print (to_test)
+		setattr(namespace,self.dest,to_test)
+
 def main_and_args():
 	
 	#### args #####
@@ -54,6 +74,34 @@ def main_and_args():
 						action='store_true',
 						help='''Handle file modifications as if the file was created, meaning that the latest changed file is seen as the current 
 								log file.''')
+
+	parser.add_argument('--no_watchnchop',
+						action='store_true',
+						help='''if specified, watchnchop is not executed''')
+
+	parser.add_argument('-b', '--basecalled_basedir',
+						action=readable_writeable_dir,
+						default='/data/basecalled',
+						help='Path to the directory where basecalled data is saved. (default: /data/basecalled)')
+
+	parser.add_argument('-u', '--update_interval',
+						type=int,
+						default=600,
+						help='inverval time in seconds for updating the stats webpage contents. (default: 600)')
+
+	parser.add_argument('--statsParser_args',
+						action=parse_statsParser_args,
+						default=[],
+						help='''Arguments that are passed to statsParser.py. Please DO NOT specify the stats file location!
+						 See a full list of possible options with --statsParser_args " -h" ''')
+
+	parser.add_argument('--html_bricks_dir',
+						action=readable_dir,
+						default='html_bricks')
+
+	parser.add_argument('--status_page_dir',
+						default='GridIONstatus',
+						help='Path to the directory where all files for the GridION status page will be stored. (default: ./GridIONstatus)')
 
 	parser.add_argument('-v', '--verbose',
 						action='store_true',
@@ -79,29 +127,55 @@ def main_and_args():
 	if not QUIET: print("#######################################")
 	if not QUIET: print("")
 
-	watchers = []
-
 	global ALL_RUNS
+
+	logging.info("setting up GrinIOn status page environment")
+	global UPDATE_STATUS_PAGE
+	if not os.path.exists(args.status_page_dir):
+		os.makedirs(args.status_page_dir)
+	if not os.path.exists(os.path.join(args.status_page_dir, 'res')):
+		os.makedirs(os.path.join(args.status_page_dir, 'res'))
+	copyfile(os.path.join(args.html_bricks_dir, 'style.css'), os.path.join(args.status_page_dir, 'res', 'style.css'))
+	copyfile(os.path.join(args.html_bricks_dir, 'flowcell.png'), os.path.join(args.status_page_dir, 'res', 'flowcell.png'))
+	copyfile(os.path.join(args.html_bricks_dir, 'no_flowcell.png'), os.path.join(args.status_page_dir, 'res', 'no_flowcell.png'))
+
 
 	logging.info("loading previous runs from database:")
 	load_runs_from_database(args.database_dir)
 	print()
 
 	logging.info("starting watchers:")
+	watchers = []
 	for channel in range(5):
-		watchers.append(Watcher(args.log_basedir, channel, args.modified_as_created, args.database_dir))
+		watchers.append(Watcher(args.log_basedir, 
+								channel, 
+								args.modified_as_created, 
+								args.database_dir, 
+								args.basecalled_basedir, 
+								args.statsParser_args,
+								args.update_interval,
+								args.no_watchnchop))
 	print()
+
+	logging.info("Initiating GrinIOn status page")
+	update_status_page(watchers, args.html_bricks_dir, args.status_page_dir)
+	webbrowser.open('file://' + os.path.realpath(os.path.join(args.status_page_dir, "GridIONstatus.html")))
 
 	logging.info("entering main loop")
 	try:
 		while True:
 			for watcher in watchers:
 				watcher.check_q()
+			if UPDATE_STATUS_PAGE:
+				update_status_page(watchers, args.html_bricks_dir, args.status_page_dir)
+				UPDATE_STATUS_PAGE = False
 			time.sleep(1)
 	except KeyboardInterrupt:
 		logging.info("### Collected information ###")
 		for watcher in watchers:
 			watcher.observer.stop()
+			if watcher.scheduler:
+				watcher.scheduler.terminate()
 			print('')
 			for key in watcher.channel_status.run_data:
 				if watcher.channel_status.run_data[key]:
@@ -114,7 +188,11 @@ def main_and_args():
 			#print(watcher.channel_status.mux_scans)
 			print('')
 	for watcher in watchers:
+		print("joining GA{}0000's observer".format(watcher.channel))
 		watcher.observer.join()
+		if watcher.scheduler:
+			print("joining GA{}0000's scheduler".format(watcher.channel))
+			watcher.scheduler.join()
 
 def load_runs_from_database(database_dir):
 	for fn in os.listdir(database_dir):
@@ -142,9 +220,122 @@ def load_runs_from_database(database_dir):
 											 'mux_scans': mux_scans}
 
 			try:
-				print('- loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(run_data['experiment_type'], flowcell['flowcell_id'], run_data['protocol_start']))
+				print('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(flowcell_id, run_data['experiment_type'], flowcell['flowcell_id'], run_data['protocol_start']))
 			except:
 				pass
+
+def update_status_page(watchers, html_bricks_dir, status_page_dir):
+	channel_to_css = {0:"one", 1:"two", 2:"three", 3:"four", 4:"five"}
+
+	with open(os.path.join(html_bricks_dir, 'gridIONstatus_brick.html'), 'r') as f:
+		gridIONstatus_brick = f.read()
+
+	for watcher in watchers:
+		with open(os.path.join(html_bricks_dir, 'flowcell_brick.html'), 'r') as f:
+			flowcell_brick = f.read()
+		with open(os.path.join(html_bricks_dir, 'flowcell_info_brick.html'), 'r') as f:
+			flowcell_info_brick = f.read()
+
+		latest_qc = None
+		flowcell_runs = []
+		asic_id_eeprom = None
+		try:
+			asic_id_eeprom = watcher.channel_status.flowcell['asic_id_eeprom']
+		except:
+			#logging.info("NO FLOWCELL")
+			pass
+
+		if asic_id_eeprom:
+			if asic_id_eeprom in ALL_RUNS:
+				for run_id in ALL_RUNS[asic_id_eeprom]:
+					protocol_start = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_start'])
+					experiment_type = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type']
+					if 'seq' in experiment_type.lower(): # to increase compatibility in future
+						flowcell_runs.append(run_id)
+					else: # only "sequencing" and "platform_qc"
+						if latest_qc:
+							_protocol_start = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start'])
+							if protocol_start > _protocol_start:
+								latest_qc = run_id
+						else:
+							latest_qc = run_id
+
+		# FILL flowcell_brick AND flowcell_info_brick
+		# case no flowcell on minion/channel:
+		if not asic_id_eeprom:
+			flowcell_brick = flowcell_brick.format("no_")
+			flowcell_info_brick = flowcell_info_brick.format(
+				channel_to_css[watcher.channel],
+				"-",
+				"",
+				"")
+		else:
+			flowcell_brick = flowcell_brick.format("")
+			# case flowcell new / unused
+			if latest_qc == None and flowcell_runs == []:
+				flowcell_info_brick = flowcell_info_brick.format(
+					channel_to_css[watcher.channel],
+					"NO RECORDS",
+					"",
+					"")
+			else:
+				# case only qc:
+				if latest_qc and flowcell_runs == []:
+					flowcell_info_brick = flowcell_info_brick.format(
+						channel_to_css[watcher.channel],
+						ALL_RUNS[asic_id_eeprom][latest_qc]['flowcell']['flowcell_id'],
+						'<p><u>Last QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
+							dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start']).date(),
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group * total'],
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 1 total'],
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 2 total'],
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 3 total'],
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 4 total']),
+						""
+						)
+				# case only flowcell_runs:
+				elif latest_qc == None and flowcell_runs:
+					runs_string = '<p><u>Runs</u>:<br><br>'
+					for run in flowcell_runs:
+						runs_string = runs_string + \
+							'<a href="" target="_blank">{0}</a><br>'.format(ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
+					runs_string = runs_string + '</p>'
+
+					flowcell_info_brick = flowcell_info_brick.format(
+						channel_to_css[watcher.channel],
+						ALL_RUNS[asic_id_eeprom][flowcell_runs[0]]['flowcell']['flowcell_id'],
+						"",
+						runs_string
+						)
+				# case both:
+				else:
+					runs_string = '<p><u>Runs</u>:<br><br>'
+					for run in flowcell_runs:
+						runs_string = runs_string + \
+							'<a href="" target="_blank">{0}</a><br>'.format(ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
+					runs_string = runs_string + '</p>'
+
+					flowcell_info_brick = flowcell_info_brick.format(
+						channel_to_css[watcher.channel],
+						ALL_RUNS[asic_id_eeprom][latest_qc]['flowcell']['flowcell_id'],
+						'<p><u>Last QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
+							dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start']).date(),
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group * total'],
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 1 total'],
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 2 total'],
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 3 total'],
+							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 4 total']),
+						runs_string
+						)
+
+		gridIONstatus_brick =  gridIONstatus_brick.format(flowcell_brick + "\n{0}",
+														  flowcell_info_brick + "\n{1}")
+
+
+	gridIONstatus_brick = gridIONstatus_brick.format("", "")
+
+	with open(os.path.join(status_page_dir, 'GridIONstatus.html'), 'w') as f:
+		print(gridIONstatus_brick, file=f)
 
 
 class ChannelStatus():
@@ -232,12 +423,66 @@ class ChannelStatus():
 		self.mux_scans = []
 
 
+class Scheduler(mp.Process):
+
+	def __init__(self, update_interval, statsfp, statsParser_args, user_filename_input, minion_id, flowcell_id, protocol_start):
+		mp.Process.__init__(self)
+		self.exit = mp.Event()
+		#self.sched_q = sched_q
+		self.update_interval = update_interval
+		self.statsfp = statsfp
+		self.statsParser_args = statsParser_args
+		self.user_filename_input = user_filename_input
+		self.minion_id = minion_id
+		self.flowcell_id = flowcell_id
+		self.protocol_start = protocol_start
+
+	def run(self):
+		page_opened = False
+		while not self.exit.is_set():
+			last_time = time.time()
+			#print("updating stats page")
+			#self.doNotDisturb = True
+			# do something!
+			logging.info("STARTING STATSPARSING")
+
+			if os.path.exists(self.statsfp):
+				args = ['python3', 'statsParser.py', self.statsfp,
+						'--user_filename_input', self.user_filename_input,
+						'--minion_id', self.minion_id,
+						'--flowcell_id', self.flowcell_id,
+						'--protocol_start', self.protocol_start]
+				args.extend(self.statsParser_args)
+				cp = subprocess.run(args) # waits for process to complete
+				if cp.returncode == 0:
+					logging.info("STATSPARSING COMPLETED")
+					if not page_opened:
+						basedir = os.path.abspath(os.path.dirname(self.statsfp))
+						fp = os.path.join(basedir, 'results.html')
+						logging.info("OPENING " + fp)
+						page_opened = webbrowser.open('file://' + os.path.realpath(fp))
+				else:
+					logging.info("ERROR while running statsParser")
+			else:
+				logging.info("WARNING: statsfile does not exist (yet?)")
+
+			#self.doNotDisturb = False
+			this_time = time.time()
+			while (this_time - last_time < self.update_interval) and not self.exit.is_set():
+				time.sleep(1)
+				this_time = time.time()
+
+
 class Watcher():
 
-	def __init__(self, log_basedir, channel, modified_as_created, database_dir):
+	def __init__(self, log_basedir, channel, modified_as_created, database_dir, basecalled_basedir, statsParser_args, update_interval, no_watchnchop):
 		self.q = mp.SimpleQueue()
+		self.watchnchop = not no_watchnchop
 		self.channel = channel
 		self.database_dir = database_dir
+		self.basecalled_basedir = basecalled_basedir
+		self.statsParser_args = statsParser_args
+		self.update_interval = update_interval
 		self.observed_dir = os.path.join(log_basedir, "GA{}0000".format(channel+1))
 		self.event_handler = StatsFilesEventHandler(self.q, modified_as_created)
 		self.observer = Observer()
@@ -249,7 +494,12 @@ class Watcher():
 
 		self.channel_status = ChannelStatus("GA{}0000".format(channel+1))
 
+		#self.ctx = mp.get_context('spawn')
+		#self.sched_q = mp.SimpleQueue()
+		self.scheduler = None
+
 	def check_q(self):
+		# checking sheduler queue
 		if not self.q.empty:
 			if VERBOSE: logging.info("Queue content for {}:".format(self.observed_dir))
 		while not self.q.empty():
@@ -264,6 +514,8 @@ class Watcher():
 			# case timestamped information
 			else:
 				timestamp = content[0]
+				global UPDATE_STATUS_PAGE
+				UPDATE_STATUS_PAGE = True
 				# case content is mux information
 				if isinstance(content[1], tuple):
 					if len(content[1]) == 3:
@@ -277,13 +529,39 @@ class Watcher():
 					self.channel_status.new_mux(timestamp)
 					self.save_report()
 				elif content[1] == "sequencing start":
-					#TODO: start porechop & filter & rsync
-					#TODO: start regular creation of plots
 					logging.info("SEQUENCING STARTS")
-					pass
+
+					#start porechop & filter & rsync
+					if self.watchnchop:
+						self.start_watchnchop()
+
+					#start regular creation of plots
+					if self.scheduler:
+						self.scheduler.terminate()
+						self.scheduler.join()
+					statsfp = os.path.join(self.basecalled_basedir, 
+										   self.channel_status.run_data['user_filename_input'],
+										   "GA{}0000".format(self.channel+1),
+										   'filtered',
+										   'stats.txt')
+					#update_interval = 6000
+					logging.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for stats file '.format(self.update_interval/1000) + statsfp)
+					self.scheduler = Scheduler(self.update_interval, 
+											   statsfp, 
+											   self.statsParser_args, 
+											   self.channel_status.run_data['user_filename_input'], 
+											   "GA{}0000".format(self.channel+1), 
+											   self.channel_status.flowcell['flowcell_id'], 
+											   self.channel_status.run_data['protocol_start'])
+					self.scheduler.start()
+
 				elif content[1] == "flowcell discovered":
 					logging.info("FLOWCELL DISCOVERED")
 					self.channel_status.flowcell_disconnected()
+					if self.scheduler:
+						self.scheduler.terminate()
+						self.scheduler.join()
+					self.scheduler = None
 
 				elif content[1] == "Finished QC":
 					logging.info("QC FINISHED")
@@ -304,13 +582,18 @@ class Watcher():
 					if self.channel_status.mux_scans:
 						self.save_report()
 					self.channel_status.run_finished()
+					if self.scheduler:
+						self.scheduler.terminate()
+						self.scheduler.join()
+					self.scheduler = None
 				elif content[1] == "flowcell lookup":
 					logging.info("LOADING PREVIOUS FLOWCELL RUNS")
 					self.lookup_flowcell()
 
 	def lookup_flowcell(self):
 		try:
-			flowcell_id = self.channel_status.flowcell['asic_id'] + self.channel_status.flowcell['asic_id_eeprom']
+			#flowcell_id = self.channel_status.flowcell['asic_id'] + self.channel_status.flowcell['asic_id_eeprom']
+			flowcell_id = self.channel_status.flowcell['asic_id_eeprom']
 		except:
 			logging.info("ERROR: flowcell lookup failed")
 			return
@@ -360,15 +643,32 @@ class Watcher():
 			flowcell_id = self.channel_status.flowcell['asic_id_eeprom']
 			if flowcell_id in ALL_RUNS:
 				ALL_RUNS[flowcell_id][run_id] = {'flowcell': data[0],
-								 				 'run_data': data[1],
-								 				 'mux_scans': data[2]}
+												 'run_data': data[1],
+												 'mux_scans': data[2]}
 			else:
 				ALL_RUNS[flowcell_id] = {}
 				ALL_RUNS[flowcell_id][run_id] = {'flowcell': data[0],
-								 				 'run_data': data[1],
-								 				 'mux_scans': data[2]}
+												 'run_data': data[1],
+												 'mux_scans': data[2]}
 		except:
 			logging.info("ERROR: could not save report of channel GA{}0000".format(self.channel+1))
+
+	def start_watchnchop(self):
+		logging.info("STARTING WATCHNCHOP")
+		if self.channel_status.run_data['user_filename_input']:
+			#print(self.channel_status.run_data['user_filename_input'])
+			#print(self.channel_status.minion_id)
+			cmd = ['perl', '/home/grid/scripts/watchnchop.pl', '-b', '/data/basecalled/{}/{}/'.format(self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)]
+			try:
+				#subprocess.Popen(cmd)
+				subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL)
+				#subprocess.Popen(cmd, stdout=subprocess.DEVNULL)
+			except:
+				logging.info("ERROR: FAILED to start watchnchop, popen failed")
+			logging.info("STARTED WATCHNCHOP with arguments:")
+			print(cmd)
+		else:
+			logging.info("ERROR: FAILED to start watchnchop, no user_filename_input")
 
 
 
@@ -421,7 +721,7 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 		self.modified_as_created = modified_as_created
 
 	def on_moved(self, event):
-	    pass
+		pass
 
 	def on_created(self, event):
 		if not event.is_directory:
@@ -431,7 +731,6 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 				if self.control_server_log:
 					self.file_handler.close_file(event.src_path)
 					logging.info("Replacing current control_server_log file {} with {}".format(self.control_server_log, event.src_path))
-					#TODO: sent report, ( and reset all opened files ? )
 				self.control_server_log = event.src_path
 				logging.info("New control_server_log file {}".format(self.control_server_log))
 				process_function = self.parse_server_log_line
@@ -506,11 +805,11 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 			self.q.put( (line[:23], "flowcell discovered") )
 			send_after = (line[:23], "flowcell lookup")
 
-		elif 	"asic_id_changed"										in line:
-			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
+		#elif 	"asic_id_changed"										in line:
+		#	for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 
 		elif   	"[engine/info]: : data_acquisition_started"				in line:# or \
-		   		#"[saturation_control/info]: : saturation_mode_changed" 	in line:
+				#"[saturation_control/info]: : saturation_mode_changed" 	in line:
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 				dict_content[m.group(1)] = m.group(2)
 				overwrite = True
@@ -567,12 +866,8 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 
 
 if __name__ == "__main__":
-	VERBOSE = False
-	QUIET = False
-	VERSION = "v1.2"
-	ALL_RUNS = {}
 	logging.basicConfig(level=logging.INFO,
-					    format='%(threadName)s: %(asctime)s - %(message)s',
-					    datefmt='%Y-%m-%d %H:%M:%S')
+						format='%(threadName)s: %(asctime)s - %(message)s',
+						datefmt='%Y-%m-%d %H:%M:%S')
 	#q = mp.SimpleQueue()
 	main_and_args()
