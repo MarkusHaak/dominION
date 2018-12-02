@@ -7,7 +7,6 @@ import sys
 import pandas as pd
 from collections import OrderedDict
 import functools
-
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -17,10 +16,9 @@ from mpl_toolkits import axes_grid1
 import matplotlib.gridspec as gridspec
 import re
 from shutil import copyfile
-
 import warnings
-warnings.filterwarnings("ignore")
 
+warnings.filterwarnings("ignore")
 QUIET = False
 TICKLBLS = 6
 SECS_TO_HOURS = 3600.
@@ -70,79 +68,94 @@ class parse_kb_intervals(argparse.Action):
 		setattr(namespace,self.dest,intervals)
 
 def get_argument_parser():
-	argument_parser = argparse.ArgumentParser(description='''Parses a stats file containing information
-													 about a nanopore sequencing run and creates
-													 an in-depth report file including informative plots.''')
+	argument_parser = argparse.ArgumentParser(
+		description='''Parses a stats file containing information
+					about a nanopore sequencing run and creates
+					an in-depth report file including informative plots.'''
+		)
 
 	if __name__ == '__main__':
 		argument_parser.add_argument('statsfile',
-							action=readable_file,
-							help='''Path to the stats file containing all necessary information
-									about the sequencing run. Requires a CSV file with "\t" as 
-									seperator, no header and the following columns in given order:
-									read_id, length, qscore, mean_gc, Passed/tooShort, 
-									read_number, pore_index, timestamp, barcode''')
+			action=readable_file,
+			help='''Path to the stats file containing all necessary information
+					about the sequencing run. Requires a CSV file with "\t" as 
+					seperator, no header and the following columns in given order:
+					read_id, length, qscore, mean_gc, Passed/tooShort, 
+					read_number, pore_index, timestamp, barcode'''
+			)
 
 	argument_parser.add_argument('-o', '--outdir',
-						action=writeable_dir,
-						default=None,
-						help='Path to a directory in which the report files and folders will be saved.')
+		action=writeable_dir,
+		default=None,
+		help='Path to a directory in which the report files and folders will be saved.'
+		)
 
 	argument_parser.add_argument('-q', '--quiet',
-						action='store_true',
-						help='No status information is printed to stdout.')
+		action='store_true',
+		help='No status information is printed to stdout.'
+		)
 
 	argument_parser.add_argument('--max_bins', 
-						type=int,
-						default=24,
-						help='maximum number of bins for box plots (default: 24)')
+		type=int,
+		default=24,
+		help='maximum number of bins for box plots (default: 24)'
+		)
 
 	argument_parser.add_argument('--time_intervals',
-						action=parse_time_intervals,
-						default=[1,2,5,10,20,30,60,90,120,240],
-						help='time intervals in minutes available for binning. (default: 1,2,5,10,20,30,60,90,120,240)')
+		action=parse_time_intervals,
+		default=[1,2,5,10,20,30,60,90,120,240],
+		help='time intervals in minutes available for binning. (default: 1,2,5,10,20,30,60,90,120,240)'
+		)
 
 	argument_parser.add_argument('--kb_intervals',
-						action=parse_kb_intervals,
-						default=[.5,1.,2.,5.],
-						help='kb intervals available for binning. (default: .5,1.,2.,5.)')
+		action=parse_kb_intervals,
+		default=[.5,1.,2.,5.],
+		help='kb intervals available for binning. (default: .5,1.,2.,5.)'
+		)
 
 	argument_parser.add_argument('--gc_intervals',
-						action=parse_kb_intervals,
-						default=[.2,.5,1.,2.,5.],
-						help='kb intervals available for binning. (default: .2,.5,1.,2.,5.)')
+		action=parse_kb_intervals,
+		default=[.2,.5,1.,2.,3.,4.,5.],
+		help='kb intervals available for binning. (default: .2,.5,1.,2.,3.,4.,5.)'
+		)
 
 	argument_parser.add_argument('--matplotlib_style',
-						default='default',
-						help='matplotlib style string that influences all colors and plot appearances. (default: default)')
+		default='default',
+		help='matplotlib style string that influences all colors and plot appearances. (default: default)'
+		)
 
 	argument_parser.add_argument('--website_refresh_rate',
-						type=int,
-						default=60,
-						help='refresh rate in seconds. (default: 60)')
+		type=int,
+		default=60,
+		help='refresh rate in seconds. (default: 60)'
+		)
 
 	argument_parser.add_argument('--html_bricks_dir',
-						action=readable_dir,
-						default='html_bricks')
+		action=readable_dir,
+		default='html_bricks'
+		)
 
 	# the following should only be set if statsParser is called directly:
 	if __name__ == '__main__':
 		argument_parser.add_argument('--user_filename_input',
-							default='Run#####_MIN###_KIT###')
+			default='Run#####_MIN###_KIT###'
+			)
 
 		argument_parser.add_argument('--minion_id',
-							default='GA#0000')
+			default='GA#0000'
+			)
 
 		argument_parser.add_argument('--flowcell_id',
-							default='FAK#####')
+			default='FAK#####'
+			)
 
 		argument_parser.add_argument('--protocol_start',
-							default='YYYY-MM-DD hh:mm:ss.ms')
+			default='YYYY-MM-DD hh:mm:ss.ms'
+			)
 
 	return argument_parser
 
 def parse_args(argument_parser, ext_args=None):
-
 	if ext_args:
 		args = argument_parser.parse_args(ext_args)
 	else:
@@ -158,15 +171,15 @@ def parse_args(argument_parser, ext_args=None):
 	if not os.path.isdir(os.path.join(args.outdir, 'res', 'plots')):
 		os.makedirs(os.path.join(args.outdir, 'res', 'plots'))
 
-	if not os.path.exists('html_bricks') or not os.path.isdir('html_bricks'):
+	if not os.path.exists(args.html_bricks_dir) or not os.path.isdir(args.html_bricks_dir):
 		raise argparse.ArgumentTypeError('ERR: directory "html_bricks" does not exist'.format(args.outdir))
 		for brick in ["barcode_brick.html",
 					  "bottom_brick.html",
 					  "overview_brick.html",
 					  "top_brick.html"]:
-			if not os.path.isfile(os.path.join('html_bricks', 'html_bricks')):
-				raise argparse.ArgumentTypeError('ERR: file {} does not exist'.format(os.path.join('html_bricks', 'html_bricks')))
-
+			if not os.path.isfile(os.path.join(args.html_bricks_dir, brick)):
+				raise argparse.ArgumentTypeError('ERR: file {} does not exist'.format(os.path.join(args.html_bricks_dir, 
+																								   brick)))
 	args.time_intervals = [i*60 for i in args.time_intervals]
 
 	try:
@@ -174,12 +187,9 @@ def parse_args(argument_parser, ext_args=None):
 	except:
 		raise argparse.ArgumentTypeError('ERR: {} is not a valid matplotlib style'.format(args.matplotlib_style))
 
-	#args.kb_intervals = list(np.array(args.kb_intervals)*1000)
-
 	return args
 
 def main(args):
-	#### main #####
 	global QUIET
 	QUIET = args.quiet
 
@@ -194,71 +204,69 @@ def main(args):
 	tprint("Creating stats table")
 	stats_df = stats_table(df)
 
-	#with open(os.path.join(args.outdir, "results.html"), 'w') as outfile:
-	#	print(html_stats_df, file=outfile)
-
 	subgrouped = df.groupby(['barcode', 'subset'])
 	indexes = list(pd.DataFrame(subgrouped['bases'].count()).index)
 
 	#######
 
 	tprint("Creating boxplots")
-	#interval, offset, num_bins = get_lowest_possible_interval(args.time_intervals,
-	#											 args.max_bins, 
-	#											 df['time'].min(), 
-	#											 df['time'].max())
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('time', axis=0, ascending=True)
 		interval, offset, num_bins = get_lowest_possible_interval(args.time_intervals,
 																  args.max_bins, 
 																  sub_df['time'].min(), 
 																  sub_df['time'].max())
-		bin_edges, offsetti = get_bin_edges(sub_df['time'], interval)
+		bin_edges = get_bin_edges(sub_df['time'], interval)
 		for col in sub_df:
 			if col != 'time':
 				tprint("...plotting {}, {}: {}".format(bc, subset, col))
 				bins = get_bins(sub_df[col], bin_edges)
 				intervals = [(offset+i)*interval for i in range(len(bins))]
-				boxplot(bins, intervals, interval, col, os.path.join(args.outdir, 'res', "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
+				boxplot(bins, 
+						intervals, 
+						interval, 
+						col, 
+						os.path.join(args.outdir, 'res', "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
 	
 	#######
 	
 	tprint("Creating kb-bins barplots")
-	#interval, offset, num_bins = get_lowest_possible_interval(list(np.array(args.kb_intervals)*1000),
-	#											 args.max_bins, 
-	#											 df['bases'].min(), 
-	#											 df['bases'].max())
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('bases', axis=0, ascending=True)
 		interval, offset, num_bins = get_lowest_possible_interval(list(np.array(args.kb_intervals)*1000),
 																  args.max_bins, 
 																  sub_df['bases'].min(), 
 																  sub_df['bases'].max())
-		bin_edges, offsetti = get_bin_edges(sub_df['bases'], interval)
+		bin_edges = get_bin_edges(sub_df['bases'], interval)
 		tprint("...plotting {}, {}".format(bc, subset))
 		bins = get_bins(sub_df['bases']/1000000., bin_edges)
 		intervals = [((offset+i)*interval)/1000. for i in range(len(bins))]
-		barplot(bins, intervals, interval/1000., 'kb', 'Mb', os.path.join(args.outdir, 'res', "plots", "barplot_kb-bins_{}_{}".format(bc, subset)))
-
-	tprint("Creating qc-bins barplots")
+		barplot(bins, 
+				intervals, 
+				interval/1000., 
+				'kb', 
+				'Mb', 
+				os.path.join(args.outdir, 'res', "plots", "barplot_kb-bins_{}_{}".format(bc, subset)))
 
 	#######
 
-	#interval, offset, num_bins = get_lowest_possible_interval(args.gc_intervals,
-	#											 args.max_bins, 
-	#											 df['gc'].min(), 
-	#											 df['gc'].max())
+	tprint("Creating qc-bins barplots")
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('gc', axis=0, ascending=True)
 		interval, offset, num_bins = get_lowest_possible_interval(args.gc_intervals,
 												 				  args.max_bins, 
 												 				  sub_df['gc'].min(), 
 												 				  sub_df['gc'].max())
-		bin_edges, offsetti = get_bin_edges(sub_df['gc'], interval)
+		bin_edges = get_bin_edges(sub_df['gc'], interval)
 		tprint("...plotting {}, {}".format(bc, subset))
 		bins = get_bins(sub_df['bases']/1000000., bin_edges)
 		intervals = [(offset+i)*interval for i in range(len(bins))]
-		barplot(bins, intervals, interval, '%', 'Mb', os.path.join(args.outdir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
+		barplot(bins, 
+				intervals, 
+				interval, 
+				'%', 
+				'Mb', 
+				os.path.join(args.outdir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
 	
 	#######
 	
@@ -298,9 +306,15 @@ def main(args):
 						  (sorted_df['bases']/1000000000.).expanding(1).sum(),
 						  subset) )
 	tprint("...plotting {}".format('reads'))
-	lineplot_multi(reads_dfs, "reads", os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('reads')))
+	lineplot_multi(reads_dfs, 
+				   "reads", 
+				   os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('reads'))
+				   )
 	tprint("...plotting {}".format('bases'))
-	lineplot_multi(bases_dfs, "bases [Gb]", os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('bases')))
+	lineplot_multi(bases_dfs, 
+				   "bases [Gb]", 
+				   os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('bases'))
+				   )
 
 	######
 	
@@ -345,19 +359,13 @@ def create_html(outdir,
 				barcodes, 
 				subsets, 
 				html_bricks_dir):
-	#def dashrepl(matchobj):
-	#	return '<a href="#{0}">{0}</a>'.format(matchobj.group(1))
-	#	#if matchobj.group(0) == '-': return ' '
-	#	#else: return '-'
+
 	tprint("Parsing stats table to html")
 	html_stats_df = make_html_table(stats_df).replace('valign="top"', 'valign="center"')
-	#for m in re.finditer(">(BC[0-9][0-9])<", html_stats_df):
-	#	print("x")
+
 	for bc in barcodes:
 		tprint(bc)
 		html_stats_df = html_stats_df.replace(bc, '<a href="#{0}">{0}</a>'.format(bc))
-	#html_stats_df = html_stats_df.replace("BC01", '<a href="BC01">BC01</a>')
-
 
 	with open(os.path.join(html_bricks_dir, 'barcode_brick.html'), 'r') as f:
 		barcode_brick = f.read()
@@ -374,8 +382,13 @@ def create_html(outdir,
 						"GA40000":"four",
 						"GA50000":"five"}
 
-	html_content = top_brick.format(user_filename_input, minion_id, flowcell_id, protocol_start, website_refresh_rate, minion_id_to_css[minion_id]) + \
-				   overview_brick.format(html_stats_df)
+	html_content = top_brick.format(user_filename_input, 
+									minion_id, 
+									flowcell_id, 
+									protocol_start, 
+									website_refresh_rate, 
+									minion_id_to_css[minion_id])
+	html_content = html_content + overview_brick.format(html_stats_df)
 
 	for barcode in barcodes:
 		html_content = html_content + barcode_brick.format(barcode, subsets[0], subsets[2], subsets[1])
@@ -388,59 +401,38 @@ def create_html(outdir,
 	copyfile(os.path.join(html_bricks_dir, 'style.css'), os.path.join(outdir, 'res', 'style.css'))
 
 
-
-
-
-
 def pore_heatmap(max_pore_index, pore_bases, pore_indexes, dest):
 	f = plt.figure()
 	fig = plt.gcf()
 	gs0 = gridspec.GridSpec(1, 1)
 	ax1 = plt.subplot(gs0[0, 0])
-
 	x_dim = 32
 	data = []
-	#for 
-
-
 
 def lineplot_multi(time_dfs_lbls, y_label, dest):
 	f = plt.figure()
 	fig = plt.gcf()
-
 	gs0 = gridspec.GridSpec(1, 1)
-
 	ax1 = plt.subplot(gs0[0, 0])
-
-	ax1.set_ylabel(y_label)
 
 	for i, (time, df, lbl) in enumerate(time_dfs_lbls):
 		ax1.plot(time, df, color='C{}'.format(i), label=lbl)
 
+	ax1.set_xlabel('sequencing time [h]')
+	ax1.set_ylabel(y_label)
 	ax1.legend(loc=2)
-
 	ax1.yaxis.grid(color="black", alpha=0.1)
 
-	ax1.set_xlabel('sequencing time [h]')
-
 	fig.tight_layout()
-	#plt.show()
 	plt.savefig(dest)
 
 def lineplot_2y(time, bases, dest):
-
-	#y_bases = [bases[0]]
-	#for i in range(1,len(bases)):
-	#	y_bases.append(y_bases[i-1] + bases[i])
 	y_bases = bases.expanding(1).sum()
-
 	y_reads = pd.DataFrame({'count':range(1,bases.size+1)})
 
 	f = plt.figure()
 	fig = plt.gcf()
-
 	gs0 = gridspec.GridSpec(1, 1)
-
 	ax1 = plt.subplot(gs0[0, 0])
 	ax2 = ax1.twinx()
 
@@ -453,36 +445,27 @@ def lineplot_2y(time, bases, dest):
 	ax1.legend(loc=2, bbox_to_anchor=(0., 1.))
 	ax2.legend(loc=2, bbox_to_anchor=(0., 0.92))
 
-	#ax1.set_xticks()
 	ax1.set_xlabel('sequencing time [h]')
 
 	fig.tight_layout()
-	#plt.show()
 	plt.savefig(dest)
 
 def barplot(bins, intervals, interval, x_unit, y_unit, dest):
+	reads = [len(i) for i in bins]
+	bases = [sum(i) for i in bins]
+	x = np.array(list(range(len(intervals)))) + 0.5
+
 	f = plt.figure()
 	fig = plt.gcf()
-
-	gs0 = gridspec.GridSpec(1, 1)#, width_ratios=[1], height_ratios=[0.3,1])
-	#gs0.update(wspace=0.01, hspace=0.01)
-
+	gs0 = gridspec.GridSpec(1, 1)
 	ax1 = plt.subplot(gs0[0, 0])
 	ax2 = ax1.twinx()
 
+	ax1.bar(x-0.15, reads, width=0.3, color='C1', align='center', label = 'reads')
+	ax2.bar(x+0.15, bases, width=0.3, color='C2', align='center', label = 'bases')
+
 	ax1.set_ylabel('reads')
 	ax2.set_ylabel('bases [{}]'.format(y_unit))
-	#ax1 = plt.subplot(gs0[1, 0])
-
-	reads = [len(i) for i in bins]
-	bases = [sum(i) for i in bins]
-
-	x = np.array(list(range(len(intervals)))) + 0.5
-
-	bar1 = ax1.bar(x-0.15, reads, width=0.3, color='C1', align='center', label = 'reads')
-	bar2 = ax2.bar(x+0.15, bases, width=0.3, color='C2', align='center', label = 'bases')
-
-	bars = [b for b in bar1+bar2]
 	ax1.legend(loc=1, bbox_to_anchor=(1., 1.))
 	ax2.legend(loc=1, bbox_to_anchor=(1., 0.92))
 
@@ -499,28 +482,21 @@ def barplot(bins, intervals, interval, x_unit, y_unit, dest):
 	ax1.set_xlabel("{} {} bins".format(interval, x_unit))
 
 	fig.tight_layout()
-	#plt.show()
 	plt.savefig(dest)
-
-
 
 def boxplot(bins, intervals, interval, ylabel, dest):
 	f = plt.figure()
 	fig = plt.gcf()
-
 	gs0 = gridspec.GridSpec(2, 1, width_ratios=[1], height_ratios=[0.3,1])
 	gs0.update(wspace=0.01, hspace=0.01)
-
 	ax0 = plt.subplot(gs0[0, 0])
 	ax1 = plt.subplot(gs0[1, 0])
 
-	#fig1, ax1 = plt.subplots()
-	#ax1.set_title('mean qscore over time')
 	ax1.boxplot(bins, showfliers=False)
+
 	ax1.set_xlabel("sequencing time [h]")
 	ax1.set_ylabel(ylabel)
 	ax1.set_xticks([i+0.5 for i in range(len(intervals)+1)])
-	#print([i+0.5 for i in range(len(intervals)+1)])
 	xticklabels = ["" for i in intervals]
 	xticklabels.append("{0:.1f}".format((intervals[-1]+interval)/SECS_TO_HOURS))
 	tickspace = len(intervals)//TICKLBLS
@@ -537,17 +513,12 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 	ax1.set_axisbelow(True)
 
 
-
-
 	ax0.bar([i for i in range(len(bins))], [len(i) for i in bins], align='center', color='grey', width=0.4)
+
 	ax0.set_xlim([-0.5, len(bins)-0.5])
 	ax0.set_ylim([0,max([len(i) for i in bins])*1.2])
 	ax0.tick_params(top=False, bottom=False, left=True, right=False,
 				   labeltop=False, labelbottom=False)
-	#for edge, spine in ax0.spines.items():
-	#	spine.set_visible(False)
-	#ax0.spines['left'].set_visible(True)
-	#ax0.spines['right'].set_visible(True)
 	ax0.set_ylabel("reads")
 	ax0.set_xticklabels([])
 	ax0.yaxis.grid(color="black", alpha=0.1)
@@ -566,37 +537,41 @@ def tprint(*args, **kwargs):
 
 def stats_table(df):
 	subgrouped = df.groupby(['barcode', 'subset'])
-
-	#groups = list(pd.DataFrame(subgrouped['bases'].count()).index)
 	grouped = df.groupby(['barcode'])
 
 	# keys equal headers in html
-	subgrouped_output_df = pd.DataFrame(OrderedDict((('reads' ,							subgrouped['bases'].count()), 
-							 			 			 ('Mb' ,							subgrouped['bases'].sum()/1000000.), 
-							 			 			 ('mean quality' ,					subgrouped['qual'].mean()), 
-							 			 			 ('mean GC [%]' ,					subgrouped['gc'].mean()),
-							 			 			 ('avg length [kb]' ,				subgrouped['bases'].mean()/1000.),
-							 			 			 ('median length [kb]' ,			subgrouped['bases'].median()/1000.),
-							 			 			 ('mean length longest N50 [kb]',	subgrouped['bases'].agg(avgN50longest)/1000.),
-							 			 			 ('longest [kb]' ,					subgrouped['bases'].max()/1000.)
-							 			 			 )))
-	grouped_output_df = pd.DataFrame(OrderedDict((('reads' ,							grouped['bases'].count()), 
-							 			 		  ('Mb' ,								grouped['bases'].sum()/1000000.), 
-							 			 		  ('mean quality' ,						grouped['qual'].mean()), 
-							 			 		  ('mean GC [%]' ,						grouped['gc'].mean()),
-							 			 		  ('avg length [kb]' ,					grouped['bases'].mean()/1000.),
-							 			 		  ('median length [kb]' ,				grouped['bases'].median()/1000.),
-							 			 		  ('mean length longest N50 [kb]',		grouped['bases'].agg(avgN50longest)/1000.),
-							 			 		  ('longest [kb]' ,						grouped['bases'].max()/1000.)
-							 			 		  )))
+	subgrouped_output_df = pd.DataFrame(
+		OrderedDict((('reads',							 subgrouped['bases'].count()), 
+					 ('Mb',								 subgrouped['bases'].sum()/1000000.), 
+					 ('mean quality',					 subgrouped['qual'].mean()), 
+					 ('mean GC [%]',					 subgrouped['gc'].mean()),
+					 ('avg length [kb]',				 subgrouped['bases'].mean()/1000.),
+					 ('median length [kb]' ,			 subgrouped['bases'].median()/1000.),
+					 ('mean length longest N50 [kb]',	 subgrouped['bases'].agg(avgN50longest)/1000.),
+					 ('longest [kb]',					 subgrouped['bases'].max()/1000.)
+					 )))
+	grouped_output_df = pd.DataFrame(
+		OrderedDict((('reads',								grouped['bases'].count()), 
+					 ('Mb',									grouped['bases'].sum()/1000000.), 
+					 ('mean quality',						grouped['qual'].mean()), 
+					 ('mean GC [%]',						grouped['gc'].mean()),
+					 ('avg length [kb]',					grouped['bases'].mean()/1000.),
+					 ('median length [kb]',					grouped['bases'].median()/1000.),
+					 ('mean length longest N50 [kb]',		grouped['bases'].agg(avgN50longest)/1000.),
+					 ('longest [kb]',						grouped['bases'].max()/1000.)
+					 )))
 
 	# concat both to one DataFrame, sorted by the indexes
-	index = pd.MultiIndex.from_tuples(list(zip(list(grouped_output_df.index), ['all' for i in grouped_output_df.index])), names=['barcode', 'subset'])
+	index = pd.MultiIndex.from_tuples(list(zip(list(grouped_output_df.index), 
+											   ['all' for i in grouped_output_df.index]
+											   )
+										   ), 
+									  names=['barcode', 'subset']
+									  )
 	grouped_output_df.index = index
 	concat_res = pd.concat([subgrouped_output_df,grouped_output_df])
 	concat_res = concat_res.sort_index(level=['barcode', 'subset'])
 	#concat_res = concat_res.reindex(['Passed','tooShort','BadQual','all'], level='subset') #TODO
-
 	return concat_res
 
 def make_html_table(df):
@@ -611,22 +586,12 @@ def parse_stats(fp):
 					 names="id bases qual gc subset pore_num pore time barcode".split(" "), 
 					 usecols=[1,2,3,4,5,6,7,8],
 					 index_col=[7,3,5], # referes to usecols
-					 #converters={'time':(lambda x: pd.Timestamp(x)), 'bases':(lambda x: float(x)/1000000)}, 
 					 converters={'time':(lambda x: pd.Timestamp(x))},
 					 dtype={'qual':float, 'gc':float, 'bases':float})
-	#print(df)
-	#df['bases'] = df['bases']/1000000
-	#print(df)
-	#exit()
 
-	#tprint(df.sort_values('time', axis=0, ascending=True))
 
 	start_time = df['time'].min(axis=1)
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
-	
-	#exit()
-	#print(df.groupby(['pore'])['pore_num'].count().sort_values(ascending=True))
-	#print(df.groupby(['pore'])['pore_num'].count().sort_index(ascending=True))
 	return df
 
 def get_lowest_possible_interval(intervals, max_bins, min_value, max_value):
@@ -651,7 +616,7 @@ def get_bin_edges(sorted_df, interval):
 			edges.append( i )
 			edge += interval
 	edges.append(sorted_df.size)
-	return edges, offset
+	return edges
 
 def get_bins(df, bin_edges):
 	bins = []

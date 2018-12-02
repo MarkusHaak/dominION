@@ -1,7 +1,6 @@
 .container {
 	width: 100%;
-	margin-top: 16px;
-	background-color: #FFFFFF;
+	background-color: #f0f0f0;
 }
 
 .contentbox {	
@@ -46,16 +45,17 @@
 
 
 .contentbox.overview {
-	background: #f0f0f0;
+	background: #ffffff;
 }
 
 .contentbox.barcode {
-	background: #f0f0f0;
+	background: #ffffff;
 }
 
 .contentbox.flowcells {	
 	background: #e8e6e2;
 	width: 80%;
+	height: 100%;
 }
 
 .flowcelltitle {
@@ -97,7 +97,8 @@ p, article, .article {
 	
 	overflow: auto;
 	margin: auto;
-	padding-bottom: 20px;
+	padding-bottom: 40px;
+	padding-top: 40px;
 	display: none;
 }
 
@@ -121,8 +122,6 @@ article, .article, .contentline {
 
 .contentline {
 	margin: auto;
-	margin-top: 10px;
-	margin-bottom: 10px;
 	overflow: auto;
 }
 
@@ -165,8 +164,8 @@ article, .article, .contentline {
 .figure {
 	display: block;
 	margin: auto;
-	margin-top: 20px;
-	margin-bottom: 20px;
+	margin-top: 0px;
+	margin-bottom: 0px;
 }
 
 .figure.large {
@@ -195,6 +194,10 @@ article, .article, .contentline {
 
 .figure.eighty {
 	width: 80%;
+}
+
+.figure.hundred {
+	width: 100%;
 }
 
 .figure.image {
@@ -290,7 +293,7 @@ td  {
 }
 
 body {
-	background: #FFFFFF;
+	background: #f0f0f0;
 	height: 100%;
 	font-family: verdana;
 	font-size: 12px;

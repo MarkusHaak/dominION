@@ -19,7 +19,7 @@ import dateutil
 
 VERBOSE = False
 QUIET = False
-VERSION = "v2.0"
+VERSION = "v2.1"
 ALL_RUNS = {}
 UPDATE_STATUS_PAGE = False
 
@@ -63,7 +63,8 @@ def main_and_args():
 	parser.add_argument('-l', '--log_basedir',
 						action=readable_dir,
 						default='/var/log/MinKNOW',
-						help='Path to the base directory of GridIONs log files, contains the manager log files. (default: /var/log/MinKNOW)')
+						help='''Path to the base directory of GridIONs log files,
+						 contains the manager log files. (default: /var/log/MinKNOW)''')
 
 	a_d = parser.add_argument('-d', '--database_dir',
 						action=readable_writeable_dir,
@@ -72,8 +73,8 @@ def main_and_args():
 
 	parser.add_argument('-m', '--modified_as_created',
 						action='store_true',
-						help='''Handle file modifications as if the file was created, meaning that the latest changed file is seen as the current 
-								log file.''')
+						help='''Handle file modifications as if the file was created, 
+						meaning that the latest changed file is seen as the current log file.''')
 
 	parser.add_argument('--no_watchnchop',
 						action='store_true',
@@ -92,16 +93,18 @@ def main_and_args():
 	parser.add_argument('--statsParser_args',
 						action=parse_statsParser_args,
 						default=[],
-						help='''Arguments that are passed to statsParser.py. Please DO NOT specify the stats file location!
-						 See a full list of possible options with --statsParser_args " -h" ''')
+						help='''Arguments that are passed to the statsParser.
+						See a full list of possible options with --statsParser_args " -h" ''')
 
 	parser.add_argument('--html_bricks_dir',
 						action=readable_dir,
-						default='html_bricks')
+						default='html_bricks',
+						help='')
 
 	parser.add_argument('--status_page_dir',
 						default='GridIONstatus',
-						help='Path to the directory where all files for the GridION status page will be stored. (default: ./GridIONstatus)')
+						help='''Path to the directory where all files for the GridION status page 
+						will be stored. (default: ./GridIONstatus)''')
 
 	parser.add_argument('-v', '--verbose',
 						action='store_true',
@@ -122,6 +125,7 @@ def main_and_args():
 	VERBOSE = args.verbose
 
 	#### main #####
+
 	if not QUIET: print("#######################################")
 	if not QUIET: print("######### grinIONwatcher {} #########".format(VERSION))
 	if not QUIET: print("#######################################")
@@ -135,9 +139,12 @@ def main_and_args():
 		os.makedirs(args.status_page_dir)
 	if not os.path.exists(os.path.join(args.status_page_dir, 'res')):
 		os.makedirs(os.path.join(args.status_page_dir, 'res'))
-	copyfile(os.path.join(args.html_bricks_dir, 'style.css'), os.path.join(args.status_page_dir, 'res', 'style.css'))
-	copyfile(os.path.join(args.html_bricks_dir, 'flowcell.png'), os.path.join(args.status_page_dir, 'res', 'flowcell.png'))
-	copyfile(os.path.join(args.html_bricks_dir, 'no_flowcell.png'), os.path.join(args.status_page_dir, 'res', 'no_flowcell.png'))
+	copyfile(os.path.join(args.html_bricks_dir, 'style.css'), 
+			 os.path.join(args.status_page_dir, 'res', 'style.css'))
+	copyfile(os.path.join(args.html_bricks_dir, 'flowcell.png'), 
+			 os.path.join(args.status_page_dir, 'res', 'flowcell.png'))
+	copyfile(os.path.join(args.html_bricks_dir, 'no_flowcell.png'), 
+			 os.path.join(args.status_page_dir, 'res', 'no_flowcell.png'))
 
 
 	logging.info("loading previous runs from database:")
@@ -210,7 +217,8 @@ def load_runs_from_database(database_dir):
 			run_id = run_data['run_id']
 			if flowcell_id in ALL_RUNS:
 				if run_id in ALL_RUNS[flowcell_id]:
-					print("ERROR: {} exists multiple times in database entry for flowcell {}!".format(run_id, flowcell_id))
+					print("ERROR: {} exists multiple times in database entry for flowcell {}!".format(run_id, 
+																									  flowcell_id))
 					continue
 			else:
 				ALL_RUNS[flowcell_id] = {}
@@ -220,7 +228,10 @@ def load_runs_from_database(database_dir):
 											 'mux_scans': mux_scans}
 
 			try:
-				print('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(flowcell_id, run_data['experiment_type'], flowcell['flowcell_id'], run_data['protocol_start']))
+				print('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(flowcell_id, 
+																							  run_data['experiment_type'], 
+																							  flowcell['flowcell_id'], 
+																							  run_data['protocol_start']))
 			except:
 				pass
 
@@ -297,8 +308,13 @@ def update_status_page(watchers, html_bricks_dir, status_page_dir):
 				elif latest_qc == None and flowcell_runs:
 					runs_string = '<p><u>Runs</u>:<br><br>'
 					for run in flowcell_runs:
-						runs_string = runs_string + \
-							'<a href="" target="_blank">{0}</a><br>'.format(ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
+						runs_string = runs_string + '<a href="{0}" target="_blank">{1}</a><br>'.format(
+							os.path.join(watcher.basecalled_basedir, 
+										 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
+										 "GA{}0000".format(watcher.channel+1),
+										 'filtered',
+										 'results.html'),
+							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
 					runs_string = runs_string + '</p>'
 
 					flowcell_info_brick = flowcell_info_brick.format(
@@ -311,8 +327,13 @@ def update_status_page(watchers, html_bricks_dir, status_page_dir):
 				else:
 					runs_string = '<p><u>Runs</u>:<br><br>'
 					for run in flowcell_runs:
-						runs_string = runs_string + \
-							'<a href="" target="_blank">{0}</a><br>'.format(ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
+						runs_string = runs_string + '<a href="{0}" target="_blank">{1}</a><br>'.format(
+							os.path.join(watcher.basecalled_basedir, 
+										 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
+										 "GA{}0000".format(watcher.channel+1),
+										 'filtered',
+										 'results.html'),
+							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
 					runs_string = runs_string + '</p>'
 
 					flowcell_info_brick = flowcell_info_brick.format(
@@ -425,7 +446,8 @@ class ChannelStatus():
 
 class Scheduler(mp.Process):
 
-	def __init__(self, update_interval, statsfp, statsParser_args, user_filename_input, minion_id, flowcell_id, protocol_start):
+	def __init__(self, update_interval, statsfp, statsParser_args, 
+				 user_filename_input, minion_id, flowcell_id, protocol_start):
 		mp.Process.__init__(self)
 		self.exit = mp.Event()
 		#self.sched_q = sched_q
@@ -475,7 +497,8 @@ class Scheduler(mp.Process):
 
 class Watcher():
 
-	def __init__(self, log_basedir, channel, modified_as_created, database_dir, basecalled_basedir, statsParser_args, update_interval, no_watchnchop):
+	def __init__(self, log_basedir, channel, modified_as_created, database_dir, 
+				 basecalled_basedir, statsParser_args, update_interval, no_watchnchop):
 		self.q = mp.SimpleQueue()
 		self.watchnchop = not no_watchnchop
 		self.channel = channel
@@ -544,7 +567,6 @@ class Watcher():
 										   "GA{}0000".format(self.channel+1),
 										   'filtered',
 										   'stats.txt')
-					#update_interval = 6000
 					logging.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for stats file '.format(self.update_interval/1000) + statsfp)
 					self.scheduler = Scheduler(self.update_interval, 
 											   statsfp, 
