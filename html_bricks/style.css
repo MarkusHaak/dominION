@@ -5,8 +5,8 @@
 
 .contentbox {	
 	width: 80%;
-    margin: auto;
-    margin-bottom: 30px;
+	margin: auto;
+	margin-bottom: 30px;
 }
 
 .contentbox.title {	
@@ -71,19 +71,19 @@
 
 p, article, .article {
 	text-align: justify;
-    display: block;
-    padding: 10px;
+	display: block;
+	padding: 10px;
 }
 
 .seperator {
 	text-align: center;
 
-    font-size: 14px;
-    width: 100%;
-    padding-top: 5px;
+	font-size: 14px;
+	width: 100%;
+	padding-top: 5px;
 	padding-bottom: 5px;
 	margin-bottom: 2px;
-    background: #cfcfcf;
+	background: #cfcfcf;
 
 	cursor: pointer;
 	text-align: center;
@@ -92,8 +92,8 @@ p, article, .article {
 
 .expandable {
 	width: 100%;
-    border-top: 0;
-    border-bottom: 0;
+	border-top: 0;
+	border-bottom: 0;
 	
 	overflow: auto;
 	margin: auto;
@@ -206,41 +206,46 @@ article, .article, .contentline {
 }
 
 
-
-
 h1, h2, h3, h4, h5, h6 {
-    width: 95%;
-    margin: auto;
-    margin-top: 0px;
-    color: #ffffff;
+	width: 95%;
+	margin: auto;
+	margin-top: 0px;
+	color: #ffffff;
 }
 
 h1 {
-	padding-top: 20px;
-    padding-bottom: 20px;
+	padding-top: 22px;
+	padding-bottom: 20px;
 }
 
 h2 {
 	padding-top: 0px;
-    padding-bottom: 10px;
+	padding-bottom: 10px;
 }
 
 h3 {
 	padding-top: 10px;
-    padding-bottom: 20px;
+	padding-bottom: 0px;
 }
 
 h4 {
 	padding-top: 10px;
-    padding-bottom: 10px;
-    font-size: 15px;
+	padding-bottom: 10px;
+	font-size: 15px;
 }
 
 h5 {
 	padding-top: 10px;
-    padding-bottom: 10px;
-    font-size: 15px;
-    text-align: center
+	padding-bottom: 10px;
+	font-size: 15px;
+	text-align: center
+}
+
+h6 {
+	padding-top: 0px;
+	padding-bottom: 15px;
+	font-size: 12px;
+	text-align: right
 }
 
 table, th, td {
@@ -302,8 +307,8 @@ body {
 }
 
 html, body {
-    max-width: 100%;
-    overflow-x: hidden;
+	max-width: 100%;
+	overflow-x: hidden;
 }
 
 a, a:link, a:visited, a:active {
@@ -318,27 +323,94 @@ a:hover {
 
 
 @media print {
-    .container {
-        width: 100%;
-        font-size: 9px;
-    }
+	@page {
+		size: auto;   /* auto is the initial value */
+		margin: 0;  /* this affects the margin in the printer settings */
+		margin-left: 30pt;
+		margin-right: 30pt;
+	}
 
-    .contentbox {	
+	table, figure {
+	  page-break-inside: avoid;
+	}
+
+	.seperator {
+		padding-top: 30px;
+	}
+
+	.doNotSeperate {
+		page-break-inside: avoid;
+	}
+
+	.expandable {
+		
+		
+	}
+	
+	.container {
 		width: 100%;
-	    margin: auto;
-	    /*margin-bottom: 30px;*/
+		font-size: 9px;
+	}
+
+	.contentbox {	
+		width: 100%;
+		margin: auto;
+		/*margin-bottom: 30px;*/
 		background: #f0f0f0;
 	}
 
-    .contentbox.title {	
+	.contentbox.title {	
+		padding-top: 30px;
 		width: 100%;
+		page-break-before: always;
+	}
+
+	.contentbox.title:nth-child(1) {	
+		width: 100%;
+		page-break-before: avoid;
 	}
 
 	.contentbox.overview {
 		width: 100%;
+		background: #ffffff;
 	}
 
 	.contentbox.barcode {	
+		width: 100%;
+		background: #ffffff;
+	}
+
+	.contentbox.title {	
+		background: #333333;
+	}
+	.contentbox.title.one {	
+		background: #c7b900;
+	}
+	.contentbox.title.two {	
+		background: #0ad15d;
+	}
+	.contentbox.title.three {	
+		background: #0029ba;
+	}
+	.contentbox.title.four {	
+		background: #d1009b;
+	}
+	.contentbox.title.five {	
+		background: #c76700;
+	}
+	.contentbox.title.one.hundred {	
+		width: 100%;
+	}
+	.contentbox.title.two.hundred {	
+		width: 100%;
+	}
+	.contentbox.title.three.hundred {	
+		width: 100%;
+	}
+	.contentbox.title.four.hundred {	
+		width: 100%;
+	}
+	.contentbox.title.five.hundred {	
 		width: 100%;
 	}
 

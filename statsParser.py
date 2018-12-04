@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore")
 QUIET = False
 TICKLBLS = 6
 SECS_TO_HOURS = 3600.
-VERSION = "v2.0"
+VERSION = "v2.1"
 
 class readable_file(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
@@ -87,7 +87,8 @@ def get_argument_parser():
 	argument_parser.add_argument('-o', '--outdir',
 		action=writeable_dir,
 		default=None,
-		help='Path to a directory in which the report files and folders will be saved.'
+		help='''Path to a directory in which the report files and folders will be saved.
+			 (default: directory of statsfile)'''
 		)
 
 	argument_parser.add_argument('-q', '--quiet',
@@ -113,10 +114,10 @@ def get_argument_parser():
 		help='kb intervals available for binning. (default: .5,1.,2.,5.)'
 		)
 
-	argument_parser.add_argument('--gc_intervals',
-		action=parse_kb_intervals,
-		default=[.2,.5,1.,2.,3.,4.,5.],
-		help='kb intervals available for binning. (default: .2,.5,1.,2.,3.,4.,5.)'
+	argument_parser.add_argument('--gc_interval',
+		type=float,
+		default=0.5,
+		help='gc interval for binning reads based on mean gc content. (default: 0.05)'
 		)
 
 	argument_parser.add_argument('--matplotlib_style',
@@ -124,15 +125,16 @@ def get_argument_parser():
 		help='matplotlib style string that influences all colors and plot appearances. (default: default)'
 		)
 
-	argument_parser.add_argument('--website_refresh_rate',
+	argument_parser.add_argument('--result_page_refresh_rate',
 		type=int,
-		default=60,
-		help='refresh rate in seconds. (default: 60)'
+		default=120,
+		help='refresh rate in seconds. (default: 120)'
 		)
 
 	argument_parser.add_argument('--html_bricks_dir',
 		action=readable_dir,
-		default='html_bricks'
+		default='html_bricks',
+		help='directory containing template files for creating the results html page. (default: ./html_bricks)'
 		)
 
 	# the following should only be set if statsParser is called directly:
@@ -250,10 +252,10 @@ def main(args):
 
 	#######
 
-	tprint("Creating qc-bins barplots")
+	tprint("Creating gc-bins barplots")
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('gc', axis=0, ascending=True)
-		interval, offset, num_bins = get_lowest_possible_interval(args.gc_intervals,
+		interval, offset, num_bins = get_lowest_possible_interval([args.gc_interval],
 												 				  args.max_bins, 
 												 				  sub_df['gc'].min(), 
 												 				  sub_df['gc'].max())
@@ -261,12 +263,12 @@ def main(args):
 		tprint("...plotting {}, {}".format(bc, subset))
 		bins = get_bins(sub_df['bases']/1000000., bin_edges)
 		intervals = [(offset+i)*interval for i in range(len(bins))]
-		barplot(bins, 
-				intervals, 
-				interval, 
-				'%', 
-				'Mb', 
-				os.path.join(args.outdir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
+		gc_lineplot(bins, 
+					intervals, 
+					interval, 
+					'%', 
+					'Mb', 
+					os.path.join(args.outdir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
 	
 	#######
 	
@@ -344,7 +346,7 @@ def main(args):
 				args.minion_id, 
 				args.flowcell_id, 
 				args.protocol_start, 
-				args.website_refresh_rate, 
+				args.result_page_refresh_rate, 
 				barcodes, 
 				subsets, 
 				args.html_bricks_dir)
@@ -355,7 +357,7 @@ def create_html(outdir,
 				minion_id, 
 				flowcell_id, 
 				protocol_start, 
-				website_refresh_rate, 
+				result_page_refresh_rate, 
 				barcodes, 
 				subsets, 
 				html_bricks_dir):
@@ -380,14 +382,17 @@ def create_html(outdir,
 						"GA20000":"two",
 						"GA30000":"three",
 						"GA40000":"four",
-						"GA50000":"five"}
+						"GA50000":"five",
+						"GA#0000":"unknown"}
 
 	html_content = top_brick.format(user_filename_input, 
 									minion_id, 
 									flowcell_id, 
 									protocol_start, 
-									website_refresh_rate, 
-									minion_id_to_css[minion_id])
+									result_page_refresh_rate, 
+									minion_id_to_css[minion_id],
+									VERSION,
+									"{}".format(datetime.now())[:-7])
 	html_content = html_content + overview_brick.format(html_stats_df)
 
 	for barcode in barcodes:
@@ -480,6 +485,43 @@ def barplot(bins, intervals, interval, x_unit, y_unit, dest):
 			pass
 	ax1.set_xticklabels(xticklabels)
 	ax1.set_xlabel("{} {} bins".format(interval, x_unit))
+
+	fig.tight_layout()
+	plt.savefig(dest)
+
+
+def gc_lineplot(bins, intervals, interval, x_unit, y_unit, dest):
+	reads = [len(i) for i in bins]
+	bases = [sum(i) for i in bins]
+	#x = np.array(list(range(len(intervals)))) + 0.5
+
+	f = plt.figure()
+	fig = plt.gcf()
+	gs0 = gridspec.GridSpec(1, 1)
+	ax1 = plt.subplot(gs0[0, 0])
+	ax2 = ax1.twinx()
+
+	#ax1.bar(x-0.15, reads, width=0.3, color='C1', align='center', label = 'reads')
+	#ax2.bar(x+0.15, bases, width=0.3, color='C2', align='center', label = 'bases')
+	ax1.plot([i+interval/2 for i in intervals], reads, color='C1', label='reads', linewidth=0.5)
+	ax2.plot([i+interval/2 for i in intervals], bases, color='C2', label='bases', linewidth=0.5)
+
+	ax1.set_ylabel('reads')
+	ax2.set_ylabel('bases [{}]'.format(y_unit))
+	ax1.legend(loc=1, bbox_to_anchor=(1., 1.))
+	ax2.legend(loc=1, bbox_to_anchor=(1., 0.92))
+
+	#ax1.set_xticks(list(range(len(intervals)+1)))
+	#xticklabels = ["" for i in intervals]
+	#xticklabels.append("{0:.1f}".format(intervals[-1]+interval))
+	#tickspace = len(intervals)//TICKLBLS
+	#for i in range(0,len(xticklabels)-tickspace, max(tickspace,1)):
+	#	try: # fails if only one bin
+	#		xticklabels[i] = "{0:.1f}".format(intervals[i])
+	#	except:
+	#		pass
+	#ax1.set_xticklabels(xticklabels)
+	ax1.set_xlabel("gc content ({} {} bins)".format(interval, x_unit))
 
 	fig.tight_layout()
 	plt.savefig(dest)
@@ -611,8 +653,12 @@ def get_bin_edges(sorted_df, interval):
 	offset = sorted_df[0] // interval
 	edge = sorted_df[0] + interval
 	edges = [0]
+	#for i,val in enumerate(sorted_df):
+	#	if val > edge:
+	#		edges.append( i )
+	#		edge += interval
 	for i,val in enumerate(sorted_df):
-		if val > edge:
+		while val > edge:
 			edges.append( i )
 			edge += interval
 	edges.append(sorted_df.size)
