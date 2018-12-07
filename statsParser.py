@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore")
 QUIET = False
 TICKLBLS = 6
 SECS_TO_HOURS = 3600.
-VERSION = "v2.1"
+VERSION = "v2.5"
 
 class readable_file(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
@@ -131,14 +131,14 @@ def get_argument_parser():
 		help='refresh rate in seconds. (default: 120)'
 		)
 
-	argument_parser.add_argument('--html_bricks_dir',
-		action=readable_dir,
-		default='html_bricks',
-		help='directory containing template files for creating the results html page. (default: ./html_bricks)'
-		)
-
 	# the following should only be set if statsParser is called directly:
 	if __name__ == '__main__':
+		argument_parser.add_argument('--html_bricks_dir',
+			action=readable_dir,
+			default='html_bricks',
+			help='directory containing template files for creating the results html page. (default: ./html_bricks)'
+			)
+
 		argument_parser.add_argument('--user_filename_input',
 			default='Run#####_MIN###_KIT###'
 			)
@@ -576,6 +576,7 @@ def avgN50longest(series):
 def tprint(*args, **kwargs):
 	if not QUIET:
 		print("["+strftime("%H:%M:%S", gmtime())+"] "+" ".join(map(str,args)), **kwargs)
+	sys.stdout.flush()
 
 def stats_table(df):
 	subgrouped = df.groupby(['barcode', 'subset'])
@@ -626,6 +627,7 @@ def parse_stats(fp):
 					 sep='\t', 
 					 header=None, 
 					 names="id bases qual gc subset pore_num pore time barcode".split(" "), 
+					 #names="bases qual gc subset pore_num pore time barcode".split(" "), 
 					 usecols=[1,2,3,4,5,6,7,8],
 					 index_col=[7,3,5], # referes to usecols
 					 converters={'time':(lambda x: pd.Timestamp(x))},

@@ -10,17 +10,14 @@
 
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
   <script>
-    $(document).ready(function() {{
-      $(".seperator").click(function() {{
-        $title = $(this);
-        $content = $title.next();
-        $content.slideToggle(250, function() {{
-          if (!$content.is(":visible")) {{
-            $title.css("zIndex", "0");
-          }}
-        }});
-      }});
-    }});
+    function clickFunction(id) {{
+      if ($("#" + id).css('display') == 'block') {{
+          $("#" + id).css('display', 'none');
+      }} else {{
+          $("#" + id).css('display', 'block');
+      }}
+      sessionStorage.setItem(id, $("#" + id).css('display'));
+    }}
   </script>
 
   <body>
@@ -30,5 +27,5 @@
         <h1>{0}</h1>
         <h2>{1}, {2}</h2>
         <h3>{3}</h3>
-        <h6>statsParser {6}, {7}</h6>
+        <h6><a href="https://etherpad.uni-wuppertal.de/p/gridTools_Wunschliste" target="_blank">Wunschliste</a> statsParser {6}, {7}</h6>
       </div>

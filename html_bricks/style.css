@@ -215,11 +215,11 @@ h1, h2, h3, h4, h5, h6 {
 
 h1 {
 	padding-top: 22px;
-	padding-bottom: 20px;
+	padding-bottom: 0px;
 }
 
 h2 {
-	padding-top: 0px;
+	padding-top: 20px;
 	padding-bottom: 10px;
 }
 
@@ -268,7 +268,7 @@ table.parts {
 }
 
 th {
-	font-family: verdana;
+	font-family: Verdana, "Bitstream Vera Sans", "DejaVu Sans", Tahoma, Geneva, Arial, Sans-serif;
 	background-color: #e5e5e5;
 	text-align: center;
 	padding: 5px;
@@ -300,7 +300,7 @@ td  {
 body {
 	background: #f0f0f0;
 	height: 100%;
-	font-family: verdana;
+	font-family: Verdana, "Bitstream Vera Sans", "DejaVu Sans", Tahoma, Geneva, Arial, Sans-serif;
 	font-size: 12px;
 	color: #000000;
 	margin: 0px;
@@ -420,7 +420,7 @@ a:hover {
 	}
 
 	th {
-		font-family: verdana;
+		font-family: Verdana, "Bitstream Vera Sans", "DejaVu Sans", Tahoma, Geneva, Arial, Sans-serif;
 		background-color: #e5e5e5;
 		text-align: center;
 		padding: 1px;

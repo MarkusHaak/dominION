@@ -6,11 +6,11 @@
 
         <div class="doNotSeperate">
 
-          <div class="seperator">
+          <div class="seperator" onclick="clickFunction('{0}_1')">
             <b>{1}</b>
           </div>
 
-          <div class="expandable expanded">
+          <div class="expandable expanded" id="{0}_1">
 
             <div class="contentline">
               <div class="half left">
@@ -50,11 +50,11 @@
 
         <div class="doNotSeperate">
 
-          <div class="seperator">
+          <div class="seperator" onclick="clickFunction('{0}_2')">
             <b>{2}</b>
           </div>
 
-          <div class="expandable">
+          <div class="expandable" id="{0}_2">
 
             <div class="contentline">
               <div class="half left">
@@ -94,34 +94,34 @@
 
         <div class="doNotSeperate">
 
-          <div class="seperator">
+          <div class="seperator" onclick="clickFunction('{0}_3')">
             <b>{3}</b>
           </div>
 
-          <div class="expandable">
+          <div class="expandable" id="{0}_3">
 
             <div class="contentline">
               <div class="figure fifty">
-                <img class="figure image" src="res/plots/barplot_gc-bins_{0}_{2}.png">
+                <img class="figure image" src="res/plots/barplot_gc-bins_{0}_{3}.png">
               </div>
             </div>
 
             <div class="contentline">
               <div class="half left">
                 <div class="figure large">
-                  <img class="figure image" src="res/plots/boxplot_{0}_{2}_bases.png">
+                  <img class="figure image" src="res/plots/boxplot_{0}_{3}_bases.png">
                 </div>  
               </div>
               <div class="half right">
                 <div class="figure large">
-                  <img class="figure image" src="res/plots/boxplot_{0}_{2}_gc.png">
+                  <img class="figure image" src="res/plots/boxplot_{0}_{3}_gc.png">
                 </div>
               </div>
             </div>
 
             <div class="contentline">
               <div class="figure fifty">
-                <img class="figure image" src="res/plots/boxplot_{0}_{2}_qual.png">
+                <img class="figure image" src="res/plots/boxplot_{0}_{3}_qual.png">
               </div>
             </div>
 

@@ -2,25 +2,41 @@
 <html>
   <head>
       <meta charset="UTF-8">
-      <meta http-equiv="refresh" content="120">
       <title>Run#####_MIN###_KIT###_GA#0000</title>
+      <meta http-equiv="refresh" content="120">
       <link rel="stylesheet" type="text/css" href="html_bricks/style.css">
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
   </head>
 
   <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
   <script>
-    $(document).ready(function() {
-      $(".seperator").click(function() {
-        $title = $(this);
-        $content = $title.next();
-        $content.slideToggle(250, function() {
-          if (!$content.is(":visible")) {
-            $title.css("zIndex", "0");
-          }
-        });
-      });
-    });
+
+    //$(document).ready(function() {
+    //  $(".seperator").click(function() {
+    //    $title = $(this);
+    //    $content = $title.next();
+    //    $content.slideToggle(250, function() {
+    //      
+    //    });
+    //  
+    //    sessionStorage.setItem($content.id, $content.is(":visible"));
+    //  });
+    //});
+
+    function clickFunction(id) {
+      //$item = document.getElementById(id);
+      //$item.innerHTML = "Paragraph changed!";
+      //$("#" + id).slideToggle(250, function() {
+      //   
+      //});
+      if ($("#" + id).css('display') == 'block') { // Current display
+          $("#" + id).css('display', 'none');
+      } else { // Hide
+          $("#" + id).css('display', 'block');
+      }
+    
+      sessionStorage.setItem(id, $("#" + id).css('display'));
+    }
   </script>
 
   <body>
@@ -30,7 +46,7 @@
         <h1>Run#####_MIN###_KIT###</h1>
         <h2>GA#0000, FAK#####</h2>
         <h3>YYYY-MM-DD hh:mm:ss.ms</h3>
-        <h6>statsParser v2.1, 2018-12-04</h6>
+        <h6><b><a href="https://etherpad.uni-wuppertal.de/p/gridTools_Wunschliste" target="_blank">Wunschliste</a></b>        statsParser v2.1, 2018-12-04</h6>
       </div>
       <div class="contentbox title">
         <h4 id="OVERVIEW">OVERVIEW</h4>
@@ -318,11 +334,11 @@
 
         <div class="doNotSeperate">
           
-          <div class="seperator">
+          <div class="seperator" onclick="clickFunction('BC01_1')">
             <b>Passed</b>
           </div>
 
-          <div class="expandable expanded">
+          <div id="BC01_1" class="expandable expanded" >
 
             <div class="contentline">
               <div class="half left">
@@ -362,11 +378,11 @@
 
         <div class="doNotSeperate">
 
-          <div class="seperator">
+          <div class="seperator" onclick="clickFunction('BC01_2')">
             <b>qual<5</b>
           </div>
 
-          <div class="expandable">
+          <div id="BC01_2" class="expandable" >
 
             <div class="contentline">
               <div class="half left">
@@ -406,11 +422,11 @@
 
         <div class="doNotSeperate">
 
-          <div class="seperator">
+          <div class="seperator" onclick="clickFunction('BC01_3')">
             <b>length<1000</b>
           </div>
 
-          <div class="expandable">
+          <div id="BC01_3" class="expandable" >
 
             <div class="contentline">
               <div class="figure fifty">
@@ -444,5 +460,15 @@
       </div>
     </div>
   </body>
+
+  <script>
+    for (var key in sessionStorage) {
+      if (sessionStorage.getItem(key) == 'block') {
+        $("#" + key).css('display', 'block');
+      } else {
+        $("#" + key).css('display', 'none');
+      }
+    }
+  </script>
 </html>
 

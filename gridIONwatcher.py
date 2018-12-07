@@ -16,12 +16,23 @@ import statsParser
 import webbrowser
 from shutil import copyfile
 import dateutil
+from datetime import datetime
+from operator import itemgetter
 
 VERBOSE = False
 QUIET = False
-VERSION = "v2.1"
+VERSION = "v2.6"
 ALL_RUNS = {}
 UPDATE_STATUS_PAGE = False
+
+class readable_file(argparse.Action):
+	def __call__(self, parser, namespace, values, option_string=None):
+		to_test=values
+		if not os.path.isfile(to_test):
+			raise argparse.ArgumentTypeError('ERR: {} is not a file'.format(to_test))
+		if not os.access(to_test, os.R_OK):
+			raise argparse.ArgumentTypeError('ERR: {} is not readable'.format(to_test))
+		setattr(namespace,self.dest,to_test)
 
 class readable_dir(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
@@ -69,7 +80,7 @@ def main_and_args():
 	a_d = parser.add_argument('-d', '--database_dir',
 						action=readable_writeable_dir,
 						default='reports',
-						help='Path to the base directory where reports will be safed. (default: reports)')
+						help='Path to the base directory where reports will be safed. (default: ./reports)')
 
 	parser.add_argument('-m', '--modified_as_created',
 						action='store_true',
@@ -99,12 +110,33 @@ def main_and_args():
 	parser.add_argument('--html_bricks_dir',
 						action=readable_dir,
 						default='html_bricks',
-						help='')
+						help='''Path to the directory containing template files and resources 
+						for the html pages. (default: ./html_bricks''')
 
 	parser.add_argument('--status_page_dir',
 						default='GridIONstatus',
 						help='''Path to the directory where all files for the GridION status page 
 						will be stored. (default: ./GridIONstatus)''')
+
+	parser.add_argument('--watchnchop_path',
+						action=readable_file,
+						default='watchnchop.pl',
+						help='''Path to the watchnchop executable (default: ./watchnchop.pl)''')
+
+	parser.add_argument('--statsParser_path',
+						action=readable_file,
+						default='statsParser.py',
+						help='''Path to statsParser.py (default: ./statsParser.py)''')
+
+	parser.add_argument('--python3_path',
+						action=readable_file,
+						default='/usr/bin/python3',
+						help='''Path to the python3 executable (default: /usr/bin/python3)''')
+
+	parser.add_argument('--perl_path',
+						action=readable_file,
+						default='/usr/bin/perl',
+						help='''Path to the perl executable (default: /usr/bin/perl)''')
 
 	parser.add_argument('-v', '--verbose',
 						action='store_true',
@@ -130,6 +162,7 @@ def main_and_args():
 	if not QUIET: print("######### grinIONwatcher {} #########".format(VERSION))
 	if not QUIET: print("#######################################")
 	if not QUIET: print("")
+	sys.stdout.flush()
 
 	global ALL_RUNS
 
@@ -150,6 +183,7 @@ def main_and_args():
 	logging.info("loading previous runs from database:")
 	load_runs_from_database(args.database_dir)
 	print()
+	sys.stdout.flush()
 
 	logging.info("starting watchers:")
 	watchers = []
@@ -161,8 +195,14 @@ def main_and_args():
 								args.basecalled_basedir, 
 								args.statsParser_args,
 								args.update_interval,
-								args.no_watchnchop))
+								args.no_watchnchop,
+								args.html_bricks_dir,
+								args.watchnchop_path,
+								args.statsParser_path,
+								args.python3_path,
+								args.perl_path))
 	print()
+	sys.stdout.flush()
 
 	logging.info("Initiating GrinIOn status page")
 	update_status_page(watchers, args.html_bricks_dir, args.status_page_dir)
@@ -170,6 +210,7 @@ def main_and_args():
 
 	logging.info("entering main loop")
 	try:
+		n = 0
 		while True:
 			for watcher in watchers:
 				watcher.check_q()
@@ -177,6 +218,10 @@ def main_and_args():
 				update_status_page(watchers, args.html_bricks_dir, args.status_page_dir)
 				UPDATE_STATUS_PAGE = False
 			time.sleep(1)
+			n += 1
+			if n == 20:
+				n = 0
+				UPDATE_STATUS_PAGE = True
 	except KeyboardInterrupt:
 		logging.info("### Collected information ###")
 		for watcher in watchers:
@@ -194,12 +239,14 @@ def main_and_args():
 					print(key, ":\t\t", mux_scan[key])
 			#print(watcher.channel_status.mux_scans)
 			print('')
+			sys.stdout.flush()
 	for watcher in watchers:
 		print("joining GA{}0000's observer".format(watcher.channel))
 		watcher.observer.join()
 		if watcher.scheduler:
 			print("joining GA{}0000's scheduler".format(watcher.channel))
 			watcher.scheduler.join()
+		sys.stdout.flush()
 
 def load_runs_from_database(database_dir):
 	for fn in os.listdir(database_dir):
@@ -240,6 +287,8 @@ def update_status_page(watchers, html_bricks_dir, status_page_dir):
 
 	with open(os.path.join(html_bricks_dir, 'gridIONstatus_brick.html'), 'r') as f:
 		gridIONstatus_brick = f.read()
+
+	gridIONstatus_brick = gridIONstatus_brick.format("{0}", "{1}", VERSION, "{}".format(datetime.now())[:-7])
 
 	for watcher in watchers:
 		with open(os.path.join(html_bricks_dir, 'flowcell_brick.html'), 'r') as f:
@@ -311,7 +360,7 @@ def update_status_page(watchers, html_bricks_dir, status_page_dir):
 						runs_string = runs_string + '<a href="{0}" target="_blank">{1}</a><br>'.format(
 							os.path.join(watcher.basecalled_basedir, 
 										 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
-										 "GA{}0000".format(watcher.channel+1),
+										 ALL_RUNS[asic_id_eeprom][run]['run_data']['minion_id'],
 										 'filtered',
 										 'results.html'),
 							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
@@ -330,7 +379,7 @@ def update_status_page(watchers, html_bricks_dir, status_page_dir):
 						runs_string = runs_string + '<a href="{0}" target="_blank">{1}</a><br>'.format(
 							os.path.join(watcher.basecalled_basedir, 
 										 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
-										 "GA{}0000".format(watcher.channel+1),
+										 ALL_RUNS[asic_id_eeprom][run]['run_data']['minion_id'],
 										 'filtered',
 										 'results.html'),
 							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
@@ -355,8 +404,47 @@ def update_status_page(watchers, html_bricks_dir, status_page_dir):
 
 	gridIONstatus_brick = gridIONstatus_brick.format("", "")
 
+	
+	with open(os.path.join(html_bricks_dir, 'gridIONstatus_bottom_brick.html'), 'r') as f:
+		bottom_brick = f.read()
+
+	blank_line = '<tr>\n<th><a href="{}" target="_blank">{}</a></th>\n<td>{}</td>\n<td>{}</td>\n<td>{}</td>\n<td>{}</td></tr>'
+
+	all_runs_info = []
+	for asic_id_eeprom in ALL_RUNS:
+		for run_id in ALL_RUNS[asic_id_eeprom]:
+			experiment_type = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type']
+			if 'seq' in experiment_type.lower(): # to increase compatibility in future
+				protocol_start = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_start'])
+				time_diff = "N/A"
+				if 'protocol_end' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']:
+					if ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_end']:
+						protocol_end = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_end'])
+						time_diff = "{}".format(protocol_end - protocol_start)[:-7]
+				protocol_start = "{}".format(protocol_start)[:-7]
+				sequencing_kit = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sequencing_kit']
+				user_filename_input = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input']
+				minion_id = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['minion_id']
+				link = os.path.join(watchers[0].basecalled_basedir, 
+									user_filename_input,
+									minion_id,
+									'filtered',
+									'results.html')
+				all_runs_info.append( (link, user_filename_input, minion_id, sequencing_kit, protocol_start, time_diff) )
+
+	all_runs_info = sorted(all_runs_info, key=itemgetter(1), reverse=True)
+
+	for run_info in all_runs_info:
+		bottom_brick = bottom_brick.format(blank_line.format(run_info[0], 
+															 run_info[1], 
+															 run_info[2], 
+															 run_info[3], 
+															 run_info[4], 
+															 run_info[5]) + "\n{0}")
+	bottom_brick = bottom_brick.format("")
+
 	with open(os.path.join(status_page_dir, 'GridIONstatus.html'), 'w') as f:
-		print(gridIONstatus_brick, file=f)
+		print(gridIONstatus_brick + bottom_brick, file=f)
 
 
 class ChannelStatus():
@@ -447,17 +535,21 @@ class ChannelStatus():
 class Scheduler(mp.Process):
 
 	def __init__(self, update_interval, statsfp, statsParser_args, 
-				 user_filename_input, minion_id, flowcell_id, protocol_start):
+				 user_filename_input, minion_id, flowcell_id, protocol_start,
+				 html_bricks_dir, statsParser_path, python3_path):
 		mp.Process.__init__(self)
 		self.exit = mp.Event()
 		#self.sched_q = sched_q
 		self.update_interval = update_interval
+		self.html_bricks_dir = html_bricks_dir
 		self.statsfp = statsfp
+		self.statsParser_path = statsParser_path
 		self.statsParser_args = statsParser_args
 		self.user_filename_input = user_filename_input
 		self.minion_id = minion_id
 		self.flowcell_id = flowcell_id
 		self.protocol_start = protocol_start
+		self.python3_path = python3_path
 
 	def run(self):
 		page_opened = False
@@ -469,11 +561,13 @@ class Scheduler(mp.Process):
 			logging.info("STARTING STATSPARSING")
 
 			if os.path.exists(self.statsfp):
-				args = ['python3', 'statsParser.py', self.statsfp,
+				args = [self.python3_path, self.statsParser_path, self.statsfp,
 						'--user_filename_input', self.user_filename_input,
 						'--minion_id', self.minion_id,
 						'--flowcell_id', self.flowcell_id,
-						'--protocol_start', self.protocol_start]
+						'--protocol_start', self.protocol_start,
+						'--html_bricks_dir', self.html_bricks_dir,
+						'-q']
 				args.extend(self.statsParser_args)
 				cp = subprocess.run(args) # waits for process to complete
 				if cp.returncode == 0:
@@ -498,7 +592,8 @@ class Scheduler(mp.Process):
 class Watcher():
 
 	def __init__(self, log_basedir, channel, modified_as_created, database_dir, 
-				 basecalled_basedir, statsParser_args, update_interval, no_watchnchop):
+				 basecalled_basedir, statsParser_args, update_interval, no_watchnchop,
+				 html_bricks_dir, watchnchop_path, statsParser_path, python3_path, perl_path):
 		self.q = mp.SimpleQueue()
 		self.watchnchop = not no_watchnchop
 		self.channel = channel
@@ -506,6 +601,11 @@ class Watcher():
 		self.basecalled_basedir = basecalled_basedir
 		self.statsParser_args = statsParser_args
 		self.update_interval = update_interval
+		self.html_bricks_dir = html_bricks_dir
+		self.watchnchop_path = watchnchop_path
+		self.statsParser_path = statsParser_path
+		self.python3_path = python3_path
+		self.perl_path = perl_path
 		self.observed_dir = os.path.join(log_basedir, "GA{}0000".format(channel+1))
 		self.event_handler = StatsFilesEventHandler(self.q, modified_as_created)
 		self.observer = Observer()
@@ -574,7 +674,10 @@ class Watcher():
 											   self.channel_status.run_data['user_filename_input'], 
 											   "GA{}0000".format(self.channel+1), 
 											   self.channel_status.flowcell['flowcell_id'], 
-											   self.channel_status.run_data['protocol_start'])
+											   self.channel_status.run_data['protocol_start'],
+											   self.html_bricks_dir,
+											   self.statsParser_path,
+											   self.python3_path)
 					self.scheduler.start()
 
 				elif content[1] == "flowcell discovered":
@@ -610,7 +713,7 @@ class Watcher():
 					self.scheduler = None
 				elif content[1] == "flowcell lookup":
 					logging.info("LOADING PREVIOUS FLOWCELL RUNS")
-					self.lookup_flowcell()
+					#self.lookup_flowcell()
 
 	def lookup_flowcell(self):
 		try:
@@ -680,7 +783,7 @@ class Watcher():
 		if self.channel_status.run_data['user_filename_input']:
 			#print(self.channel_status.run_data['user_filename_input'])
 			#print(self.channel_status.minion_id)
-			cmd = ['perl', '/home/grid/scripts/watchnchop.pl', '-b', '/data/basecalled/{}/{}/'.format(self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)]
+			cmd = [self.perl_path, self.watchnchop_path, '-b', os.path.join(self.basecalled_basedir, self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)]
 			try:
 				#subprocess.Popen(cmd)
 				subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL)
