@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore")
 QUIET = False
 TICKLBLS = 6
 SECS_TO_HOURS = 3600.
-VERSION = "v2.5"
+VERSION = "v2.6"
 
 class readable_file(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
@@ -249,16 +249,16 @@ def main(args):
 				'kb', 
 				'Mb', 
 				os.path.join(args.outdir, 'res', "plots", "barplot_kb-bins_{}_{}".format(bc, subset)))
-
+	
 	#######
-
+	
 	tprint("Creating gc-bins barplots")
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('gc', axis=0, ascending=True)
 		interval, offset, num_bins = get_lowest_possible_interval([args.gc_interval],
-												 				  args.max_bins, 
-												 				  sub_df['gc'].min(), 
-												 				  sub_df['gc'].max())
+																  args.max_bins, 
+																  sub_df['gc'].min(), 
+																  sub_df['gc'].max())
 		bin_edges = get_bin_edges(sub_df['gc'], interval)
 		tprint("...plotting {}, {}".format(bc, subset))
 		bins = get_bins(sub_df['bases']/1000000., bin_edges)
@@ -287,12 +287,13 @@ def main(args):
 	#######
 	
 	tprint("Creating multi lineplots with one y-axis")
-	subset_grouped = df.groupby(['subset'])
+	grouped = df.groupby(['barcode'])
+	#subset_grouped = df.groupby(['subset'])
 	
 	reads_dfs = []
 	bases_dfs = []
 	
-	sorted_df = df.sort_values('time', axis=0, ascending=True)
+	sorted_df = grouped.get_group( 'All' ).sort_values('time', axis=0, ascending=True)
 	reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
 					  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
 					  'all') )
@@ -300,7 +301,8 @@ def main(args):
 					  (sorted_df['bases']/1000000000.).expanding(1).sum(),
 					  'all') )
 	for subset in set([j for i,j in indexes]):
-		sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
+		#sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
+		sorted_df = subgrouped.get_group( ('All',subset) ).sort_values('time', axis=0, ascending=True)
 		reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
 						  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
 						  subset) )
@@ -427,6 +429,7 @@ def lineplot_multi(time_dfs_lbls, y_label, dest):
 	ax1.set_ylabel(y_label)
 	ax1.legend(loc=2)
 	ax1.yaxis.grid(color="black", alpha=0.1)
+	ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
 
 	fig.tight_layout()
 	plt.savefig(dest)
@@ -470,6 +473,7 @@ def barplot(bins, intervals, interval, x_unit, y_unit, dest):
 	ax2.bar(x+0.15, bases, width=0.3, color='C2', align='center', label = 'bases')
 
 	ax1.set_ylabel('reads')
+	ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
 	ax2.set_ylabel('bases [{}]'.format(y_unit))
 	ax1.legend(loc=1, bbox_to_anchor=(1., 1.))
 	ax2.legend(loc=1, bbox_to_anchor=(1., 0.92))
@@ -522,6 +526,7 @@ def gc_lineplot(bins, intervals, interval, x_unit, y_unit, dest):
 	#		pass
 	#ax1.set_xticklabels(xticklabels)
 	ax1.set_xlabel("gc content ({} {} bins)".format(interval, x_unit))
+	ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
 
 	fig.tight_layout()
 	plt.savefig(dest)
@@ -530,7 +535,7 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 	f = plt.figure()
 	fig = plt.gcf()
 	gs0 = gridspec.GridSpec(2, 1, width_ratios=[1], height_ratios=[0.3,1])
-	gs0.update(wspace=0.01, hspace=0.01)
+	gs0.update(wspace=0.05, hspace=0.05)
 	ax0 = plt.subplot(gs0[0, 0])
 	ax1 = plt.subplot(gs0[1, 0])
 
@@ -552,6 +557,7 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 	ax1.tick_params(top=False, bottom=True, left=True, right=False,
 				   labeltop=False, labelbottom=True)
 	ax1.yaxis.grid(color="black", alpha=0.1)
+	ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
 	ax1.set_axisbelow(True)
 
 
@@ -564,6 +570,7 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 	ax0.set_ylabel("reads")
 	ax0.set_xticklabels([])
 	ax0.yaxis.grid(color="black", alpha=0.1)
+	ax0.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
 	ax0.set_axisbelow(True)
 
 	fig.tight_layout()
@@ -584,14 +591,14 @@ def stats_table(df):
 
 	# keys equal headers in html
 	subgrouped_output_df = pd.DataFrame(
-		OrderedDict((('reads',							 subgrouped['bases'].count()), 
-					 ('Mb',								 subgrouped['bases'].sum()/1000000.), 
-					 ('mean quality',					 subgrouped['qual'].mean()), 
-					 ('mean GC [%]',					 subgrouped['gc'].mean()),
-					 ('avg length [kb]',				 subgrouped['bases'].mean()/1000.),
-					 ('median length [kb]' ,			 subgrouped['bases'].median()/1000.),
-					 ('mean length longest N50 [kb]',	 subgrouped['bases'].agg(avgN50longest)/1000.),
-					 ('longest [kb]',					 subgrouped['bases'].max()/1000.)
+		OrderedDict((('reads',							 	subgrouped['bases'].count()), 
+					 ('Mb',								 	subgrouped['bases'].sum()/1000000.), 
+					 ('mean quality',					 	subgrouped['qual'].mean()), 
+					 ('mean GC [%]',					 	subgrouped['gc'].mean()),
+					 ('avg length [kb]',				 	subgrouped['bases'].mean()/1000.),
+					 ('median length [kb]' ,			 	subgrouped['bases'].median()/1000.),
+					 ('mean length longest N50 [kb]',	 	subgrouped['bases'].agg(avgN50longest)/1000.),
+					 ('longest [kb]',					 	subgrouped['bases'].max()/1000.)
 					 )))
 	grouped_output_df = pd.DataFrame(
 		OrderedDict((('reads',								grouped['bases'].count()), 
@@ -610,7 +617,7 @@ def stats_table(df):
 											   )
 										   ), 
 									  names=['barcode', 'subset']
-									  )
+									 )
 	grouped_output_df.index = index
 	concat_res = pd.concat([subgrouped_output_df,grouped_output_df])
 	concat_res = concat_res.sort_index(level=['barcode', 'subset'])
@@ -620,7 +627,8 @@ def stats_table(df):
 def make_html_table(df):
 	df = df.round(2)
 	#df = df.reindex(['Passed','tooShort','BadQual','all'], level='subset')
-	return df.to_html()
+	return df.to_html(formatters={'reads':(lambda x: "{:,}".format(x))},
+					  float_format=(lambda x: "{0:,.2f}".format(x)))
 
 def parse_stats(fp):
 	df = pd.read_csv(fp, 
@@ -636,7 +644,20 @@ def parse_stats(fp):
 
 	start_time = df['time'].min(axis=1)
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
-	return df
+
+	index = pd.MultiIndex.from_tuples([('All',subset,pore) for barbode,subset,pore in df.index],
+									names=['barcode', 'subset', 'pore'])
+	#print(multi_index)
+	df_copy = df.copy()
+	df_copy.index = index
+	concat_df = pd.concat([df,df_copy])
+
+	grouped = concat_df.groupby(['barcode','subset'])
+	#indexes = list(pd.DataFrame(grouped['bases'].count()).index)
+	#print(indexes)
+
+	#exit()
+	return concat_df
 
 def get_lowest_possible_interval(intervals, max_bins, min_value, max_value):
 	interval = None
