@@ -1,0 +1,438 @@
+.container {
+	width: 100%;
+	background-color: #f0f0f0;
+}
+
+.contentbox {	
+	width: 80%;
+	margin: auto;
+	margin-bottom: 30px;
+}
+
+.contentbox.title {	
+	background: #333333;
+}
+.contentbox.title.one {	
+	background: #c7b900;
+}
+.contentbox.title.two {	
+	background: #0ad15d;
+}
+.contentbox.title.three {	
+	background: #0029ba;
+}
+.contentbox.title.four {	
+	background: #d1009b;
+}
+.contentbox.title.five {	
+	background: #c76700;
+}
+.contentbox.title.one.hundred {	
+	width: 100%;
+}
+.contentbox.title.two.hundred {	
+	width: 100%;
+}
+.contentbox.title.three.hundred {	
+	width: 100%;
+}
+.contentbox.title.four.hundred {	
+	width: 100%;
+}
+.contentbox.title.five.hundred {	
+	width: 100%;
+}
+
+
+.contentbox.overview {
+	background: #ffffff;
+}
+
+.contentbox.barcode {
+	background: #ffffff;
+}
+
+.contentbox.flowcells {	
+	background: #e8e6e2;
+	width: 80%;
+	height: 100%;
+}
+
+.flowcelltitle {
+	width: 100%;
+	background: #001f8c;
+}
+
+.contentbox.flowcellinfo {
+	width: 100%;
+	background: #d0d0d0;
+	margin: auto;
+}
+
+p, article, .article {
+	text-align: justify;
+	display: block;
+	padding: 10px;
+}
+
+.seperator {
+	text-align: center;
+
+	font-size: 14px;
+	width: 100%;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	margin-bottom: 2px;
+	background: #cfcfcf;
+
+	cursor: pointer;
+	text-align: center;
+}
+
+
+.expandable {
+	width: 100%;
+	border-top: 0;
+	border-bottom: 0;
+	
+	overflow: auto;
+	margin: auto;
+	padding-bottom: 40px;
+	padding-top: 40px;
+	display: none;
+}
+
+.expandable.expanded {
+	display: block;
+}
+
+.tablebox {
+	margin: auto;
+	margin-top: 10px;
+	margin-bottom: 10px;
+}
+
+article, .article, .contentline {
+	width: 96%;
+}
+
+.contentline article, .contentline .article {
+	width: 100%;
+}
+
+.contentline {
+	margin: auto;
+	overflow: auto;
+}
+
+.half {
+	width: 50%;
+}
+
+/* */
+.half.left {
+	float: left;
+}
+
+.half.right {
+	float: right;
+}
+
+.third {
+	width: 33%;
+	float: left;
+	margin-right: 0.334%;
+}
+
+.fifth {
+	width: 19%;
+	float: left;
+	margin-right: 1.25%;
+}
+.fifth:nth-child(5n) {
+	width: 19%;
+	float: left;
+	margin-right: 0%;
+}
+
+.third.double {
+	width: 66%;
+	float: left;
+	margin-right: 0.335%;
+}
+
+.figure {
+	display: block;
+	margin: auto;
+	margin-top: 0px;
+	margin-bottom: 0px;
+}
+
+.figure.large {
+	width: 92%;
+}
+
+.figure.medium, .figure.fifty {
+	width: 50%;
+}
+
+.figure.small {
+	width: 30%;
+}
+
+.figure.fourty {
+	width: 40%;
+}
+
+.figure.sixty {
+	width: 60%;
+}
+
+.figure.seventy {
+	width: 70%;
+}
+
+.figure.eighty {
+	width: 80%;
+}
+
+.figure.hundred {
+	width: 100%;
+}
+
+.figure.image {
+	width: 100%;
+	margin-bottom: 15px;
+}
+
+
+h1, h2, h3, h4, h5, h6 {
+	width: 95%;
+	margin: auto;
+	margin-top: 0px;
+	color: #ffffff;
+}
+
+h1 {
+	padding-top: 22px;
+	padding-bottom: 0px;
+}
+
+h2 {
+	padding-top: 20px;
+	padding-bottom: 10px;
+}
+
+h3 {
+	padding-top: 10px;
+	padding-bottom: 0px;
+}
+
+h4 {
+	padding-top: 10px;
+	padding-bottom: 10px;
+	font-size: 15px;
+}
+
+h5 {
+	padding-top: 10px;
+	padding-bottom: 10px;
+	font-size: 15px;
+	text-align: center
+}
+
+h6 {
+	padding-top: 0px;
+	padding-bottom: 15px;
+	font-size: 12px;
+	text-align: right
+}
+
+table, th, td {
+	border-collapse: collapse;
+	border: 1px solid #aaaaaa;
+}
+
+table {
+	width: 92%;
+	table-layout: fixed;
+	margin: auto;
+	margin-top: 15px;
+	margin-bottom: 15px;
+	padding-bottom: 20px;
+}
+
+table.parts {
+	width: 62%;
+	margin-bottom: 20px;
+}
+
+th {
+	font-family: Verdana, "Bitstream Vera Sans", "DejaVu Sans", Tahoma, Geneva, Arial, Sans-serif;
+	background-color: #e5e5e5;
+	text-align: center;
+	padding: 5px;
+}
+
+tr {
+	background-color: #ffffff;
+	font-family: courier;
+	text-align: right;
+}
+
+tr:hover {
+	background-color: #e5e5e5;
+}
+
+tr:nth-child(4n-3) {
+	background-color: #f5f5f5;
+}
+
+tr:nth-child(4n-3):hover {
+	background-color: #e5e5e5;
+}
+
+td  {
+	background-color: transparent;
+	padding: 5px;
+}
+
+body {
+	background: #f0f0f0;
+	height: 100%;
+	font-family: Verdana, "Bitstream Vera Sans", "DejaVu Sans", Tahoma, Geneva, Arial, Sans-serif;
+	font-size: 12px;
+	color: #000000;
+	margin: 0px;
+}
+
+html, body {
+	max-width: 100%;
+	overflow-x: hidden;
+}
+
+a, a:link, a:visited, a:active {
+	color: #001f8c;
+	text-decoration: none;
+}
+
+a:hover {
+	color: #006fec;
+	text-decoration: none;
+}
+
+
+@media print {
+	@page {
+		size: auto;   /* auto is the initial value */
+		margin: 0;  /* this affects the margin in the printer settings */
+		margin-left: 30pt;
+		margin-right: 30pt;
+	}
+
+	table, figure {
+	  page-break-inside: avoid;
+	}
+
+	.seperator {
+		padding-top: 30px;
+	}
+
+	.doNotSeperate {
+		page-break-inside: avoid;
+	}
+
+	.expandable {
+		
+		
+	}
+	
+	.container {
+		width: 100%;
+		font-size: 9px;
+	}
+
+	.contentbox {	
+		width: 100%;
+		margin: auto;
+		/*margin-bottom: 30px;*/
+		background: #f0f0f0;
+	}
+
+	.contentbox.title {	
+		padding-top: 30px;
+		width: 100%;
+		page-break-before: always;
+	}
+
+	.contentbox.title:nth-child(1) {	
+		width: 100%;
+		page-break-before: avoid;
+	}
+
+	.contentbox.overview {
+		width: 100%;
+		background: #ffffff;
+	}
+
+	.contentbox.barcode {	
+		width: 100%;
+		background: #ffffff;
+	}
+
+	.contentbox.title {	
+		background: #333333;
+	}
+	.contentbox.title.one {	
+		background: #c7b900;
+	}
+	.contentbox.title.two {	
+		background: #0ad15d;
+	}
+	.contentbox.title.three {	
+		background: #0029ba;
+	}
+	.contentbox.title.four {	
+		background: #d1009b;
+	}
+	.contentbox.title.five {	
+		background: #c76700;
+	}
+	.contentbox.title.one.hundred {	
+		width: 100%;
+	}
+	.contentbox.title.two.hundred {	
+		width: 100%;
+	}
+	.contentbox.title.three.hundred {	
+		width: 100%;
+	}
+	.contentbox.title.four.hundred {	
+		width: 100%;
+	}
+	.contentbox.title.five.hundred {	
+		width: 100%;
+	}
+
+	td  {
+		background-color: white;
+		padding: 1px;
+	}
+
+	th {
+		font-family: Verdana, "Bitstream Vera Sans", "DejaVu Sans", Tahoma, Geneva, Arial, Sans-serif;
+		background-color: #e5e5e5;
+		text-align: center;
+		padding: 1px;
+		font-size: 7px;
+	}
+
+	tr:hover {
+		background-color: #e5e5e5;
+	}
+
+	tr:nth-child(4n-3) {
+		background-color: #f5f5f5;
+	}
+}
+
