@@ -12,7 +12,7 @@ import copy
 import json
 import subprocess
 import sched
-import statsParser
+import statsparser
 import webbrowser
 from shutil import copyfile
 import dateutil
@@ -56,11 +56,11 @@ class readable_writeable_dir(argparse.Action):
 			raise argparse.ArgumentTypeError('ERR: {} is not writeable'.format(to_test))
 		setattr(namespace,self.dest,to_test)
 
-class parse_statsParser_args(argparse.Action):
+class parse_statsparser_args(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
 		to_test = values.split(' ')
-		argument_parser = statsParser.get_argument_parser()
-		args = statsParser.parse_args(argument_parser, to_test)
+		argument_parser = statsparser.get_argument_parser()
+		args = statsparser.parse_args(argument_parser, to_test)
 		print (to_test)
 		setattr(namespace,self.dest,to_test)
 
@@ -101,11 +101,11 @@ def main_and_args():
 						default=600,
 						help='inverval time in seconds for updating the stats webpage contents. (default: 600)')
 
-	parser.add_argument('--statsParser_args',
-						action=parse_statsParser_args,
+	parser.add_argument('--statsparser_args',
+						action=parse_statsparser_args,
 						default=[],
-						help='''Arguments that are passed to the statsParser.
-						See a full list of possible options with --statsParser_args " -h" ''')
+						help='''Arguments that are passed to the statsparser.
+						See a full list of possible options with --statsparser_args " -h" ''')
 
 	parser.add_argument('--html_bricks_dir',
 						action=readable_dir,
@@ -123,10 +123,10 @@ def main_and_args():
 						default='watchnchop.pl',
 						help='''Path to the watchnchop executable (default: ./watchnchop.pl)''')
 
-	parser.add_argument('--statsParser_path',
+	parser.add_argument('--statsparser_path',
 						action=readable_file,
-						default='statsParser.py',
-						help='''Path to statsParser.py (default: ./statsParser.py)''')
+						default='statsparser.py',
+						help='''Path to statsparser.py (default: ./statsparser.py)''')
 
 	parser.add_argument('--python3_path',
 						action=readable_file,
@@ -193,12 +193,12 @@ def main_and_args():
 								args.modified_as_created, 
 								args.database_dir, 
 								args.basecalled_basedir, 
-								args.statsParser_args,
+								args.statsparser_args,
 								args.update_interval,
 								args.no_watchnchop,
 								args.html_bricks_dir,
 								args.watchnchop_path,
-								args.statsParser_path,
+								args.statsparser_path,
 								args.python3_path,
 								args.perl_path))
 	print()
@@ -534,17 +534,17 @@ class ChannelStatus():
 
 class Scheduler(mp.Process):
 
-	def __init__(self, update_interval, statsfp, statsParser_args, 
+	def __init__(self, update_interval, statsfp, statsparser_args, 
 				 user_filename_input, minion_id, flowcell_id, protocol_start,
-				 html_bricks_dir, statsParser_path, python3_path):
+				 html_bricks_dir, statsparser_path, python3_path):
 		mp.Process.__init__(self)
 		self.exit = mp.Event()
 		#self.sched_q = sched_q
 		self.update_interval = update_interval
 		self.html_bricks_dir = html_bricks_dir
 		self.statsfp = statsfp
-		self.statsParser_path = statsParser_path
-		self.statsParser_args = statsParser_args
+		self.statsparser_path = statsparser_path
+		self.statsparser_args = statsparser_args
 		self.user_filename_input = user_filename_input
 		self.minion_id = minion_id
 		self.flowcell_id = flowcell_id
@@ -561,14 +561,14 @@ class Scheduler(mp.Process):
 			logging.info("STARTING STATSPARSING")
 
 			if os.path.exists(self.statsfp):
-				args = [self.python3_path, self.statsParser_path, self.statsfp,
+				args = [self.python3_path, self.statsparser_path, self.statsfp,
 						'--user_filename_input', self.user_filename_input,
 						'--minion_id', self.minion_id,
 						'--flowcell_id', self.flowcell_id,
 						'--protocol_start', self.protocol_start,
 						'--html_bricks_dir', self.html_bricks_dir,
 						'-q']
-				args.extend(self.statsParser_args)
+				args.extend(self.statsparser_args)
 				cp = subprocess.run(args) # waits for process to complete
 				if cp.returncode == 0:
 					logging.info("STATSPARSING COMPLETED")
@@ -578,7 +578,7 @@ class Scheduler(mp.Process):
 						logging.info("OPENING " + fp)
 						page_opened = webbrowser.open('file://' + os.path.realpath(fp))
 				else:
-					logging.info("ERROR while running statsParser")
+					logging.info("ERROR while running statsparser")
 			else:
 				logging.info("WARNING: statsfile does not exist (yet?)")
 
@@ -592,18 +592,18 @@ class Scheduler(mp.Process):
 class Watcher():
 
 	def __init__(self, log_basedir, channel, modified_as_created, database_dir, 
-				 basecalled_basedir, statsParser_args, update_interval, no_watchnchop,
-				 html_bricks_dir, watchnchop_path, statsParser_path, python3_path, perl_path):
+				 basecalled_basedir, statsparser_args, update_interval, no_watchnchop,
+				 html_bricks_dir, watchnchop_path, statsparser_path, python3_path, perl_path):
 		self.q = mp.SimpleQueue()
 		self.watchnchop = not no_watchnchop
 		self.channel = channel
 		self.database_dir = database_dir
 		self.basecalled_basedir = basecalled_basedir
-		self.statsParser_args = statsParser_args
+		self.statsparser_args = statsparser_args
 		self.update_interval = update_interval
 		self.html_bricks_dir = html_bricks_dir
 		self.watchnchop_path = watchnchop_path
-		self.statsParser_path = statsParser_path
+		self.statsparser_path = statsparser_path
 		self.python3_path = python3_path
 		self.perl_path = perl_path
 		self.observed_dir = os.path.join(log_basedir, "GA{}0000".format(channel+1))
@@ -670,13 +670,13 @@ class Watcher():
 					logging.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for stats file '.format(self.update_interval/1000) + statsfp)
 					self.scheduler = Scheduler(self.update_interval, 
 											   statsfp, 
-											   self.statsParser_args, 
+											   self.statsparser_args, 
 											   self.channel_status.run_data['user_filename_input'], 
 											   "GA{}0000".format(self.channel+1), 
 											   self.channel_status.flowcell['flowcell_id'], 
 											   self.channel_status.run_data['protocol_start'],
 											   self.html_bricks_dir,
-											   self.statsParser_path,
+											   self.statsparser_path,
 											   self.python3_path)
 					self.scheduler.start()
 

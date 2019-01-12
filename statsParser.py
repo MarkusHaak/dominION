@@ -131,7 +131,7 @@ def get_argument_parser():
 		help='refresh rate in seconds. (default: 120)'
 		)
 
-	# the following should only be set if statsParser is called directly:
+	# the following should only be set if statsparser is called directly:
 	if __name__ == '__main__':
 		argument_parser.add_argument('--html_bricks_dir',
 			action=readable_dir,
@@ -196,7 +196,7 @@ def main(args):
 	QUIET = args.quiet
 
 	if not QUIET: print("#######################################")
-	if not QUIET: print("#########   statsParser {}  #########".format(VERSION))
+	if not QUIET: print("#########   statsparser {}  #########".format(VERSION))
 	if not QUIET: print("#######################################")
 	if not QUIET: print("")
 
