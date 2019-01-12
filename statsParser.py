@@ -667,7 +667,8 @@ def make_html_table(df):
 	df = df.round(2)
 	#df = df.reindex(['Passed','tooShort','BadQual','all'], level='subset')
 	return df.to_html(formatters={'reads':(lambda x: "{:,}".format(x))},
-					  float_format=(lambda x: "{0:,.2f}".format(x)))
+					  float_format=(lambda x: "{0:,.2f}".format(x)),
+					  sparsify=False)
 
 def parse_stats(fp):
 	df = pd.read_csv(fp, 

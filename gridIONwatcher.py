@@ -781,13 +781,11 @@ class Watcher():
 	def start_watchnchop(self):
 		logging.info("STARTING WATCHNCHOP")
 		if self.channel_status.run_data['user_filename_input']:
-			#print(self.channel_status.run_data['user_filename_input'])
-			#print(self.channel_status.minion_id)
+			#cmd = " ".join([self.perl_path, self.watchnchop_path, '-b', os.path.join(self.basecalled_basedir, self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)])
 			cmd = [self.perl_path, self.watchnchop_path, '-b', os.path.join(self.basecalled_basedir, self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)]
 			try:
-				#subprocess.Popen(cmd)
-				subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL)
-				#subprocess.Popen(cmd, stdout=subprocess.DEVNULL)
+				#subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+				subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 			except:
 				logging.info("ERROR: FAILED to start watchnchop, popen failed")
 			logging.info("STARTED WATCHNCHOP with arguments:")
