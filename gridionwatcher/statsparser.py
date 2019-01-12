@@ -1,4 +1,6 @@
-import itertools, argparse, os
+import itertools
+import argparse
+import os
 from time import gmtime, strftime
 import numpy as np
 import dateutil.parser
@@ -11,9 +13,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.lines as mlines
+import matplotlib.gridspec as gridspec
 import copy
 from mpl_toolkits import axes_grid1
-import matplotlib.gridspec as gridspec
 import re
 from shutil import copyfile
 import warnings
