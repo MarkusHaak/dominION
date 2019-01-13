@@ -13,20 +13,21 @@ import copy
 import json
 import subprocess
 import sched
-import statsparser
 import webbrowser
 from shutil import copyfile
 import dateutil
 from datetime import datetime
 from operator import itemgetter
+from .version import __version__
+from .statsparser import get_argument_parser as sp_get_argument_parser
+from .statsparser import parse_args as sp_parse_args
 
 VERBOSE = False
 QUIET = False
-VERSION = "v2.6"
 ALL_RUNS = {}
 UPDATE_STATUS_PAGE = False
 
-class readable_file(argparse.Action):
+class r_file(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
 		to_test=values
 		if not os.path.isfile(to_test):
@@ -35,7 +36,7 @@ class readable_file(argparse.Action):
 			raise argparse.ArgumentTypeError('ERR: {} is not readable'.format(to_test))
 		setattr(namespace,self.dest,to_test)
 
-class readable_dir(argparse.Action):
+class r_dir(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
 		to_test=values
 		if not os.path.isdir(to_test):
@@ -44,7 +45,7 @@ class readable_dir(argparse.Action):
 			raise argparse.ArgumentTypeError('ERR: {} is not readable'.format(to_test))
 		setattr(namespace,self.dest,to_test)
 
-class readable_writeable_dir(argparse.Action):
+class rw_dir(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
 		to_test=values
 		if not os.path.exists(to_test):
@@ -60,8 +61,8 @@ class readable_writeable_dir(argparse.Action):
 class parse_statsparser_args(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
 		to_test = values.split(' ')
-		argument_parser = statsparser.get_argument_parser()
-		args = statsparser.parse_args(argument_parser, to_test)
+		argument_parser = sp_get_argument_parser()
+		args = sp_parse_args(argument_parser, to_test)
 		print (to_test)
 		setattr(namespace,self.dest,to_test)
 
@@ -73,13 +74,13 @@ def main_and_args():
 													 an in-depth report file including informative plots.''')
 
 	parser.add_argument('-l', '--log_basedir',
-						action=readable_dir,
+						action=r_dir,
 						default='/var/log/MinKNOW',
 						help='''Path to the base directory of GridIONs log files,
 						 contains the manager log files. (default: /var/log/MinKNOW)''')
 
 	a_d = parser.add_argument('-d', '--database_dir',
-						action=readable_writeable_dir,
+						action=rw_dir,
 						default='reports',
 						help='Path to the base directory where reports will be safed. (default: ./reports)')
 
@@ -93,7 +94,7 @@ def main_and_args():
 						help='''if specified, watchnchop is not executed''')
 
 	parser.add_argument('-b', '--basecalled_basedir',
-						action=readable_writeable_dir,
+						action=rw_dir,
 						default='/data/basecalled',
 						help='Path to the directory where basecalled data is saved. (default: /data/basecalled)')
 
@@ -108,11 +109,11 @@ def main_and_args():
 						help='''Arguments that are passed to the statsparser.
 						See a full list of possible options with --statsparser_args " -h" ''')
 
-	parser.add_argument('--html_bricks_dir',
-						action=readable_dir,
-						default='html_bricks',
+	parser.add_argument('--resources_dir',
+						action=r_dir,
+						default='resources',
 						help='''Path to the directory containing template files and resources 
-						for the html pages. (default: ./html_bricks''')
+						for the html pages. (default: ./resources''')
 
 	parser.add_argument('--status_page_dir',
 						default='GridIONstatus',
@@ -120,22 +121,22 @@ def main_and_args():
 						will be stored. (default: ./GridIONstatus)''')
 
 	parser.add_argument('--watchnchop_path',
-						action=readable_file,
+						action=r_file,
 						default='watchnchop.pl',
 						help='''Path to the watchnchop executable (default: ./watchnchop.pl)''')
 
 	parser.add_argument('--statsparser_path',
-						action=readable_file,
+						action=r_file,
 						default='statsparser.py',
 						help='''Path to statsparser.py (default: ./statsparser.py)''')
 
 	parser.add_argument('--python3_path',
-						action=readable_file,
+						action=r_file,
 						default='/usr/bin/python3',
 						help='''Path to the python3 executable (default: /usr/bin/python3)''')
 
 	parser.add_argument('--perl_path',
-						action=readable_file,
+						action=r_file,
 						default='/usr/bin/perl',
 						help='''Path to the perl executable (default: /usr/bin/perl)''')
 
@@ -160,7 +161,7 @@ def main_and_args():
 	#### main #####
 
 	if not QUIET: print("#######################################")
-	if not QUIET: print("######### grinIONwatcher {} #########".format(VERSION))
+	if not QUIET: print("######### grinIONwatcher {} #########".format(__version__))
 	if not QUIET: print("#######################################")
 	if not QUIET: print("")
 	sys.stdout.flush()
@@ -173,11 +174,11 @@ def main_and_args():
 		os.makedirs(args.status_page_dir)
 	if not os.path.exists(os.path.join(args.status_page_dir, 'res')):
 		os.makedirs(os.path.join(args.status_page_dir, 'res'))
-	copyfile(os.path.join(args.html_bricks_dir, 'style.css'), 
+	copyfile(os.path.join(args.resources_dir, 'style.css'), 
 			 os.path.join(args.status_page_dir, 'res', 'style.css'))
-	copyfile(os.path.join(args.html_bricks_dir, 'flowcell.png'), 
+	copyfile(os.path.join(args.resources_dir, 'flowcell.png'), 
 			 os.path.join(args.status_page_dir, 'res', 'flowcell.png'))
-	copyfile(os.path.join(args.html_bricks_dir, 'no_flowcell.png'), 
+	copyfile(os.path.join(args.resources_dir, 'no_flowcell.png'), 
 			 os.path.join(args.status_page_dir, 'res', 'no_flowcell.png'))
 
 
@@ -197,7 +198,7 @@ def main_and_args():
 								args.statsparser_args,
 								args.update_interval,
 								args.no_watchnchop,
-								args.html_bricks_dir,
+								args.resources_dir,
 								args.watchnchop_path,
 								args.statsparser_path,
 								args.python3_path,
@@ -206,7 +207,7 @@ def main_and_args():
 	sys.stdout.flush()
 
 	logging.info("Initiating GrinIOn status page")
-	update_status_page(watchers, args.html_bricks_dir, args.status_page_dir)
+	update_status_page(watchers, args.resources_dir, args.status_page_dir)
 	webbrowser.open('file://' + os.path.realpath(os.path.join(args.status_page_dir, "GridIONstatus.html")))
 
 	logging.info("entering main loop")
@@ -216,7 +217,7 @@ def main_and_args():
 			for watcher in watchers:
 				watcher.check_q()
 			if UPDATE_STATUS_PAGE:
-				update_status_page(watchers, args.html_bricks_dir, args.status_page_dir)
+				update_status_page(watchers, args.resources_dir, args.status_page_dir)
 				UPDATE_STATUS_PAGE = False
 			time.sleep(1)
 			n += 1
@@ -283,18 +284,18 @@ def load_runs_from_database(database_dir):
 			except:
 				pass
 
-def update_status_page(watchers, html_bricks_dir, status_page_dir):
+def update_status_page(watchers, resources_dir, status_page_dir):
 	channel_to_css = {0:"one", 1:"two", 2:"three", 3:"four", 4:"five"}
 
-	with open(os.path.join(html_bricks_dir, 'gridIONstatus_brick.html'), 'r') as f:
+	with open(os.path.join(resources_dir, 'gridIONstatus_brick.html'), 'r') as f:
 		gridIONstatus_brick = f.read()
 
-	gridIONstatus_brick = gridIONstatus_brick.format("{0}", "{1}", VERSION, "{}".format(datetime.now())[:-7])
+	gridIONstatus_brick = gridIONstatus_brick.format("{0}", "{1}", __version__, "{}".format(datetime.now())[:-7])
 
 	for watcher in watchers:
-		with open(os.path.join(html_bricks_dir, 'flowcell_brick.html'), 'r') as f:
+		with open(os.path.join(resources_dir, 'flowcell_brick.html'), 'r') as f:
 			flowcell_brick = f.read()
-		with open(os.path.join(html_bricks_dir, 'flowcell_info_brick.html'), 'r') as f:
+		with open(os.path.join(resources_dir, 'flowcell_info_brick.html'), 'r') as f:
 			flowcell_info_brick = f.read()
 
 		latest_qc = None
@@ -406,7 +407,7 @@ def update_status_page(watchers, html_bricks_dir, status_page_dir):
 	gridIONstatus_brick = gridIONstatus_brick.format("", "")
 
 	
-	with open(os.path.join(html_bricks_dir, 'gridIONstatus_bottom_brick.html'), 'r') as f:
+	with open(os.path.join(resources_dir, 'gridIONstatus_bottom_brick.html'), 'r') as f:
 		bottom_brick = f.read()
 
 	blank_line = '<tr>\n<th><a href="{}" target="_blank">{}</a></th>\n<td>{}</td>\n<td>{}</td>\n<td>{}</td>\n<td>{}</td></tr>'
@@ -537,12 +538,12 @@ class Scheduler(mp.Process):
 
 	def __init__(self, update_interval, statsfp, statsparser_args, 
 				 user_filename_input, minion_id, flowcell_id, protocol_start,
-				 html_bricks_dir, statsparser_path, python3_path):
+				 resources_dir, statsparser_path, python3_path):
 		mp.Process.__init__(self)
 		self.exit = mp.Event()
 		#self.sched_q = sched_q
 		self.update_interval = update_interval
-		self.html_bricks_dir = html_bricks_dir
+		self.resources_dir = resources_dir
 		self.statsfp = statsfp
 		self.statsparser_path = statsparser_path
 		self.statsparser_args = statsparser_args
@@ -567,7 +568,7 @@ class Scheduler(mp.Process):
 						'--minion_id', self.minion_id,
 						'--flowcell_id', self.flowcell_id,
 						'--protocol_start', self.protocol_start,
-						'--html_bricks_dir', self.html_bricks_dir,
+						'--resources_dir', self.resources_dir,
 						'-q']
 				args.extend(self.statsparser_args)
 				cp = subprocess.run(args) # waits for process to complete
@@ -594,7 +595,7 @@ class Watcher():
 
 	def __init__(self, log_basedir, channel, modified_as_created, database_dir, 
 				 basecalled_basedir, statsparser_args, update_interval, no_watchnchop,
-				 html_bricks_dir, watchnchop_path, statsparser_path, python3_path, perl_path):
+				 resources_dir, watchnchop_path, statsparser_path, python3_path, perl_path):
 		self.q = mp.SimpleQueue()
 		self.watchnchop = not no_watchnchop
 		self.channel = channel
@@ -602,7 +603,7 @@ class Watcher():
 		self.basecalled_basedir = basecalled_basedir
 		self.statsparser_args = statsparser_args
 		self.update_interval = update_interval
-		self.html_bricks_dir = html_bricks_dir
+		self.resources_dir = resources_dir
 		self.watchnchop_path = watchnchop_path
 		self.statsparser_path = statsparser_path
 		self.python3_path = python3_path
@@ -676,7 +677,7 @@ class Watcher():
 											   "GA{}0000".format(self.channel+1), 
 											   self.channel_status.flowcell['flowcell_id'], 
 											   self.channel_status.run_data['protocol_start'],
-											   self.html_bricks_dir,
+											   self.resources_dir,
 											   self.statsparser_path,
 											   self.python3_path)
 					self.scheduler.start()

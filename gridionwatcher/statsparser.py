@@ -19,14 +19,14 @@ from mpl_toolkits import axes_grid1
 import re
 from shutil import copyfile
 import warnings
+from .version import __version__
 
 warnings.filterwarnings("ignore")
 QUIET = False
 TICKLBLS = 6
 SECS_TO_HOURS = 3600.
-VERSION = "v2.7"
 
-class readable_file(argparse.Action):
+class r_file(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
 		to_test=values
 		if not os.path.isfile(to_test):
@@ -35,7 +35,7 @@ class readable_file(argparse.Action):
 			raise argparse.ArgumentTypeError('ERR: {} is not readable'.format(to_test))
 		setattr(namespace,self.dest,to_test)
 
-class readable_dir(argparse.Action):
+class r_dir(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
 		to_test=values
 		if not os.path.isdir(to_test):
@@ -44,7 +44,7 @@ class readable_dir(argparse.Action):
 			raise argparse.ArgumentTypeError('ERR: {} is not readable'.format(to_test))
 		setattr(namespace,self.dest,to_test)
 
-class writeable_dir(argparse.Action):
+class w_dir(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
 		to_test=values
 		if not os.path.isdir(to_test):
@@ -73,89 +73,74 @@ def get_argument_parser():
 	argument_parser = argparse.ArgumentParser(
 		description='''Parses a stats file containing information
 					about a nanopore sequencing run and creates
-					an in-depth report file including informative plots.'''
-		)
+					an in-depth report file including informative plots.''')
 
 	if __name__ == '__main__':
 		argument_parser.add_argument('statsfile',
-			action=readable_file,
+			action=r_file,
 			help='''Path to the stats file containing all necessary information
 					about the sequencing run. Requires a CSV file with "\t" as 
 					seperator, no header and the following columns in given order:
 					read_id, length, qscore, mean_gc, Passed/tooShort, 
-					read_number, pore_index, timestamp, barcode'''
-			)
+					read_number, pore_index, timestamp, barcode''')
 
 	argument_parser.add_argument('-o', '--outdir',
-		action=writeable_dir,
+		action=w_dir,
 		default=None,
 		help='''Path to a directory in which the report files and folders will be saved.
-			 (default: directory of statsfile)'''
-		)
+			 (default: directory of statsfile)''')
 
 	argument_parser.add_argument('-q', '--quiet',
 		action='store_true',
-		help='No status information is printed to stdout.'
-		)
+		help='No status information is printed to stdout.')
 
 	argument_parser.add_argument('--max_bins', 
 		type=int,
 		default=24,
-		help='maximum number of bins for box plots (default: 24)'
-		)
+		help='maximum number of bins for box plots (default: 24)')
 
 	argument_parser.add_argument('--time_intervals',
 		action=parse_time_intervals,
 		default=[1,2,5,10,20,30,60,90,120,240],
-		help='time intervals in minutes available for binning. (default: 1,2,5,10,20,30,60,90,120,240)'
-		)
+		help='time intervals in minutes available for binning. (default: 1,2,5,10,20,30,60,90,120,240)')
 
 	argument_parser.add_argument('--kb_intervals',
 		action=parse_kb_intervals,
 		default=[.5,1.,2.,5.],
-		help='kb intervals available for binning. (default: .5,1.,2.,5.)'
-		)
+		help='kb intervals available for binning. (default: .5,1.,2.,5.)')
 
 	argument_parser.add_argument('--gc_interval',
 		type=float,
 		default=0.5,
-		help='gc interval for binning reads based on mean gc content. (default: 0.05)'
-		)
+		help='gc interval for binning reads based on mean gc content. (default: 0.05)')
 
 	argument_parser.add_argument('--matplotlib_style',
 		default='default',
-		help='matplotlib style string that influences all colors and plot appearances. (default: default)'
-		)
+		help='matplotlib style string that influences all colors and plot appearances. (default: default)')
 
 	argument_parser.add_argument('--result_page_refresh_rate',
 		type=int,
 		default=120,
-		help='refresh rate in seconds. (default: 120)'
-		)
+		help='refresh rate in seconds. (default: 120)')
 
 	# the following should only be set if statsparser is called directly:
 	if __name__ == '__main__':
 		argument_parser.add_argument('--html_bricks_dir',
-			action=readable_dir,
+			action=r_dir,
 			default='html_bricks',
-			help='directory containing template files for creating the results html page. (default: ./html_bricks)'
-			)
+			help='directory containing template files for creating the results html page. (default: ./html_bricks)')
 
 		argument_parser.add_argument('--user_filename_input',
-			default='Run#####_MIN###_KIT###'
-			)
+			default='Run#####_MIN###_KIT###')
 
 		argument_parser.add_argument('--minion_id',
-			default='GA#0000'
-			)
+			default='GA#0000')
 
 		argument_parser.add_argument('--flowcell_id',
-			default='FAK#####'
-			)
+			default='FAK#####')
 
 		argument_parser.add_argument('--protocol_start',
-			default='YYYY-MM-DD hh:mm:ss.ms'
-			)
+			default='YYYY-MM-DD hh:mm:ss.ms')
 
 	return argument_parser
 
@@ -198,7 +183,7 @@ def main(args):
 	QUIET = args.quiet
 
 	if not QUIET: print("#######################################")
-	if not QUIET: print("#########   statsparser {}  #########".format(VERSION))
+	if not QUIET: print("#########   statsparser {}  #########".format(__version__))
 	if not QUIET: print("#######################################")
 	if not QUIET: print("")
 
@@ -416,7 +401,7 @@ def create_html(outdir,
 									protocol_start, 
 									result_page_refresh_rate, 
 									minion_id_to_css[minion_id],
-									VERSION,
+									__version__,
 									"{}".format(datetime.now())[:-7])
 	html_content = html_content + overview_brick.format(html_stats_df)
 

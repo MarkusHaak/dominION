@@ -11,3 +11,7 @@ MinKNOW
 *.log
 minknow*
 *.psd
+*.pyc
+dist
+*.egg-info
+*.egg
