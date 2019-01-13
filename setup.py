@@ -42,5 +42,6 @@ setup(name='gridionwatcher',
 	  					'matplotlib'],
 	  include_package_data=True,
 	  zip_safe=False,
-	  entry_points={"console_scripts": ['gridionwatcher = gridionwatcher.gridionwatcher:main_and_args']})
+	  entry_points={"console_scripts": ['gridionwatcher = gridionwatcher.gridionwatcher:main_and_args',
+	  									'statsparser = gridionwatcher.statsparser:standalone']})
 	  #scripts=['bin/watchnchop.pl'])

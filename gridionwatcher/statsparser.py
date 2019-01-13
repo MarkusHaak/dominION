@@ -1,3 +1,16 @@
+"""
+Copyright 2018 Markus Haak (markus.haak@posteo.net)
+https://github.com/MarkusHaak/GridIONwatcher
+
+This file is part of GridIONwatcher. GridIONwatcher is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by the Free Software Foundation,
+either version 3 of the License, or (at your option) any later version. GridIONwatcher is distributed in
+the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+details. You should have received a copy of the GNU General Public License along with GridIONwatcher. If
+not, see <http://www.gnu.org/licenses/>.
+"""
+
 import itertools
 import argparse
 import os
@@ -20,38 +33,12 @@ import re
 from shutil import copyfile
 import warnings
 from .version import __version__
+from .helper import logger, package_dir, ArgHelpFormatter, r_file, r_dir, w_dir
 
 warnings.filterwarnings("ignore")
 QUIET = False
 TICKLBLS = 6
 SECS_TO_HOURS = 3600.
-
-class r_file(argparse.Action):
-	def __call__(self, parser, namespace, values, option_string=None):
-		to_test=values
-		if not os.path.isfile(to_test):
-			raise argparse.ArgumentTypeError('ERR: {} is not a file'.format(to_test))
-		if not os.access(to_test, os.R_OK):
-			raise argparse.ArgumentTypeError('ERR: {} is not readable'.format(to_test))
-		setattr(namespace,self.dest,to_test)
-
-class r_dir(argparse.Action):
-	def __call__(self, parser, namespace, values, option_string=None):
-		to_test=values
-		if not os.path.isdir(to_test):
-			raise argparse.ArgumentTypeError('ERR: {} is not a directory'.format(to_test))
-		if not os.access(to_test, os.R_OK):
-			raise argparse.ArgumentTypeError('ERR: {} is not readable'.format(to_test))
-		setattr(namespace,self.dest,to_test)
-
-class w_dir(argparse.Action):
-	def __call__(self, parser, namespace, values, option_string=None):
-		to_test=values
-		if not os.path.isdir(to_test):
-			raise argparse.ArgumentTypeError('ERR: {} is not a directory'.format(to_test))
-		if not os.access(to_test, os.W_OK):
-			raise argparse.ArgumentTypeError('ERR: {} is not writeable'.format(to_test))
-		setattr(namespace,self.dest,to_test)
 
 class parse_time_intervals(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
@@ -70,77 +57,91 @@ class parse_kb_intervals(argparse.Action):
 		setattr(namespace,self.dest,intervals)
 
 def get_argument_parser():
-	argument_parser = argparse.ArgumentParser(
-		description='''Parses a stats file containing information
-					about a nanopore sequencing run and creates
-					an in-depth report file including informative plots.''')
+	argument_parser = argparse.ArgumentParser(description='''Parses a csv file containing statistics
+														  about a nanopore sequencing run and creates
+														  an in-depth report file including informative plots.''',
+											  formatter_class=ArgHelpFormatter, 
+											  add_help=False)
 
+	main_options = argument_parser.add_argument_group('Main options')
 	if __name__ == '__main__':
-		argument_parser.add_argument('statsfile',
-			action=r_file,
-			help='''Path to the stats file containing all necessary information
-					about the sequencing run. Requires a CSV file with "\t" as 
-					seperator, no header and the following columns in given order:
-					read_id, length, qscore, mean_gc, Passed/tooShort, 
-					read_number, pore_index, timestamp, barcode''')
+		main_options.add_argument('statsfile',
+								  action=r_file,
+								  help='''Path to the stats file containing all necessary information
+								  	   about the sequencing run. Requires a CSV file with "\t" as 
+								  	   seperator, no header and the following columns in given order:
+								  	   read_id, length, qscore, mean_gc, Passed/tooShort, 
+								  	   read_number, pore_index, timestamp, barcode''')
+	main_options.add_argument('-o', '--outdir',
+							  action=w_dir,
+							  default=None,
+							  help='''Path to a directory in which the report files and folders will be saved
+								   (default: directory of statsfile)''')
+	main_options.add_argument('--result_page_refresh_rate',
+							  type=int,
+							  default=120,
+							  help='refresh rate in seconds. (default: 120)')
+	if __name__ == '__main__':
+		main_options.add_argument('--resources_dir',
+								 action=r_dir,
+								 default=os.path.join(package_dir,'resources'),
+								 help='''directory containing template files for creating the results html page.
+								 	  (default: PACKAGE_DIR/resources)''')
 
-	argument_parser.add_argument('-o', '--outdir',
-		action=w_dir,
-		default=None,
-		help='''Path to a directory in which the report files and folders will be saved.
-			 (default: directory of statsfile)''')
-
-	argument_parser.add_argument('-q', '--quiet',
-		action='store_true',
-		help='No status information is printed to stdout.')
-
-	argument_parser.add_argument('--max_bins', 
-		type=int,
-		default=24,
-		help='maximum number of bins for box plots (default: 24)')
-
-	argument_parser.add_argument('--time_intervals',
-		action=parse_time_intervals,
-		default=[1,2,5,10,20,30,60,90,120,240],
-		help='time intervals in minutes available for binning. (default: 1,2,5,10,20,30,60,90,120,240)')
-
-	argument_parser.add_argument('--kb_intervals',
-		action=parse_kb_intervals,
-		default=[.5,1.,2.,5.],
-		help='kb intervals available for binning. (default: .5,1.,2.,5.)')
-
-	argument_parser.add_argument('--gc_interval',
-		type=float,
-		default=0.5,
-		help='gc interval for binning reads based on mean gc content. (default: 0.05)')
-
-	argument_parser.add_argument('--matplotlib_style',
-		default='default',
-		help='matplotlib style string that influences all colors and plot appearances. (default: default)')
-
-	argument_parser.add_argument('--result_page_refresh_rate',
-		type=int,
-		default=120,
-		help='refresh rate in seconds. (default: 120)')
+	plot_options = argument_parser.add_argument_group('Plotting options',
+													  'Arguments changing the appearance of plots')
+	plot_options.add_argument('--max_bins', 
+							  type=int,
+							  default=24,
+							  help='maximum number of bins for box plots')
+	plot_options.add_argument('--time_intervals',
+							  action=parse_time_intervals,
+							  default=[1,2,5,10,20,30,60,90,120,240],
+							  help='time intervals in minutes available for binning')
+	plot_options.add_argument('--kb_intervals',
+							  action=parse_kb_intervals,
+							  default=[.5,1.,2.,5.],
+							  help='kb intervals available for binning')
+	plot_options.add_argument('--gc_interval',
+							  type=float,
+							  default=0.5,
+							  help='gc interval for binning reads based on mean gc content')
+	plot_options.add_argument('--matplotlib_style',
+							  default='default',
+							  help='matplotlib style string that influences all colors and plot appearances')
 
 	# the following should only be set if statsparser is called directly:
 	if __name__ == '__main__':
-		argument_parser.add_argument('--html_bricks_dir',
-			action=r_dir,
-			default='html_bricks',
-			help='directory containing template files for creating the results html page. (default: ./html_bricks)')
+		exp_options = argument_parser.add_argument_group('Experiment options',
+														 'Arguments concerning the experiment')
+		exp_options.add_argument('--user_filename_input',
+								 default='Run#####_MIN###_KIT###',
+								 help=' ')
+		exp_options.add_argument('--minion_id',
+								 default='GA#0000',
+								 help=' ')
+		exp_options.add_argument('--flowcell_id',
+								 default='FAK#####',
+								 help=' ')
+		exp_options.add_argument('--protocol_start',
+								 default='YYYY-MM-DD hh:mm:ss.ms',
+								 help=' ')
 
-		argument_parser.add_argument('--user_filename_input',
-			default='Run#####_MIN###_KIT###')
-
-		argument_parser.add_argument('--minion_id',
-			default='GA#0000')
-
-		argument_parser.add_argument('--flowcell_id',
-			default='FAK#####')
-
-		argument_parser.add_argument('--protocol_start',
-			default='YYYY-MM-DD hh:mm:ss.ms')
+	help_group = argument_parser.add_argument_group('Help')
+	help_group.add_argument('-h', '--help', 
+							action='help', 
+							default=argparse.SUPPRESS,
+							help='Show this help message and exit')
+	help_group.add_argument('--version', 
+							action='version', 
+							version=__version__,
+							help="Show program's version number and exit")
+	#help_group.add_argument('-v', '--verbose',
+	#						action='store_true',
+	#						help='Additional status information is printed to stdout')
+	help_group.add_argument('-q', '--quiet', #TODO: implement
+							action='store_true',
+							help='No prints to stdout')
 
 	return argument_parser
 
@@ -160,14 +161,14 @@ def parse_args(argument_parser, ext_args=None):
 	if not os.path.isdir(os.path.join(args.outdir, 'res', 'plots')):
 		os.makedirs(os.path.join(args.outdir, 'res', 'plots'))
 
-	if not os.path.exists(args.html_bricks_dir) or not os.path.isdir(args.html_bricks_dir):
+	if not os.path.exists(args.resources_dir) or not os.path.isdir(args.resources_dir):
 		raise argparse.ArgumentTypeError('ERR: directory "html_bricks" does not exist'.format(args.outdir))
 		for brick in ["barcode_brick.html",
 					  "bottom_brick.html",
 					  "overview_brick.html",
 					  "top_brick.html"]:
-			if not os.path.isfile(os.path.join(args.html_bricks_dir, brick)):
-				raise argparse.ArgumentTypeError('ERR: file {} does not exist'.format(os.path.join(args.html_bricks_dir, 
+			if not os.path.isfile(os.path.join(args.resources_dir, brick)):
+				raise argparse.ArgumentTypeError('ERR: file {} does not exist'.format(os.path.join(args.resources_dir, 
 																								   brick)))
 	args.time_intervals = [i*60 for i in args.time_intervals]
 
@@ -178,7 +179,14 @@ def parse_args(argument_parser, ext_args=None):
 
 	return args
 
-def main(args):
+def standalone():
+	global __name__
+	__name__ = '__main__'
+	argument_parser = get_argument_parser()
+	args = parse_args(argument_parser)
+	main(args)
+
+def main(args=None):
 	global QUIET
 	QUIET = args.quiet
 
@@ -217,7 +225,6 @@ def main(args):
 						col, 
 						os.path.join(args.outdir, 'res', "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
 
-	
 	#######
 	
 	tprint("Creating kb-bins barplots")
@@ -355,7 +362,7 @@ def main(args):
 				args.result_page_refresh_rate, 
 				barcodes, 
 				subsets, 
-				args.html_bricks_dir)
+				args.resources_dir)
 
 	tprint("Everything done")
 	exit()
@@ -370,7 +377,7 @@ def create_html(outdir,
 				result_page_refresh_rate, 
 				barcodes, 
 				subsets, 
-				html_bricks_dir):
+				resources_dir):
 
 	tprint("Parsing stats table to html")
 	html_stats_df = make_html_table(stats_df).replace('valign="top"', 'valign="center"')
@@ -379,13 +386,13 @@ def create_html(outdir,
 		tprint(bc)
 		html_stats_df = html_stats_df.replace(bc, '<a href="#{0}">{0}</a>'.format(bc))
 
-	with open(os.path.join(html_bricks_dir, 'barcode_brick.html'), 'r') as f:
+	with open(os.path.join(resources_dir, 'barcode_brick.html'), 'r') as f:
 		barcode_brick = f.read()
-	with open(os.path.join(html_bricks_dir, 'bottom_brick.html'), 'r') as f:
+	with open(os.path.join(resources_dir, 'bottom_brick.html'), 'r') as f:
 		bottom_brick = f.read()
-	with open(os.path.join(html_bricks_dir, 'overview_brick.html'), 'r') as f:
+	with open(os.path.join(resources_dir, 'overview_brick.html'), 'r') as f:
 		overview_brick = f.read()
-	with open(os.path.join(html_bricks_dir, 'top_brick.html'), 'r') as f:
+	with open(os.path.join(resources_dir, 'top_brick.html'), 'r') as f:
 		top_brick = f.read()
 
 	minion_id_to_css = {"GA10000":"one",
@@ -413,7 +420,7 @@ def create_html(outdir,
 	with open(os.path.join(outdir, "results.html"), 'w') as outfile:
 		print(html_content, file=outfile)
 
-	copyfile(os.path.join(html_bricks_dir, 'style.css'), os.path.join(outdir, 'res', 'style.css'))
+	copyfile(os.path.join(resources_dir, 'style.css'), os.path.join(outdir, 'res', 'style.css'))
 
 
 def pore_heatmap(max_pore_index, pore_bases, pore_indexes, dest):
