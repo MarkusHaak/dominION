@@ -66,25 +66,25 @@ def main_and_args():
 							  action=rw_dir,
 							  default='reports',
 							  help='Path to the base directory where experiment reports shall be saved')
-	main_options.add_argument('--status_page_dir',
+	main_options.add_argument('-s', '--status_page_dir',
 							  default='GridIONstatus',
 							  help='''Path to the directory where all files for the GridION status page 
 								   will be stored''')
 
 	sp_options = parser.add_argument_group('Statsparser arguments',
-											 'Arguments passed to statsparser for formatting html pages')
+										   'Arguments passed to statsparser for formatting html pages')
 	sp_options.add_argument('--statsparser_args',
-							  action=parse_statsparser_args,
-							  default=[],
-							  help='''Arguments that are passed to the statsparser.
-							  	   See a full list of possible options with --statsparser_args " -h" ''')
+							action=parse_statsparser_args,
+							default=[],
+							help='''Arguments that are passed to the statsparser.
+								   See a full list of possible options with --statsparser_args " -h" ''')
 
 	io_group = parser.add_argument_group('I/O options', 
 										 'Further input/output options. Only for special use cases')
 	a_d = \
-	io_group.add_argument('-b', '--basecalled_basedir',
+	io_group.add_argument('-b', '--data_basedir',
 						  action=rw_dir,
-						  default='/data/basecalled',
+						  default='/data',
 						  help='Path to the directory where basecalled data is saved')
 	io_group.add_argument('-l', '--minknow_log_basedir',
 						  action=r_dir,
@@ -100,7 +100,7 @@ def main_and_args():
 										  'Paths to mandatory executables')
 	exe_group.add_argument('--watchnchop_path',
 						   action=r_file,
-						   default='watchnchop.pl',
+						   default='/home/grid/scripts/watchnchop.pl',
 						   help='''Path to the watchnchop executable''')
 	exe_group.add_argument('--statsparser_path',
 						   action=r_file,
@@ -116,13 +116,13 @@ def main_and_args():
 						   help='''Path to the perl executable''')
 
 	general_group = parser.add_argument_group('General options', 
-											   'Advanced options influencing the program execution')
+											  'Advanced options influencing the program execution')
 	general_group.add_argument('-u', '--update_interval',
 							   type=int,
-							   default=600,
+							   default=300,
 							   help='Time inverval (in seconds) for updating the stats webpage contents')
 	general_group.add_argument('-m', '--ignore_file_modifications',
-							   action='store_false',
+							   action='store_true',
 							   help='''Ignore file modifications and only consider file creations regarding 
 									determination of the latest log files''')
 	general_group.add_argument('--no_watchnchop',
@@ -158,10 +158,9 @@ def main_and_args():
 
 	#### main #####
 
-	if not QUIET: print("#######################################")
-	if not QUIET: print("######### grinIONwatcher {} #########".format(__version__))
-	if not QUIET: print("#######################################")
-	if not QUIET: print("")
+	if not QUIET: print("#######################################\n" + \
+						"######## grinIONwatcher {} #########\n".format(__version__) + \
+						"#######################################\n")
 	sys.stdout.flush()
 
 	global ALL_RUNS
@@ -190,9 +189,9 @@ def main_and_args():
 	for channel in range(5):
 		watchers.append(Watcher(args.minknow_log_basedir, 
 								channel, 
-								args.modified_as_created, 
+								args.ignore_file_modifications, 
 								args.database_dir, 
-								args.basecalled_basedir, 
+								args.data_basedir, 
 								args.statsparser_args,
 								args.update_interval,
 								args.no_watchnchop,
@@ -255,7 +254,7 @@ def load_runs_from_database(database_dir):
 			try:
 				flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
 			except:
-				print("ERROR: Failed to load {}, probably json format corrupted!".format(fn))
+				logger.info("ERROR: Failed to load {}, probably json format corrupted!".format(fn))
 				continue
 
 			#key = run_data['run_id']+flowcell['flowcell_id']
@@ -264,7 +263,7 @@ def load_runs_from_database(database_dir):
 			run_id = run_data['run_id']
 			if flowcell_id in ALL_RUNS:
 				if run_id in ALL_RUNS[flowcell_id]:
-					print("ERROR: {} exists multiple times in database entry for flowcell {}!".format(run_id, 
+					logger.info("ERROR: {} exists multiple times in database entry for flowcell {}!".format(run_id, 
 																									  flowcell_id))
 					continue
 			else:
@@ -275,7 +274,7 @@ def load_runs_from_database(database_dir):
 											 'mux_scans': mux_scans}
 
 			try:
-				print('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(flowcell_id, 
+				logger.info('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(flowcell_id, 
 																							  run_data['experiment_type'], 
 																							  flowcell['flowcell_id'], 
 																							  run_data['protocol_start']))
@@ -357,14 +356,27 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 				elif latest_qc == None and flowcell_runs:
 					runs_string = '<p><u>Runs</u>:<br><br>'
 					for run in flowcell_runs:
-						runs_string = runs_string + '<a href="{0}" target="_blank">{1}</a><br>'.format(
-							os.path.join(watcher.basecalled_basedir, 
-										 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
-										 ALL_RUNS[asic_id_eeprom][run]['run_data']['minion_id'],
-										 'filtered',
-										 'results.html'),
+						#exp_dir = get_experiment_dir(os.path.join(
+						#								watcher.data_basedir,
+						#								ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
+						#								ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input']), # TODO: change to sample_name
+						#							 ALL_RUNS[asic_id_eeprom][run]['run_data']['run_id'].split("-")[0])
+						#if not exp_dir:
+						#	logger.info("ERROR: experiment directory not found")
+						#	return
+						try:
+							relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
+						except:
+							relative_path = "NA"
+						runs_string += '<a href="{0}" target="_blank">{1}</a><br>'.format(
+							#os.path.join(watcher.data_basedir, 
+							#			 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
+							#			 ALL_RUNS[asic_id_eeprom][run]['run_data']['minion_id'],
+							#			 'filtered',
+							#			 'results.html'),
+							os.path.join(watcher.data_basedir,relative_path,'filtered','results.html'),
 							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
-					runs_string = runs_string + '</p>'
+					runs_string += '</p>'
 
 					flowcell_info_brick = flowcell_info_brick.format(
 						channel_to_css[watcher.channel],
@@ -376,12 +388,17 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 				else:
 					runs_string = '<p><u>Runs</u>:<br><br>'
 					for run in flowcell_runs:
-						runs_string = runs_string + '<a href="{0}" target="_blank">{1}</a><br>'.format(
-							os.path.join(watcher.basecalled_basedir, 
-										 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
-										 ALL_RUNS[asic_id_eeprom][run]['run_data']['minion_id'],
-										 'filtered',
-										 'results.html'),
+						try:
+							relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
+						except:
+							relative_path = "NA"
+						runs_string += '<a href="{0}" target="_blank">{1}</a><br>'.format(
+							#os.path.join(watcher.data_basedir, 
+							#			 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
+							#			 ALL_RUNS[asic_id_eeprom][run]['run_data']['minion_id'],
+							#			 'filtered',
+							#			 'results.html'),
+							os.path.join(watcher.data_basedir,relative_path,'filtered','results.html'),
 							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
 					runs_string = runs_string + '</p>'
 
@@ -425,9 +442,17 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 				sequencing_kit = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sequencing_kit']
 				user_filename_input = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input']
 				minion_id = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['minion_id']
-				link = os.path.join(watchers[0].basecalled_basedir, 
-									user_filename_input,
-									minion_id,
+				#link = os.path.join(watchers[0].data_basedir, 
+				#					user_filename_input,
+				#					minion_id,
+				#					'filtered',
+				#					'results.html')
+				try:
+					relative_path = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['relative_path']
+				except:
+					relative_path = "NA"
+				link = os.path.join(watchers[0].data_basedir,
+									relative_path,
 									'filtered',
 									'results.html')
 				all_runs_info.append( (link, user_filename_input, minion_id, sequencing_kit, protocol_start, time_diff) )
@@ -531,6 +556,28 @@ class ChannelStatus():
 		self.run_data['minion_id'] = self.minion_id
 		self.mux_scans = []
 
+	def find_relative_path(self, data_basedir):
+		if not self.run_data['user_filename_input']:
+			logger.info("ERROR: Could not determine relative data path, 'user_filename_input' is not set")
+			return
+		rel_path = os.path.join(self.run_data['user_filename_input'],
+								self.run_data['user_filename_input'])	# TODO: change to sample_name
+		basedir = os.path.join(data_basedir, rel_path)	
+		if not os.path.isdir(basedir):
+			logger.info("ERROR: Could not determine relative data path, directory {} does not exist".format(basedir))
+			return
+		if not self.run_data['run_id']:
+			logger.info("ERROR: Could not determine relative data path, 'run_id' is not set")
+			return
+		exp_id_substring = self.run_data['run_id'].split('-')[0]
+		for item in os.listdir(basedir):
+			joined = os.path.join(basedir, item)
+			if os.path.isdir(joined) and item.rstrip('/').endswith(exp_id_substring):
+				self.update({"relative_path":os.path.join(rel_path, item)}, overwrite=True)
+				return
+		logger.info("WARNING: Could not determine relative data path, no directory found ending with {}".format(exp_id_substring))
+		return
+
 
 class Scheduler(mp.Process):
 
@@ -591,14 +638,14 @@ class Scheduler(mp.Process):
 
 class Watcher():
 
-	def __init__(self, minknow_log_basedir, channel, modified_as_created, database_dir, 
-				 basecalled_basedir, statsparser_args, update_interval, no_watchnchop,
+	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, database_dir, 
+				 data_basedir, statsparser_args, update_interval, no_watchnchop,
 				 resources_dir, watchnchop_path, statsparser_path, python3_path, perl_path):
 		self.q = mp.SimpleQueue()
 		self.watchnchop = not no_watchnchop
 		self.channel = channel
 		self.database_dir = database_dir
-		self.basecalled_basedir = basecalled_basedir
+		self.data_basedir = data_basedir
 		self.statsparser_args = statsparser_args
 		self.update_interval = update_interval
 		self.resources_dir = resources_dir
@@ -607,7 +654,7 @@ class Watcher():
 		self.python3_path = python3_path
 		self.perl_path = perl_path
 		self.observed_dir = os.path.join(minknow_log_basedir, "GA{}0000".format(channel+1))
-		self.event_handler = StatsFilesEventHandler(self.q, modified_as_created)
+		self.event_handler = LogFilesEventHandler(self.q, ignore_file_modifications)
 		self.observer = Observer()
 		self.observer.schedule(self.event_handler, 
 							   self.observed_dir, 
@@ -616,9 +663,6 @@ class Watcher():
 		print("...watcher for {} ready".format(self.observed_dir))
 
 		self.channel_status = ChannelStatus("GA{}0000".format(channel+1))
-
-		#self.ctx = mp.get_context('spawn')
-		#self.sched_q = mp.SimpleQueue()
 		self.scheduler = None
 
 	def check_q(self):
@@ -654,6 +698,9 @@ class Watcher():
 				elif content[1] == "sequencing start":
 					logger.info("SEQUENCING STARTS")
 
+					#try to identify the path in which the experiment data is saved, relative to data_basedir
+					self.channel_status.find_relative_path(self.data_basedir)
+
 					#start porechop & filter & rsync
 					if self.watchnchop:
 						self.start_watchnchop()
@@ -662,9 +709,17 @@ class Watcher():
 					if self.scheduler:
 						self.scheduler.terminate()
 						self.scheduler.join()
-					statsfp = os.path.join(self.basecalled_basedir, 
-										   self.channel_status.run_data['user_filename_input'],
-										   "GA{}0000".format(self.channel+1),
+					#statsfp = os.path.join(self.data_basedir, 
+					#					   self.channel_status.run_data['user_filename_input'],
+					#					   "GA{}0000".format(self.channel+1),
+					#					   'filtered',
+					#					   'stats.txt')
+					try:
+						relative_path = self.channel_status.run_data['relative_path']
+					except:
+						relative_path = "NA"
+					statsfp = os.path.join(self.data_basedir,
+										   relative_path,
 										   'filtered',
 										   'stats.txt')
 					logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for stats file '.format(self.update_interval/1000) + statsfp)
@@ -693,16 +748,16 @@ class Watcher():
 					#self.save_report()
 					#self.channel_status.run_finished()
 				elif content[1] == "new bream_log file":
-					logger.info("NEW EXPERIMENT RUN")
+					logger.info("NEW EXPERIMENT")
 					#self.channel_status.run_finished()
 				elif content[1] == "flowcell disconnected":
 					logger.info("FLOWCELL DISCONNECTED")
 					self.channel_status.flowcell_disconnected()
 				elif content[1] == "protocol started":
-					logger.info("PROTOCOL STARTED")
+					logger.info("PROTOCOL START")
 					self.channel_status.run_data['protocol_start'] = content[0]
 				elif content[1] == "protocol finished":
-					logger.info("PROTOCOL FINISHED")
+					logger.info("PROTOCOL END")
 					self.channel_status.run_data['protocol_end'] = content[0]
 					if self.channel_status.mux_scans:
 						self.save_report()
@@ -781,8 +836,17 @@ class Watcher():
 	def start_watchnchop(self):
 		logger.info("STARTING WATCHNCHOP")
 		if self.channel_status.run_data['user_filename_input']:
-			#cmd = " ".join([self.perl_path, self.watchnchop_path, '-b', os.path.join(self.basecalled_basedir, self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)])
-			cmd = [self.perl_path, self.watchnchop_path, '-b', os.path.join(self.basecalled_basedir, self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)]
+			#cmd = " ".join([self.perl_path, self.watchnchop_path, '-b', os.path.join(self.data_basedir, self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)])
+			#cmd = [self.perl_path, self.watchnchop_path, '-b', os.path.join(self.data_basedir, self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)]
+			try:
+				relative_path = self.channel_status.run_data['relative_path']
+			except:
+				logger.info("ERROR: FAILED to start watchnchop, could not determine experiment base directory")
+				return
+			cmd = [self.perl_path,
+				   self.watchnchop_path,
+				   '-b',
+				   os.path.join(self.data_basedir, relative_path)]
 			try:
 				#subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 				subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -833,15 +897,15 @@ class OpenedFilesHandler():
 				self.open_files[path][1] = self.open_files[path][1] + line
 
 
-class StatsFilesEventHandler(FileSystemEventHandler):
+class LogFilesEventHandler(FileSystemEventHandler):
 	file_handler = OpenedFilesHandler()
 	control_server_log = None
 	bream_log = None
 
-	def __init__(self, q, modified_as_created):
-		super(StatsFilesEventHandler, self).__init__()
+	def __init__(self, q, ignore_file_modifications):
+		super(LogFilesEventHandler, self).__init__()
 		self.q = q
-		self.modified_as_created = modified_as_created
+		self.ignore_file_modifications = ignore_file_modifications
 
 	def on_moved(self, event):
 		pass
@@ -901,7 +965,7 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 					return
 				self.file_handler.process_lines_until_EOF(process_function, event.src_path)
 			else:
-				if self.modified_as_created:
+				if not self.ignore_file_modifications:
 					self.on_created(event)
 				else:
 					if VERBOSE: logger.info("File {} existed before this script was started".format(event.src_path))
@@ -987,8 +1051,4 @@ class StatsFilesEventHandler(FileSystemEventHandler):
 			self.q.put( (dict_content, overwrite) )
 
 if __name__ == "__main__":
-	#logging.basicConfig(level=logging.INFO,
-	#					format='%(threadName)s: %(asctime)s - %(message)s',
-	#					datefmt='%Y-%m-%d %H:%M:%S')
-	#logger.info("basic info called")
 	main_and_args()

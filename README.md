@@ -2,6 +2,27 @@
 
 GridIONwatcher is a tool for monitoring and protocoling sequencing runs performed on the Oxford Nanopore Technologies GridION sequencer and for automated post processing and transmission of generated data. Listening for changes to MinKNOW log files, it collects information on QC and sequencing experiments and displays summaries of mounted flow cells as well as comprehensive reports about currently running and previously performed experiments.
 
+## Installation
+
+As this software is intended to be run on the GridION sequencer, I highly recommend using [virtualenv](https://pypi.org/project/virtualenv/) to set up a virtual python environment prior to the installation. 
+
+```bash
+virtualenv -p python3 /path/to/new/virtual/environment
+source /path/to/new/virtual/environment/bin/activate
+```
+Afterwards, clone and install GridIONwatcher:
+
+```bash
+git clone https://github.com/MarkusHaak/GridIONwatcher.git
+cd GridIONwatcher
+python3 setup.py install
+```
+Alternatively, install GridIONwatcher with pip from GitHub:
+
+```bash
+pip3 install git+https://github.com/MarkusHaak/GridIONwatcher.git
+```
+
 ## Dependencies
 
 The following external python modules are required:
@@ -11,21 +32,7 @@ The following external python modules are required:
 * pandas
 * matplotlib
 
-GridIONwatcher requires python3 and is currently not backwards compatible with python2. 
-
-## Installation
-
-```bash
-git clone https://github.com/MarkusHaak/GridIONwatcher.git
-cd GridIONwatcher
-python3 setup.py install
-```
-Alternatively, install with GridIONwatcher with pip from GitHub:
-
-```bash
-pip3 install git+https://github.com/MarkusHaak/GridIONwatcher.git
-```
-As this software is intended to be run on the GridION sequencer, I highly recommend using [virtualenv](https://pypi.org/project/virtualenv/) to set up a virtual python environment for your installation. 
+GridIONwatcher requires at least python3.5 and is not backwards compatible with python2. 
 
 ## Full usage
 

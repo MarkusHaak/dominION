@@ -139,7 +139,7 @@ def get_argument_parser():
 	#help_group.add_argument('-v', '--verbose',
 	#						action='store_true',
 	#						help='Additional status information is printed to stdout')
-	help_group.add_argument('-q', '--quiet', #TODO: implement
+	help_group.add_argument('-q', '--quiet',
 							action='store_true',
 							help='No prints to stdout')
 
@@ -190,10 +190,10 @@ def main(args=None):
 	global QUIET
 	QUIET = args.quiet
 
-	if not QUIET: print("#######################################")
-	if not QUIET: print("#########   statsparser {}  #########".format(__version__))
-	if not QUIET: print("#######################################")
-	if not QUIET: print("")
+	if not QUIET: print("#######################################\n" + \
+						"########   statsparser {}  #########\n".format(__version__) + \
+						"#######################################\n")
+	sys.stdout.flush()
 
 	tprint("Parsing stats file")
 	df = parse_stats(args.statsfile)
@@ -262,26 +262,9 @@ def main(args=None):
 					intervals, 
 					interval,  
 					os.path.join(args.outdir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
-
-	######
-	
-	#tprint("Creating lineplots with two y-axes")
-	#subset_grouped = df.groupby(['subset'])
-	#
-	#tprint("...plotting {}".format('all'))
-	#sorted_df = df.sort_values('time', axis=0, ascending=True)
-	#lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['bases']/1000000., os.path.join(args.outdir, 'res', "plots", "lineplot_{}".format('all')))
-	#
-	#for subset in set([j for i,j in indexes]):
-	#	tprint("...plotting {}".format(subset))
-	#	sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
-	#	lineplot_2y(sorted_df['time']/SECS_TO_HOURS, sorted_df['bases']/1000000., os.path.join(args.outdir, 'res', "plots", "lineplot_{}".format(subset)) )
-	
-	#######
 	
 	tprint("Creating multi lineplots with one y-axis")
 	grouped = df.groupby(['barcode'])
-	#subset_grouped = df.groupby(['subset'])
 	
 	reads_dfs = []
 	bases_dfs = []
@@ -289,30 +272,23 @@ def main(args=None):
 	sorted_df = grouped.get_group( 'All' ).sort_values('time', axis=0, ascending=True)
 
 	sorted_reads_df = pd.DataFrame({'count':range(1,sorted_df['time'].size+1)})
-	#print(sorted_reads_df)
-	#print(sorted_reads_df.iat[-1,-1])
 	reads_scaling_factor, reads_unit = choose_scaling_factor(sorted_reads_df.iat[-1,-1], [10**3, 1], ['K', '-'])
 	sorted_bases_df = (sorted_df['bases']).expanding(1).sum()
-	#print(sorted_bases_df)
-	#print(sorted_bases_df.iat[-1])
 	bases_scaling_factor, bases_unit = choose_scaling_factor(sorted_bases_df.iat[-1], [10**9, 10**6, 10**3], ['Gb', 'Mb', 'kb'])
 
 	reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
 					  sorted_reads_df,
 					  'all') )
 	bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
-					  #(sorted_df['bases']/1000000000.).expanding(1).sum(),
 					  sorted_bases_df,
 					  'all') )
 
 	for subset in set([j for i,j in indexes]):
-		#sorted_df = subset_grouped.get_group(subset).sort_values('time', axis=0, ascending=True)
 		sorted_df = subgrouped.get_group( ('All',subset) ).sort_values('time', axis=0, ascending=True)
 		reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
 						  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
 						  subset) )
 		bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
-						  #(sorted_df['bases']/1000000000.).expanding(1).sum(),
 						  (sorted_df['bases']).expanding(1).sum(),
 						  subset) )
 	tprint("...plotting {}".format('reads'))
@@ -329,22 +305,10 @@ def main(args=None):
 				   bases_scaling_factor,
 				   bases_unit
 				   )
-	#plt.close('all')
 
-	######
-	
-	#tprint("Creating pore heatmap")
-	#pore_grouped = df.groupby(['pore'])
-	##pore_indexes = list(pd.DataFrame(pore_grouped['bases'].count()).index)
-	#pore_bases = pore_grouped['bases'].sum()
-	#pore_indexes = list(pore_bases.index)
-	##print(pore_bases)
-	##print(pore_bases.index)
-	##print(pore_indexes)
-	#max_pore_index = max(pore_indexes)
+	#######
 
 	tprint("Creating html file")
-	
 	subset_grouped = df.groupby(['subset'])
 	subsets = list(pd.DataFrame(subset_grouped['bases'].count()).index)
 	tprint(subsets)
@@ -533,8 +497,6 @@ def gc_lineplot(bins, intervals, interval, dest):
 	ax1 = plt.subplot(gs0[0, 0])
 	ax2 = ax1.twinx()
 
-	#ax1.bar(x-0.15, reads, width=0.3, color='C1', align='center', label = 'reads')
-	#ax2.bar(x+0.15, bases, width=0.3, color='C2', align='center', label = 'bases')
 	ax1.plot([i+interval/2 for i in intervals], reads, color='C1', label='reads', linewidth=0.5)
 	ax2.plot([i+interval/2 for i in intervals], bases, color='C2', label='bases', linewidth=0.5)
 
@@ -543,16 +505,6 @@ def gc_lineplot(bins, intervals, interval, dest):
 	ax1.legend(loc=1, bbox_to_anchor=(1., 1.))
 	ax2.legend(loc=1, bbox_to_anchor=(1., 0.92))
 
-	#ax1.set_xticks(list(range(len(intervals)+1)))
-	#xticklabels = ["" for i in intervals]
-	#xticklabels.append("{0:.1f}".format(intervals[-1]+interval))
-	#tickspace = len(intervals)//TICKLBLS
-	#for i in range(0,len(xticklabels)-tickspace, max(tickspace,1)):
-	#	try: # fails if only one bin
-	#		xticklabels[i] = "{0:.1f}".format(intervals[i])
-	#	except:
-	#		pass
-	#ax1.set_xticklabels(xticklabels)
 	ax1.set_xlabel("gc content ({} % bins)".format(interval))
 	if max(reads) >= 1000.:
 		ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
@@ -610,7 +562,6 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 	plt.close()
 
 def avgN50longest(series):
-	#return series.sort_values(0, ascending=False)[:int(series.size/2)].mean()
 	return series.nlargest(int(series.size/2)).mean()
 
 def tprint(*args, **kwargs):
@@ -660,37 +611,32 @@ def stats_table(df):
 def make_html_table(df):
 	df = df.round(2)
 	#df = df.reindex(['Passed','tooShort','BadQual','all'], level='subset')
-	return df.to_html(formatters={'reads':(lambda x: "{:,}".format(x))},
-					  float_format=(lambda x: "{0:,.2f}".format(x)),
-					  sparsify=False)
+	html_table =  df.to_html(formatters={'reads':(lambda x: "{:,}".format(x))},
+							 float_format=(lambda x: "{0:,.2f}".format(x)),
+							 sparsify=True)
+	m = re.search('<tr>[\s]+<th rowspan', html_table)
+	html_table = html_table.replace(m.group(0), '<tr class="trhighlight"' + m.group(0)[3:])
+	return html_table
 
 def parse_stats(fp):
 	df = pd.read_csv(fp, 
 					 sep='\t', 
 					 header=None, 
 					 names="id bases qual gc subset pore_num pore time barcode".split(" "), 
-					 #names="bases qual gc subset pore_num pore time barcode".split(" "), 
 					 usecols=[1,2,3,4,5,6,7,8],
 					 index_col=[7,3,5], # referes to usecols
 					 converters={'time':(lambda x: pd.Timestamp(x))},
 					 dtype={'qual':float, 'gc':float, 'bases':float})
 
-
-	start_time = df['time'].min(axis=1)
+	start_time = df['time'].min()
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
 
 	index = pd.MultiIndex.from_tuples([('All',subset,pore) for barbode,subset,pore in df.index],
 									names=['barcode', 'subset', 'pore'])
-	#print(multi_index)
 	df_copy = df.copy()
 	df_copy.index = index
 	concat_df = pd.concat([df,df_copy])
 
-	grouped = concat_df.groupby(['barcode','subset'])
-	#indexes = list(pd.DataFrame(grouped['bases'].count()).index)
-	#print(indexes)
-
-	#exit()
 	return concat_df
 
 def choose_scaling_factor(max_value, scaling_factors, units):
@@ -717,10 +663,7 @@ def get_bin_edges(sorted_df, interval):
 	offset = sorted_df[0] // interval
 	edge = sorted_df[0] + interval
 	edges = [0]
-	#for i,val in enumerate(sorted_df):
-	#	if val > edge:
-	#		edges.append( i )
-	#		edge += interval
+
 	for i,val in enumerate(sorted_df):
 		while val > edge:
 			edges.append( i )

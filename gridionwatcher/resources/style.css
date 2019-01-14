@@ -284,11 +284,19 @@ tr:hover {
 	background-color: #e5e5e5;
 }
 
-tr:nth-child(4n-3) {
+/*tr:nth-child(4n-3) {*/
+/*	background-color: #f5f5f5;*/
+/*}*/
+/**/
+/*tr:nth-child(4n-3):hover {*/
+/*	background-color: #e5e5e5;*/
+/*}*/
+
+tr.trhighlight {
 	background-color: #f5f5f5;
 }
 
-tr:nth-child(4n-3):hover {
+tr.trhighlight:hover {
 	background-color: #e5e5e5;
 }
 

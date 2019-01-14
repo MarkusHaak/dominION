@@ -85,3 +85,8 @@ class rw_dir(argparse.Action):
 		if not os.access(to_test, os.W_OK):
 			raise argparse.ArgumentTypeError('ERR: {} is not writeable'.format(to_test))
 		setattr(namespace,self.dest,to_test)
+
+def tprint(*args, **kwargs):
+	if not QUIET:
+		print("["+strftime("%H:%M:%S", gmtime())+"] "+" ".join(map(str,args)), **kwargs)
+	sys.stdout.flush()
