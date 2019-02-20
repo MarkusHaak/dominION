@@ -15,6 +15,8 @@ import logging
 import os
 import shutil
 import argparse
+from setuptools import Distribution
+from setuptools.command.install import install
 
 # define logging configuration once for all submudules
 logging.basicConfig(level=logging.INFO,
@@ -90,3 +92,19 @@ def tprint(*args, **kwargs):
 	if not QUIET:
 		print("["+strftime("%H:%M:%S", gmtime())+"] "+" ".join(map(str,args)), **kwargs)
 	sys.stdout.flush()
+
+
+# Taken from https://stackoverflow.com/questions/25066084
+class OnlyGetScriptPath(install):
+    def run(self):
+        # does not call install.run() by design
+        self.distribution.install_scripts = self.install_scripts
+
+def get_script_dir():
+    dist = Distribution({'cmdclass': {'install': OnlyGetScriptPath}})
+    dist.dry_run = True  # not sure if necessary, but to be safe
+    dist.parse_config_files()
+    command = dist.get_command_obj('install')
+    command.ensure_finalized()
+    command.run()
+    return dist.install_scripts

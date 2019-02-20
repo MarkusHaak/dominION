@@ -34,6 +34,7 @@ from shutil import copyfile
 import warnings
 from .version import __version__
 from .helper import logger, package_dir, ArgHelpFormatter, r_file, r_dir, w_dir
+import json
 
 warnings.filterwarnings("ignore")
 QUIET = False
@@ -113,7 +114,11 @@ def get_argument_parser():
 	# the following should only be set if statsparser is called directly:
 	if __name__ == '__main__':
 		exp_options = argument_parser.add_argument_group('Experiment options',
-														 'Arguments concerning the experiment')
+														 '''Arguments concerning the experiment. Either specify
+														 	a report file or all arguments individually.''')
+		exp_options.add_argument('--report_file',
+								 action=r_file,
+								 help='path to the report file of this sequencing run')
 		exp_options.add_argument('--user_filename_input',
 								 default='Run#####_MIN###_KIT###',
 								 help=' ')
@@ -171,6 +176,15 @@ def parse_args(argument_parser, ext_args=None):
 				raise argparse.ArgumentTypeError('ERR: file {} does not exist'.format(os.path.join(args.resources_dir, 
 																								   brick)))
 	args.time_intervals = [i*60 for i in args.time_intervals]
+
+	if args.report_file:
+		with open(args.report_file, "r") as f:
+			flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
+
+		args.user_filename_input = run_data['user_filename_input']
+		args.minion_id = run_data['minion_id']
+		args.flowcell_id = flowcell['flowcell_id']
+		args.protocol_start = run_data['protocol_start']
 
 	try:
 		matplotlib.style.use(args.matplotlib_style)
@@ -376,6 +390,10 @@ def create_html(outdir,
 									"{}".format(datetime.now())[:-7])
 	html_content = html_content + overview_brick.format(html_stats_df)
 
+	print(subsets)
+	#TODO
+	while len(subsets) != 3:
+		subsets.append("NA")
 	for barcode in barcodes:
 		html_content = html_content + barcode_brick.format(barcode, subsets[0], subsets[2], subsets[1])
 

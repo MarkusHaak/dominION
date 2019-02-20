@@ -4,12 +4,20 @@ GridIONwatcher is a tool for monitoring and protocoling sequencing runs performe
 
 ## Installation
 
-As this software is intended to be run on the GridION sequencer, I highly recommend using [virtualenv](https://pypi.org/project/virtualenv/) to set up a virtual python environment prior to the installation. 
+As this software is intended to be run on the GridION sequencer, I highly recommend using [virtualenv](https://pypi.org/project/virtualenv/) to set up a virtual python environment prior to the installation. In order to set up a virtual python3 environment in your home directory:
 
 ```bash
-virtualenv -p python3 /path/to/new/virtual/environment
-source /path/to/new/virtual/environment/bin/activate
+virtualenv -p python3 ~/python3_env
 ```
+
+Don't forget to **activate** your virtual environment: 
+
+```bash
+source ~/python3_env/bin/activate
+```
+
+This needs to be done every time you open a new console in which you want to execute GridIONwatcher commands. You can deactivate the virtual environment by simply typing deactivate.
+
 Afterwards, clone and install GridIONwatcher:
 
 ```bash
@@ -25,7 +33,7 @@ pip3 install git+https://github.com/MarkusHaak/GridIONwatcher.git
 
 ## Dependencies
 
-The following external python modules are required:
+The following external python modules are required (all are automatically installed):
 
 * watchdog
 * numpy

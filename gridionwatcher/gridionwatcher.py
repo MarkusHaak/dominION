@@ -33,7 +33,7 @@ from operator import itemgetter
 from .version import __version__
 from .statsparser import get_argument_parser as sp_get_argument_parser
 from .statsparser import parse_args as sp_parse_args
-from .helper import logger, package_dir, ArgHelpFormatter, r_file, r_dir, rw_dir
+from .helper import logger, package_dir, ArgHelpFormatter, r_file, r_dir, rw_dir, get_script_dir
 #import logging
 
 VERBOSE = False
@@ -100,16 +100,16 @@ def main_and_args():
 										  'Paths to mandatory executables')
 	exe_group.add_argument('--watchnchop_path',
 						   action=r_file,
-						   default='/home/grid/scripts/watchnchop.pl',
+						   default='/home/grid/scripts/watchnchop_update1.pl',
 						   help='''Path to the watchnchop executable''')
 	exe_group.add_argument('--statsparser_path',
 						   action=r_file,
-						   default=os.path.join(package_dir,'statsparser.py'),
-						   help='''Path to statsparser.py (default: PACKAGE_DIR/statsparser.py)''')
+						   default=os.path.join(get_script_dir(),'statsparser'),
+						   help='''Path to statsparser.py (default: PACKAGE_SCRIPT_PATH/statsparser)''')
 	exe_group.add_argument('--python3_path',
 						   action=r_file,
-						   default='/usr/bin/python3',
-						   help='''Path to the python3 executable''')
+						   default=sys.executable,
+						   help='''Path to the python3 executable (default: sys.executable)''')
 	exe_group.add_argument('--perl_path',
 						   action=r_file,
 						   default='/usr/bin/perl',
@@ -159,13 +159,13 @@ def main_and_args():
 	#### main #####
 
 	if not QUIET: print("#######################################\n" + \
-						"######## grinIONwatcher {} #########\n".format(__version__) + \
+						"######## gridIONwatcher {} #########\n".format(__version__) + \
 						"#######################################\n")
 	sys.stdout.flush()
 
 	global ALL_RUNS
 
-	logger.info("setting up GrinIOn status page environment")
+	logger.info("setting up GridION status page environment")
 	global UPDATE_STATUS_PAGE
 	if not os.path.exists(args.status_page_dir):
 		os.makedirs(args.status_page_dir)
@@ -177,7 +177,6 @@ def main_and_args():
 			 os.path.join(args.status_page_dir, 'res', 'flowcell.png'))
 	copyfile(os.path.join(args.resources_dir, 'no_flowcell.png'), 
 			 os.path.join(args.status_page_dir, 'res', 'no_flowcell.png'))
-
 
 	logger.info("loading previous runs from database:")
 	load_runs_from_database(args.database_dir)
@@ -203,7 +202,7 @@ def main_and_args():
 	print()
 	sys.stdout.flush()
 
-	logger.info("Initiating GrinIOn status page")
+	logger.info("initiating GridION status page")
 	update_status_page(watchers, args.resources_dir, args.status_page_dir)
 	webbrowser.open('file://' + os.path.realpath(os.path.join(args.status_page_dir, "GridIONstatus.html")))
 
@@ -222,22 +221,27 @@ def main_and_args():
 				n = 0
 				UPDATE_STATUS_PAGE = True
 	except KeyboardInterrupt:
-		logger.info("### Collected information ###")
+	#except:
+		#logger.info("### Collected information ###")
 		for watcher in watchers:
 			watcher.observer.stop()
 			if watcher.scheduler:
 				watcher.scheduler.terminate()
-			print('')
-			for key in watcher.channel_status.run_data:
-				if watcher.channel_status.run_data[key]:
-					print(key, ":\t\t", watcher.channel_status.run_data[key])
-			print('')
-			for i,mux_scan in enumerate(watcher.channel_status.mux_scans):
-				print("mux_scan {}:".format(i))
-				for key in mux_scan:
-					print(key, ":\t\t", mux_scan[key])
-			#print(watcher.channel_status.mux_scans)
-			print('')
+			#print('')
+			#for key in watcher.channel_status.run_data:
+			#	if watcher.channel_status.run_data[key]:
+			#		print(key, ":\t\t", watcher.channel_status.run_data[key])
+			#print('')
+			#for i,mux_scan in enumerate(watcher.channel_status.mux_scans):
+			#	print("mux_scan {}:".format(i))
+			#	for key in mux_scan:
+			#		print(key, ":\t\t", mux_scan[key])
+			##print(watcher.channel_status.mux_scans)
+			#print('')
+			try:
+				watcher.logfile.close()
+			except:
+				print("WARNING: could not close watcher's logfile")
 			sys.stdout.flush()
 	for watcher in watchers:
 		print("joining GA{}0000's observer".format(watcher.channel))
@@ -259,22 +263,22 @@ def load_runs_from_database(database_dir):
 
 			#key = run_data['run_id']+flowcell['flowcell_id']
 			#flowcell_id = flowcell['asic_id'] + flowcell['asic_id_eeprom']
-			flowcell_id = flowcell['asic_id_eeprom']
+			asic_id_eeprom = flowcell['asic_id_eeprom']
 			run_id = run_data['run_id']
-			if flowcell_id in ALL_RUNS:
-				if run_id in ALL_RUNS[flowcell_id]:
+			if asic_id_eeprom in ALL_RUNS:
+				if run_id in ALL_RUNS[asic_id_eeprom]:
 					logger.info("ERROR: {} exists multiple times in database entry for flowcell {}!".format(run_id, 
-																									  flowcell_id))
+																									  asic_id_eeprom))
 					continue
 			else:
-				ALL_RUNS[flowcell_id] = {}
+				ALL_RUNS[asic_id_eeprom] = {}
 			
-			ALL_RUNS[flowcell_id][run_id] = {'flowcell': flowcell,
+			ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': flowcell,
 											 'run_data': run_data,
 											 'mux_scans': mux_scans}
 
 			try:
-				logger.info('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(flowcell_id, 
+				logger.info('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(asic_id_eeprom, 
 																							  run_data['experiment_type'], 
 																							  flowcell['flowcell_id'], 
 																							  run_data['protocol_start']))
@@ -564,18 +568,32 @@ class ChannelStatus():
 								self.run_data['user_filename_input'])	# TODO: change to sample_name
 		basedir = os.path.join(data_basedir, rel_path)	
 		if not os.path.isdir(basedir):
-			logger.info("ERROR: Could not determine relative data path, directory {} does not exist".format(basedir))
+			logger.info("ERROR: Could not determine relative data path, directory {} does not exist!".format(basedir))
 			return
+
 		if not self.run_data['run_id']:
-			logger.info("ERROR: Could not determine relative data path, 'run_id' is not set")
+			logger.info("WARNING: 'run_id' is not set, therefore relative_path has to be guessed!")
+			exp_id_substring = None
+		else:
+			exp_id_substring = self.run_data['run_id'].split('-')[0]
+		
+		sub_dirs = [item for item in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, item))]
+		if not sub_dirs:
+			logger.info("WARNING: Could not determine relative data path, no sub directories in {}".format(basedir))
 			return
-		exp_id_substring = self.run_data['run_id'].split('-')[0]
-		for item in os.listdir(basedir):
-			joined = os.path.join(basedir, item)
-			if os.path.isdir(joined) and item.rstrip('/').endswith(exp_id_substring):
-				self.update({"relative_path":os.path.join(rel_path, item)}, overwrite=True)
+		if exp_id_substring:
+			for sub_dir in sub_dirs:
+				if sub_dir.rstrip('/').endswith(exp_id_substring):
+					self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
+					return
+		# if no relative path was found by now, then it is probably the case that the run_id was not parsed correctly
+		# --> attempt to choose a subdirectory which belongs to the correct flowcell
+		for sub_dir in sub_dirs:
+			if self.flowcell['flowcell_id'] in sub_dir:
+				self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
+				logger.info("WARNING: chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
 				return
-		logger.info("WARNING: Could not determine relative data path, no directory found ending with {}".format(exp_id_substring))
+		logger.info("ERROR: Could not determine any relative data path!")
 		return
 
 
@@ -608,15 +626,15 @@ class Scheduler(mp.Process):
 			logger.info("STARTING STATSPARSING")
 
 			if os.path.exists(self.statsfp):
-				args = [self.python3_path, self.statsparser_path, self.statsfp,
-						'--user_filename_input', self.user_filename_input,
-						'--minion_id', self.minion_id,
-						'--flowcell_id', self.flowcell_id,
-						'--protocol_start', self.protocol_start,
-						'--resources_dir', self.resources_dir,
-						'-q']
-				args.extend(self.statsparser_args)
-				cp = subprocess.run(args) # waits for process to complete
+				cmd = [self.statsparser_path, self.statsfp,
+					   '--user_filename_input', self.user_filename_input,
+					   '--minion_id', self.minion_id,
+					   '--flowcell_id', self.flowcell_id,
+					   '--protocol_start', self.protocol_start,
+					   '--resources_dir', self.resources_dir,
+					   '-q']
+				cmd.extend(self.statsparser_args)
+				cp = subprocess.run(cmd) # waits for process to complete
 				if cp.returncode == 0:
 					logger.info("STATSPARSING COMPLETED")
 					if not page_opened:
@@ -660,6 +678,8 @@ class Watcher():
 							   self.observed_dir, 
 							   recursive=False)
 		self.observer.start()
+		self.logfile = open(os.path.join(os.path.abspath(os.path.dirname(self.watchnchop_path)),
+										 "GA{}0000_watchnchop_log.txt".format(channel+1)), 'w')
 		print("...watcher for {} ready".format(self.observed_dir))
 
 		self.channel_status = ChannelStatus("GA{}0000".format(channel+1))
@@ -705,7 +725,7 @@ class Watcher():
 					if self.watchnchop:
 						self.start_watchnchop()
 
-					#start regular creation of plots
+					#start creation of plots at regular time intervals
 					if self.scheduler:
 						self.scheduler.terminate()
 						self.scheduler.join()
@@ -766,37 +786,37 @@ class Watcher():
 						self.scheduler.terminate()
 						self.scheduler.join()
 					self.scheduler = None
-				elif content[1] == "flowcell lookup":
-					logger.info("LOADING PREVIOUS FLOWCELL RUNS")
-					#self.lookup_flowcell()
+				#elif content[1] == "flowcell lookup":
+				#	logger.info("LOADING PREVIOUS FLOWCELL RUNS")
+				#	#self.lookup_flowcell()
 
-	def lookup_flowcell(self):
-		try:
-			#flowcell_id = self.channel_status.flowcell['asic_id'] + self.channel_status.flowcell['asic_id_eeprom']
-			flowcell_id = self.channel_status.flowcell['asic_id_eeprom']
-		except:
-			logger.info("ERROR: flowcell lookup failed")
-			return
-		if flowcell_id in ALL_RUNS:
-			for run in ALL_RUNS[flowcell_id]:
-				print()
-				print('#### {} ####'.format(run))
-				print()
-				for info in ALL_RUNS[flowcell_id][run]:
-					print(info)
-					if isinstance(ALL_RUNS[flowcell_id][run][info], dict):
-						for key in ALL_RUNS[flowcell_id][run][info]:
-							print("\t", key, ":", ALL_RUNS[flowcell_id][run][info][key])
-					elif isinstance(ALL_RUNS[flowcell_id][run][info], list):
-						for entry in ALL_RUNS[flowcell_id][run][info]:
-							print()
-							if isinstance(entry, dict):
-								for key in entry:
-									print("\t", key, entry[key])
-							else:
-								print("\t", entry)
-		else:
-			logger.info("no entrys for this flowcell in the database")
+#	def lookup_flowcell(self):
+#		try:
+#			#flowcell_id = self.channel_status.flowcell['asic_id'] + self.channel_status.flowcell['asic_id_eeprom']
+#			flowcell_id = self.channel_status.flowcell['asic_id_eeprom']
+#		except:
+#			logger.info("ERROR: flowcell lookup failed")
+#			return
+#		if flowcell_id in ALL_RUNS:
+#			for run in ALL_RUNS[flowcell_id]:
+#				print()
+#				print('#### {} ####'.format(run))
+#				print()
+#				for info in ALL_RUNS[flowcell_id][run]:
+#					print(info)
+#					if isinstance(ALL_RUNS[flowcell_id][run][info], dict):
+#						for key in ALL_RUNS[flowcell_id][run][info]:
+#							print("\t", key, ":", ALL_RUNS[flowcell_id][run][info][key])
+#					elif isinstance(ALL_RUNS[flowcell_id][run][info], list):
+#						for entry in ALL_RUNS[flowcell_id][run][info]:
+#							print()
+#							if isinstance(entry, dict):
+#								for key in entry:
+#									print("\t", key, entry[key])
+#							else:
+#								print("\t", entry)
+#		else:
+#			logger.info("no entrys for this flowcell in the database")
 
 
 	def save_report(self):
@@ -820,40 +840,42 @@ class Watcher():
 			run_id = self.channel_status.run_data['run_id']
 			#flowcell_id = self.channel_status.flowcell['flowcell_id']
 			#flowcell_id = self.channel_status.flowcell['asic_id'] + self.channel_status.flowcell['asic_id_eeprom']
-			flowcell_id = self.channel_status.flowcell['asic_id_eeprom']
-			if flowcell_id in ALL_RUNS:
-				ALL_RUNS[flowcell_id][run_id] = {'flowcell': data[0],
+			asic_id_eeprom = self.channel_status.flowcell['asic_id_eeprom']
+			if asic_id_eeprom in ALL_RUNS:
+				ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': data[0],
 												 'run_data': data[1],
 												 'mux_scans': data[2]}
 			else:
-				ALL_RUNS[flowcell_id] = {}
-				ALL_RUNS[flowcell_id][run_id] = {'flowcell': data[0],
+				ALL_RUNS[asic_id_eeprom] = {}
+				ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': data[0],
 												 'run_data': data[1],
 												 'mux_scans': data[2]}
 		except:
-			logger.info("ERROR: could not save report of channel GA{}0000".format(self.channel+1))
+			logger.info("ERROR: could not save report for channel GA{}0000".format(self.channel+1))
 
 	def start_watchnchop(self):
 		logger.info("STARTING WATCHNCHOP")
 		if self.channel_status.run_data['user_filename_input']:
-			#cmd = " ".join([self.perl_path, self.watchnchop_path, '-b', os.path.join(self.data_basedir, self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)])
-			#cmd = [self.perl_path, self.watchnchop_path, '-b', os.path.join(self.data_basedir, self.channel_status.run_data['user_filename_input'], self.channel_status.minion_id)]
 			try:
 				relative_path = self.channel_status.run_data['relative_path']
 			except:
 				logger.info("ERROR: FAILED to start watchnchop, could not determine experiment base directory")
 				return
-			cmd = [self.perl_path,
+			cmd = ["sleep 600;",
+				   self.perl_path,
 				   self.watchnchop_path,
 				   '-b',
+				   '-v',
 				   os.path.join(self.data_basedir, relative_path)]
+			cmd = " ".join(cmd)
 			try:
+				#environment = os.environ.copy()
 				#subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-				subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+				subprocess.Popen(cmd, shell=True, stdout=self.logfile, stderr=self.logfile)
 			except:
 				logger.info("ERROR: FAILED to start watchnchop, popen failed")
-			logger.info("STARTED WATCHNCHOP with arguments:")
-			print(cmd)
+			#logger.info("STARTED WATCHNCHOP with arguments: " + " ".join(cmd))
+			logger.info("STARTED WATCHNCHOP with arguments: {}".format(cmd))
 		else:
 			logger.info("ERROR: FAILED to start watchnchop, no user_filename_input")
 
@@ -990,7 +1012,7 @@ class LogFilesEventHandler(FileSystemEventHandler):
 				dict_content[m.group(1)] = m.group(2)
 				overwrite = True
 			self.q.put( (line[:23], "flowcell discovered") )
-			send_after = (line[:23], "flowcell lookup")
+			#send_after = (line[:23], "flowcell lookup")
 
 		#elif 	"asic_id_changed"										in line:
 		#	for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
@@ -1015,7 +1037,8 @@ class LogFilesEventHandler(FileSystemEventHandler):
 		overwrite = False
 
 		if 		"root - INFO - argument"								in line:
-			for m in re.finditer("([^\s,]+) was set to ([^\s,]+)", line): 
+			#for m in re.finditer("([^\s,]+) was set to ([^\s,]+)", line):
+			for m in re.finditer("([^\s,]+) was set to (.+)", line): 
 				dict_content[m.group(1)] = m.group(2)
 
 		elif 	"INFO - Adding the following context_tags:" 			in line or \

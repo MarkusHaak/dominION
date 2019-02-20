@@ -1,0 +1,1605 @@
+<!DOCTYPE html>
+<html>
+  <head>
+      <meta charset="UTF-8">
+      <meta http-equiv="refresh" content="120">
+      <title>Run00021_MIN106_RBK004_GA10000</title>
+      <link rel="stylesheet" type="text/css" href="res/style.css">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  </head>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script>
+    function clickFunction(id) {
+      if ($("#" + id).css('display') == 'block') {
+          $("#" + id).css('display', 'none');
+      } else {
+          $("#" + id).css('display', 'block');
+      }
+      sessionStorage.setItem(id, $("#" + id).css('display'));
+    }
+  </script>
+
+  <body>
+    <div class="container">
+
+      <div class="contentbox title one">
+        <h1>Run00021_MIN106_RBK004</h1>
+        <h2>GA10000, FAK36011</h2>
+        <h3>2019-01-17 11:54:29.798</h3>
+        <h6><a href="https://etherpad.uni-wuppertal.de/p/gridTools_Wunschliste" target="_blank">Wunschliste</a> statsParser 0.2.7, 2019-01-17 16:58:29</h6>
+      </div>
+      <div class="contentbox title">
+        <h4 id="OVERVIEW">OVERVIEW</h4>
+      </div>
+
+      <div class="contentbox overview">
+        <br>
+        <div class="contentline">
+          <div class="half left">
+            <div class="figure large">
+              <img class="figure image" src="res/plots/multi_lineplot_reads.png">
+            </div>  
+          </div>
+          <div class="half right">
+            <div class="figure large">
+              <img class="figure image" src="res/plots/multi_lineplot_bases.png">
+            </div>
+          </div>
+        </div>
+
+        <table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th></th>
+      <th>reads</th>
+      <th>Mb</th>
+      <th>mean quality</th>
+      <th>mean GC [%]</th>
+      <th>mean length [kb]</th>
+      <th>median length [kb]</th>
+      <th>mean length longest N50 [kb]</th>
+      <th>longest [kb]</th>
+    </tr>
+    <tr>
+      <th>barcode</th>
+      <th>subset</th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="trhighlight">
+      <th rowspan="4" valign="center"><a href="#All">All</a></th>
+      <th>Passed</th>
+      <td>65,770</td>
+      <td>483.21</td>
+      <td>14.89</td>
+      <td>44.82</td>
+      <td>7.35</td>
+      <td>4.96</td>
+      <td>11.85</td>
+      <td>76.47</td>
+    </tr>
+    <tr>
+      <th>all</th>
+      <td>94,173</td>
+      <td>491.22</td>
+      <td>14.80</td>
+      <td>44.11</td>
+      <td>5.22</td>
+      <td>3.27</td>
+      <td>9.43</td>
+      <td>76.47</td>
+    </tr>
+    <tr>
+      <th>length&lt;1000</th>
+      <td>28,397</td>
+      <td>8.00</td>
+      <td>14.59</td>
+      <td>42.44</td>
+      <td>0.28</td>
+      <td>0.17</td>
+      <td>0.46</td>
+      <td>1.00</td>
+    </tr>
+    <tr>
+      <th>qual&lt;5</th>
+      <td>6</td>
+      <td>0.00</td>
+      <td>3.32</td>
+      <td>29.76</td>
+      <td>0.01</td>
+      <td>0.01</td>
+      <td>0.02</td>
+      <td>0.03</td>
+    </tr>
+    <tr class="trhighlight">
+      <th rowspan="3" valign="center"><a href="#BC03">BC03</a></th>
+      <th>Passed</th>
+      <td>3</td>
+      <td>0.01</td>
+      <td>16.27</td>
+      <td>44.52</td>
+      <td>4.86</td>
+      <td>5.47</td>
+      <td>7.78</td>
+      <td>7.78</td>
+    </tr>
+    <tr>
+      <th>all</th>
+      <td>5</td>
+      <td>0.02</td>
+      <td>16.42</td>
+      <td>41.37</td>
+      <td>3.11</td>
+      <td>1.33</td>
+      <td>6.62</td>
+      <td>7.78</td>
+    </tr>
+    <tr>
+      <th>length&lt;1000</th>
+      <td>2</td>
+      <td>0.00</td>
+      <td>16.64</td>
+      <td>36.64</td>
+      <td>0.50</td>
+      <td>0.50</td>
+      <td>0.92</td>
+      <td>0.92</td>
+    </tr>
+    <tr class="trhighlight">
+      <th rowspan="3" valign="center"><a href="#BC04">BC04</a></th>
+      <th>Passed</th>
+      <td>8</td>
+      <td>0.04</td>
+      <td>14.85</td>
+      <td>42.10</td>
+      <td>5.54</td>
+      <td>3.22</td>
+      <td>8.82</td>
+      <td>21.83</td>
+    </tr>
+    <tr>
+      <th>all</th>
+      <td>20</td>
+      <td>0.05</td>
+      <td>14.61</td>
+      <td>41.13</td>
+      <td>2.33</td>
+      <td>0.23</td>
+      <td>4.51</td>
+      <td>21.83</td>
+    </tr>
+    <tr>
+      <th>length&lt;1000</th>
+      <td>12</td>
+      <td>0.00</td>
+      <td>14.45</td>
+      <td>40.49</td>
+      <td>0.19</td>
+      <td>0.16</td>
+      <td>0.26</td>
+      <td>0.51</td>
+    </tr>
+    <tr class="trhighlight">
+      <th rowspan="3" valign="center"><a href="#BC05">BC05</a></th>
+      <th>Passed</th>
+      <td>11</td>
+      <td>0.11</td>
+      <td>15.27</td>
+      <td>44.76</td>
+      <td>10.10</td>
+      <td>10.59</td>
+      <td>16.36</td>
+      <td>19.09</td>
+    </tr>
+    <tr>
+      <th>all</th>
+      <td>14</td>
+      <td>0.11</td>
+      <td>15.11</td>
+      <td>45.12</td>
+      <td>8.00</td>
+      <td>5.34</td>
+      <td>14.09</td>
+      <td>19.09</td>
+    </tr>
+    <tr>
+      <th>length&lt;1000</th>
+      <td>3</td>
+      <td>0.00</td>
+      <td>14.53</td>
+      <td>46.44</td>
+      <td>0.30</td>
+      <td>0.33</td>
+      <td>0.41</td>
+      <td>0.41</td>
+    </tr>
+    <tr class="trhighlight">
+      <th rowspan="3" valign="center"><a href="#BC06">BC06</a></th>
+      <th>Passed</th>
+      <td>10</td>
+      <td>0.05</td>
+      <td>15.33</td>
+      <td>45.38</td>
+      <td>4.72</td>
+      <td>4.83</td>
+      <td>5.92</td>
+      <td>7.41</td>
+    </tr>
+    <tr>
+      <th>all</th>
+      <td>15</td>
+      <td>0.05</td>
+      <td>15.46</td>
+      <td>42.14</td>
+      <td>3.25</td>
+      <td>3.46</td>
+      <td>5.52</td>
+      <td>7.41</td>
+    </tr>
+    <tr>
+      <th>length&lt;1000</th>
+      <td>5</td>
+      <td>0.00</td>
+      <td>15.72</td>
+      <td>35.65</td>
+      <td>0.30</td>
+      <td>0.10</td>
+      <td>0.61</td>
+      <td>0.94</td>
+    </tr>
+    <tr class="trhighlight">
+      <th rowspan="3" valign="center"><a href="#BC07">BC07</a></th>
+      <th>Passed</th>
+      <td>44</td>
+      <td>0.27</td>
+      <td>14.66</td>
+      <td>44.51</td>
+      <td>6.15</td>
+      <td>4.34</td>
+      <td>9.87</td>
+      <td>24.96</td>
+    </tr>
+    <tr>
+      <th>all</th>
+      <td>57</td>
+      <td>0.28</td>
+      <td>14.77</td>
+      <td>44.68</td>
+      <td>4.84</td>
+      <td>2.92</td>
+      <td>8.51</td>
+      <td>24.96</td>
+    </tr>
+    <tr>
+      <th>length&lt;1000</th>
+      <td>13</td>
+      <td>0.01</td>
+      <td>15.12</td>
+      <td>45.24</td>
+      <td>0.43</td>
+      <td>0.44</td>
+      <td>0.60</td>
+      <td>0.74</td>
+    </tr>
+    <tr class="trhighlight">
+      <th rowspan="3" valign="center"><a href="#BC08">BC08</a></th>
+      <th>Passed</th>
+      <td>42,144</td>
+      <td>310.25</td>
+      <td>15.02</td>
+      <td>44.82</td>
+      <td>7.36</td>
+      <td>4.96</td>
+      <td>11.89</td>
+      <td>76.47</td>
+    </tr>
+    <tr>
+      <th>all</th>
+      <td>48,642</td>
+      <td>313.61</td>
+      <td>15.00</td>
+      <td>44.88</td>
+      <td>6.45</td>
+      <td>3.97</td>
+      <td>10.90</td>
+      <td>76.47</td>
+    </tr>
+    <tr>
+      <th>length&lt;1000</th>
+      <td>6,498</td>
+      <td>3.36</td>
+      <td>14.89</td>
+      <td>45.22</td>
+      <td>0.52</td>
+      <td>0.51</td>
+      <td>0.75</td>
+      <td>1.00</td>
+    </tr>
+    <tr class="trhighlight">
+      <th rowspan="4" valign="center"><a href="#BC09">BC09</a></th>
+      <th>Passed</th>
+      <td>74</td>
+      <td>0.43</td>
+      <td>14.80</td>
+      <td>49.69</td>
+      <td>5.86</td>
+      <td>3.70</td>
+      <td>9.80</td>
+      <td>31.70</td>
+    </tr>
+    <tr>
+      <th>all</th>
+      <td>10,917</td>
+      <td>2.05</td>
+      <td>14.58</td>
+      <td>40.87</td>
+      <td>0.19</td>
+      <td>0.12</td>
+      <td>0.29</td>
+      <td>31.70</td>
+    </tr>
+    <tr>
+      <th>length&lt;1000</th>
+      <td>10,837</td>
+      <td>1.62</td>
+      <td>14.59</td>
+      <td>40.82</td>
+      <td>0.15</td>
+      <td>0.12</td>
+      <td>0.21</td>
+      <td>1.00</td>
+    </tr>
+    <tr>
+      <th>qual&lt;5</th>
+      <td>6</td>
+      <td>0.00</td>
+      <td>3.32</td>
+      <td>29.76</td>
+      <td>0.01</td>
+      <td>0.01</td>
+      <td>0.02</td>
+      <td>0.03</td>
+    </tr>
+    <tr class="trhighlight">
+      <th rowspan="3" valign="center"><a href="#none">none</a></th>
+      <th>Passed</th>
+      <td>23,476</td>
+      <td>172.05</td>
+      <td>14.66</td>
+      <td>44.81</td>
+      <td>7.33</td>
+      <td>4.97</td>
+      <td>11.80</td>
+      <td>70.47</td>
+    </tr>
+    <tr>
+      <th>all</th>
+      <td>34,503</td>
+      <td>175.06</td>
+      <td>14.58</td>
+      <td>44.04</td>
+      <td>5.07</td>
+      <td>3.14</td>
+      <td>9.24</td>
+      <td>70.47</td>
+    </tr>
+    <tr>
+      <th>length&lt;1000</th>
+      <td>11,027</td>
+      <td>3.01</td>
+      <td>14.41</td>
+      <td>42.41</td>
+      <td>0.27</td>
+      <td>0.17</td>
+      <td>0.44</td>
+      <td>1.00</td>
+    </tr>
+  </tbody>
+</table>
+
+        <br>
+
+      </div>
+      <div class="contentbox title">
+        <h4 id="All">All</h4>
+      </div>
+
+      <div class="contentbox barcode">
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('All_1')">
+            <b>Passed</b>
+          </div>
+
+          <div class="expandable expanded" id="All_1">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_All_Passed.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_All_Passed.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_All_Passed_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_All_Passed_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_All_Passed_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('All_2')">
+            <b>qual<5</b>
+          </div>
+
+          <div class="expandable" id="All_2">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_All_qual<5.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_All_qual<5.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_All_qual<5_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_All_qual<5_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_All_qual<5_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('All_3')">
+            <b>length<1000</b>
+          </div>
+
+          <div class="expandable" id="All_3">
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/barplot_gc-bins_All_length<1000.png">
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_All_length<1000_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_All_length<1000_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_All_length<1000_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>      <div class="contentbox title">
+        <h4 id="BC03">BC03</h4>
+      </div>
+
+      <div class="contentbox barcode">
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC03_1')">
+            <b>Passed</b>
+          </div>
+
+          <div class="expandable expanded" id="BC03_1">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC03_Passed.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC03_Passed.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC03_Passed_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC03_Passed_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC03_Passed_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC03_2')">
+            <b>qual<5</b>
+          </div>
+
+          <div class="expandable" id="BC03_2">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC03_qual<5.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC03_qual<5.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC03_qual<5_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC03_qual<5_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC03_qual<5_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC03_3')">
+            <b>length<1000</b>
+          </div>
+
+          <div class="expandable" id="BC03_3">
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/barplot_gc-bins_BC03_length<1000.png">
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC03_length<1000_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC03_length<1000_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC03_length<1000_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>      <div class="contentbox title">
+        <h4 id="BC04">BC04</h4>
+      </div>
+
+      <div class="contentbox barcode">
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC04_1')">
+            <b>Passed</b>
+          </div>
+
+          <div class="expandable expanded" id="BC04_1">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC04_Passed.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC04_Passed.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC04_Passed_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC04_Passed_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC04_Passed_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC04_2')">
+            <b>qual<5</b>
+          </div>
+
+          <div class="expandable" id="BC04_2">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC04_qual<5.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC04_qual<5.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC04_qual<5_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC04_qual<5_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC04_qual<5_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC04_3')">
+            <b>length<1000</b>
+          </div>
+
+          <div class="expandable" id="BC04_3">
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/barplot_gc-bins_BC04_length<1000.png">
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC04_length<1000_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC04_length<1000_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC04_length<1000_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>      <div class="contentbox title">
+        <h4 id="BC05">BC05</h4>
+      </div>
+
+      <div class="contentbox barcode">
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC05_1')">
+            <b>Passed</b>
+          </div>
+
+          <div class="expandable expanded" id="BC05_1">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC05_Passed.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC05_Passed.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC05_Passed_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC05_Passed_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC05_Passed_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC05_2')">
+            <b>qual<5</b>
+          </div>
+
+          <div class="expandable" id="BC05_2">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC05_qual<5.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC05_qual<5.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC05_qual<5_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC05_qual<5_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC05_qual<5_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC05_3')">
+            <b>length<1000</b>
+          </div>
+
+          <div class="expandable" id="BC05_3">
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/barplot_gc-bins_BC05_length<1000.png">
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC05_length<1000_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC05_length<1000_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC05_length<1000_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>      <div class="contentbox title">
+        <h4 id="BC06">BC06</h4>
+      </div>
+
+      <div class="contentbox barcode">
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC06_1')">
+            <b>Passed</b>
+          </div>
+
+          <div class="expandable expanded" id="BC06_1">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC06_Passed.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC06_Passed.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC06_Passed_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC06_Passed_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC06_Passed_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC06_2')">
+            <b>qual<5</b>
+          </div>
+
+          <div class="expandable" id="BC06_2">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC06_qual<5.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC06_qual<5.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC06_qual<5_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC06_qual<5_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC06_qual<5_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC06_3')">
+            <b>length<1000</b>
+          </div>
+
+          <div class="expandable" id="BC06_3">
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/barplot_gc-bins_BC06_length<1000.png">
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC06_length<1000_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC06_length<1000_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC06_length<1000_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>      <div class="contentbox title">
+        <h4 id="BC07">BC07</h4>
+      </div>
+
+      <div class="contentbox barcode">
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC07_1')">
+            <b>Passed</b>
+          </div>
+
+          <div class="expandable expanded" id="BC07_1">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC07_Passed.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC07_Passed.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC07_Passed_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC07_Passed_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC07_Passed_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC07_2')">
+            <b>qual<5</b>
+          </div>
+
+          <div class="expandable" id="BC07_2">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC07_qual<5.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC07_qual<5.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC07_qual<5_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC07_qual<5_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC07_qual<5_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC07_3')">
+            <b>length<1000</b>
+          </div>
+
+          <div class="expandable" id="BC07_3">
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/barplot_gc-bins_BC07_length<1000.png">
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC07_length<1000_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC07_length<1000_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC07_length<1000_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>      <div class="contentbox title">
+        <h4 id="BC08">BC08</h4>
+      </div>
+
+      <div class="contentbox barcode">
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC08_1')">
+            <b>Passed</b>
+          </div>
+
+          <div class="expandable expanded" id="BC08_1">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC08_Passed.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC08_Passed.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC08_Passed_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC08_Passed_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC08_Passed_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC08_2')">
+            <b>qual<5</b>
+          </div>
+
+          <div class="expandable" id="BC08_2">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC08_qual<5.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC08_qual<5.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC08_qual<5_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC08_qual<5_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC08_qual<5_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC08_3')">
+            <b>length<1000</b>
+          </div>
+
+          <div class="expandable" id="BC08_3">
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/barplot_gc-bins_BC08_length<1000.png">
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC08_length<1000_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC08_length<1000_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC08_length<1000_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>      <div class="contentbox title">
+        <h4 id="BC09">BC09</h4>
+      </div>
+
+      <div class="contentbox barcode">
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC09_1')">
+            <b>Passed</b>
+          </div>
+
+          <div class="expandable expanded" id="BC09_1">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC09_Passed.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC09_Passed.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC09_Passed_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC09_Passed_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC09_Passed_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC09_2')">
+            <b>qual<5</b>
+          </div>
+
+          <div class="expandable" id="BC09_2">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_BC09_qual<5.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_BC09_qual<5.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC09_qual<5_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC09_qual<5_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC09_qual<5_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('BC09_3')">
+            <b>length<1000</b>
+          </div>
+
+          <div class="expandable" id="BC09_3">
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/barplot_gc-bins_BC09_length<1000.png">
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC09_length<1000_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_BC09_length<1000_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_BC09_length<1000_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>      <div class="contentbox title">
+        <h4 id="none">none</h4>
+      </div>
+
+      <div class="contentbox barcode">
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('none_1')">
+            <b>Passed</b>
+          </div>
+
+          <div class="expandable expanded" id="none_1">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_none_Passed.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_none_Passed.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_none_Passed_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_none_Passed_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_none_Passed_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('none_2')">
+            <b>qual<5</b>
+          </div>
+
+          <div class="expandable" id="none_2">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_none_qual<5.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_none_qual<5.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_none_qual<5_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_none_qual<5_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_none_qual<5_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('none_3')">
+            <b>length<1000</b>
+          </div>
+
+          <div class="expandable" id="none_3">
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/barplot_gc-bins_none_length<1000.png">
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_none_length<1000_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_none_length<1000_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_none_length<1000_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </body>
+  <script>
+    for (var key in sessionStorage) {
+      if (sessionStorage.getItem(key) == 'block') {
+        $("#" + key).css('display', 'block');
+      } else {
+        $("#" + key).css('display', 'none');
+      }
+    }
+  </script>
+</html>
+
