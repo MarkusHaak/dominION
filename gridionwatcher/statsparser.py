@@ -390,7 +390,6 @@ def create_html(outdir,
 									"{}".format(datetime.now())[:-7])
 	html_content = html_content + overview_brick.format(html_stats_df)
 
-	print(subsets)
 	#TODO
 	while len(subsets) != 3:
 		subsets.append("NA")

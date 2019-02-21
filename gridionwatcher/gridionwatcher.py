@@ -81,7 +81,7 @@ def main_and_args():
 
 	io_group = parser.add_argument_group('I/O options', 
 										 'Further input/output options. Only for special use cases')
-	a_d = \
+	arg_basedir = \
 	io_group.add_argument('-b', '--data_basedir',
 						  action=rw_dir,
 						  default='/data',
@@ -117,6 +117,11 @@ def main_and_args():
 
 	general_group = parser.add_argument_group('General options', 
 											  'Advanced options influencing the program execution')
+	general_group.add_argument('--bc_kws',
+							   nargs='*',
+							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'barcod', 'Barcode'],
+							   help='''if at least one of these key words is a substring of the run name,
+							           then watchnchop is executed with argument -b for barcode''')
 	general_group.add_argument('-u', '--update_interval',
 							   type=int,
 							   default=300,
@@ -149,14 +154,14 @@ def main_and_args():
 	args = parser.parse_args()
 
 	ns = argparse.Namespace()
-	a_d(parser, ns, args.database_dir, 'no string') # call action
+	arg_basedir(parser, ns, args.database_dir, '') # call action
+
+	#### main #####
 
 	global QUIET
 	QUIET = args.quiet
 	global VERBOSE
 	VERBOSE = args.verbose
-
-	#### main #####
 
 	if not QUIET: print("#######################################\n" + \
 						"######## gridIONwatcher {} #########\n".format(__version__) + \
@@ -171,12 +176,9 @@ def main_and_args():
 		os.makedirs(args.status_page_dir)
 	if not os.path.exists(os.path.join(args.status_page_dir, 'res')):
 		os.makedirs(os.path.join(args.status_page_dir, 'res'))
-	copyfile(os.path.join(args.resources_dir, 'style.css'), 
-			 os.path.join(args.status_page_dir, 'res', 'style.css'))
-	copyfile(os.path.join(args.resources_dir, 'flowcell.png'), 
-			 os.path.join(args.status_page_dir, 'res', 'flowcell.png'))
-	copyfile(os.path.join(args.resources_dir, 'no_flowcell.png'), 
-			 os.path.join(args.status_page_dir, 'res', 'no_flowcell.png'))
+	for res_file in ['style.css', 'flowcell.png', 'no_flowcell.png']:
+		copyfile(os.path.join(args.resources_dir, res_file), 
+				 os.path.join(args.status_page_dir, 'res', res_file))
 
 	logger.info("loading previous runs from database:")
 	load_runs_from_database(args.database_dir)
@@ -198,7 +200,8 @@ def main_and_args():
 								args.watchnchop_path,
 								args.statsparser_path,
 								args.python3_path,
-								args.perl_path))
+								args.perl_path,
+								args.bc_kws))
 	print()
 	sys.stdout.flush()
 
@@ -254,36 +257,37 @@ def main_and_args():
 def load_runs_from_database(database_dir):
 	for fn in os.listdir(database_dir):
 		fp = os.path.join(database_dir, fn)
-		with open(fp, "r") as f:
-			try:
-				flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
-			except:
-				logger.info("ERROR: Failed to load {}, probably json format corrupted!".format(fn))
-				continue
-
-			#key = run_data['run_id']+flowcell['flowcell_id']
-			#flowcell_id = flowcell['asic_id'] + flowcell['asic_id_eeprom']
-			asic_id_eeprom = flowcell['asic_id_eeprom']
-			run_id = run_data['run_id']
-			if asic_id_eeprom in ALL_RUNS:
-				if run_id in ALL_RUNS[asic_id_eeprom]:
-					logger.info("ERROR: {} exists multiple times in database entry for flowcell {}!".format(run_id, 
-																									  asic_id_eeprom))
+		if os.path.isfile(fp):
+			with open(fp, "r") as f:
+				try:
+					flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
+				except:
+					logger.warning("WARNING: Failed to load {}, probably the json format is corrupt!".format(fn))
 					continue
-			else:
-				ALL_RUNS[asic_id_eeprom] = {}
-			
-			ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': flowcell,
-											 'run_data': run_data,
-											 'mux_scans': mux_scans}
 
-			try:
-				logger.info('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(asic_id_eeprom, 
-																							  run_data['experiment_type'], 
-																							  flowcell['flowcell_id'], 
-																							  run_data['protocol_start']))
-			except:
-				pass
+				asic_id_eeprom = flowcell['asic_id_eeprom']
+				run_id = run_data['run_id']
+				if asic_id_eeprom in ALL_RUNS:
+					if run_id in ALL_RUNS[asic_id_eeprom]:
+						logger.warning("WARNING: {} exists multiple times in database entry for flowcell {}!".format(run_id, 
+																										  asic_id_eeprom))
+						logger.warning("conflicting runs: {}, {}".format(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input'],
+																		 run_data['user_filename_input']))
+						logger.warning("conflict generating report file: {}".format(fn))
+						continue
+				else:
+					ALL_RUNS[asic_id_eeprom] = {}
+				
+				ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': flowcell,
+												 'run_data': run_data,
+												 'mux_scans': mux_scans}
+				try:
+					logger.info('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(asic_id_eeprom, 
+																								  run_data['experiment_type'], 
+																								  flowcell['flowcell_id'], 
+																								  run_data['protocol_start']))
+				except:
+					pass
 
 def update_status_page(watchers, resources_dir, status_page_dir):
 	channel_to_css = {0:"one", 1:"two", 2:"three", 3:"four", 4:"five"}
@@ -347,7 +351,7 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 					flowcell_info_brick = flowcell_info_brick.format(
 						channel_to_css[watcher.channel],
 						ALL_RUNS[asic_id_eeprom][latest_qc]['flowcell']['flowcell_id'],
-						'<p><u>Last QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
+						'<p><u>Latest QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
 							dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start']).date(),
 							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group * total'],
 							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 1 total'],
@@ -366,7 +370,7 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 						#								ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input']), # TODO: change to sample_name
 						#							 ALL_RUNS[asic_id_eeprom][run]['run_data']['run_id'].split("-")[0])
 						#if not exp_dir:
-						#	logger.info("ERROR: experiment directory not found")
+						#	logger.error("ERROR: experiment directory not found")
 						#	return
 						try:
 							relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
@@ -409,7 +413,7 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 					flowcell_info_brick = flowcell_info_brick.format(
 						channel_to_css[watcher.channel],
 						ALL_RUNS[asic_id_eeprom][latest_qc]['flowcell']['flowcell_id'],
-						'<p><u>Last QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
+						'<p><u>Latest QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
 							dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start']).date(),
 							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group * total'],
 							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 1 total'],
@@ -441,8 +445,10 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 				if 'protocol_end' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']:
 					if ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_end']:
 						protocol_end = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_end'])
-						time_diff = "{}".format(protocol_end - protocol_start)[:-7]
-				protocol_start = "{}".format(protocol_start)[:-7]
+						#time_diff = "{}".format(protocol_end - protocol_start)[:-7]
+						time_diff = "{}".format(protocol_end - protocol_start).split('.')[0]
+				#protocol_start = "{}".format(protocol_start)[:-7]
+				protocol_start = "{}".format(protocol_start).split('.')[0]
 				sequencing_kit = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sequencing_kit']
 				user_filename_input = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input']
 				minion_id = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['minion_id']
@@ -562,24 +568,24 @@ class ChannelStatus():
 
 	def find_relative_path(self, data_basedir):
 		if not self.run_data['user_filename_input']:
-			logger.info("ERROR: Could not determine relative data path, 'user_filename_input' is not set")
+			logger.error("ERROR: Could not determine relative data path, 'user_filename_input' is not set")
 			return
 		rel_path = os.path.join(self.run_data['user_filename_input'],
 								self.run_data['user_filename_input'])	# TODO: change to sample_name
 		basedir = os.path.join(data_basedir, rel_path)	
 		if not os.path.isdir(basedir):
-			logger.info("ERROR: Could not determine relative data path, directory {} does not exist!".format(basedir))
+			logger.error("ERROR: Could not determine relative data path, directory {} does not exist!".format(basedir))
 			return
 
 		if not self.run_data['run_id']:
-			logger.info("WARNING: 'run_id' is not set, therefore relative_path has to be guessed!")
+			logger.warning("WARNING: 'run_id' is not set, therefore relative_path has to be guessed!")
 			exp_id_substring = None
 		else:
 			exp_id_substring = self.run_data['run_id'].split('-')[0]
 		
 		sub_dirs = [item for item in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, item))]
 		if not sub_dirs:
-			logger.info("WARNING: Could not determine relative data path, no sub directories in {}".format(basedir))
+			logger.warning("WARNING: Could not determine relative data path, no sub directories in {}".format(basedir))
 			return
 		if exp_id_substring:
 			for sub_dir in sub_dirs:
@@ -591,9 +597,9 @@ class ChannelStatus():
 		for sub_dir in sub_dirs:
 			if self.flowcell['flowcell_id'] in sub_dir:
 				self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
-				logger.info("WARNING: chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
+				logger.warning("WARNING: chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
 				return
-		logger.info("ERROR: Could not determine any relative data path!")
+		logger.error("ERROR: Could not determine any relative data path!")
 		return
 
 
@@ -604,7 +610,6 @@ class Scheduler(mp.Process):
 				 resources_dir, statsparser_path, python3_path):
 		mp.Process.__init__(self)
 		self.exit = mp.Event()
-		#self.sched_q = sched_q
 		self.update_interval = update_interval
 		self.resources_dir = resources_dir
 		self.statsfp = statsfp
@@ -620,9 +625,6 @@ class Scheduler(mp.Process):
 		page_opened = False
 		while not self.exit.is_set():
 			last_time = time.time()
-			#print("updating stats page")
-			#self.doNotDisturb = True
-			# do something!
 			logger.info("STARTING STATSPARSING")
 
 			if os.path.exists(self.statsfp):
@@ -643,11 +645,10 @@ class Scheduler(mp.Process):
 						logger.info("OPENING " + fp)
 						page_opened = webbrowser.open('file://' + os.path.realpath(fp))
 				else:
-					logger.info("ERROR while running statsparser")
+					logger.error("ERROR while running statsparser")
 			else:
-				logger.info("WARNING: statsfile does not exist (yet?)")
+				logger.warning("WARNING: statsfile does not exist (yet?)")
 
-			#self.doNotDisturb = False
 			this_time = time.time()
 			while (this_time - last_time < self.update_interval) and not self.exit.is_set():
 				time.sleep(1)
@@ -658,7 +659,7 @@ class Watcher():
 
 	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, database_dir, 
 				 data_basedir, statsparser_args, update_interval, no_watchnchop,
-				 resources_dir, watchnchop_path, statsparser_path, python3_path, perl_path):
+				 resources_dir, watchnchop_path, statsparser_path, python3_path, perl_path, bc_kws):
 		self.q = mp.SimpleQueue()
 		self.watchnchop = not no_watchnchop
 		self.channel = channel
@@ -674,6 +675,8 @@ class Watcher():
 		self.observed_dir = os.path.join(minknow_log_basedir, "GA{}0000".format(channel+1))
 		self.event_handler = LogFilesEventHandler(self.q, ignore_file_modifications)
 		self.observer = Observer()
+		self.bc_kws = bc_kws
+
 		self.observer.schedule(self.event_handler, 
 							   self.observed_dir, 
 							   recursive=False)
@@ -729,11 +732,7 @@ class Watcher():
 					if self.scheduler:
 						self.scheduler.terminate()
 						self.scheduler.join()
-					#statsfp = os.path.join(self.data_basedir, 
-					#					   self.channel_status.run_data['user_filename_input'],
-					#					   "GA{}0000".format(self.channel+1),
-					#					   'filtered',
-					#					   'stats.txt')
+
 					try:
 						relative_path = self.channel_status.run_data['relative_path']
 					except:
@@ -786,46 +785,21 @@ class Watcher():
 						self.scheduler.terminate()
 						self.scheduler.join()
 					self.scheduler = None
-				#elif content[1] == "flowcell lookup":
-				#	logger.info("LOADING PREVIOUS FLOWCELL RUNS")
-				#	#self.lookup_flowcell()
-
-#	def lookup_flowcell(self):
-#		try:
-#			#flowcell_id = self.channel_status.flowcell['asic_id'] + self.channel_status.flowcell['asic_id_eeprom']
-#			flowcell_id = self.channel_status.flowcell['asic_id_eeprom']
-#		except:
-#			logger.info("ERROR: flowcell lookup failed")
-#			return
-#		if flowcell_id in ALL_RUNS:
-#			for run in ALL_RUNS[flowcell_id]:
-#				print()
-#				print('#### {} ####'.format(run))
-#				print()
-#				for info in ALL_RUNS[flowcell_id][run]:
-#					print(info)
-#					if isinstance(ALL_RUNS[flowcell_id][run][info], dict):
-#						for key in ALL_RUNS[flowcell_id][run][info]:
-#							print("\t", key, ":", ALL_RUNS[flowcell_id][run][info][key])
-#					elif isinstance(ALL_RUNS[flowcell_id][run][info], list):
-#						for entry in ALL_RUNS[flowcell_id][run][info]:
-#							print()
-#							if isinstance(entry, dict):
-#								for key in entry:
-#									print("\t", key, entry[key])
-#							else:
-#								print("\t", entry)
-#		else:
-#			logger.info("no entrys for this flowcell in the database")
 
 
 	def save_report(self):
 		try:
 			fn = []
-			if self.channel_status.run_data['user_filename_input']:
-				fn.append(self.channel_status.run_data['user_filename_input'])
-			else:
+			#if self.channel_status.run_data['user_filename_input']:
+			if "qc" in self.channel_status.run_data['experiment_type']:
+				if self.channel_status.run_data['user_filename_input']:
+					if 'run_id' in self.channel_status.run_data:
+						logger.warning("WARNING: NOT SAVING REPORT for {} because it is not absolutely clear if it a qc or sequencing run".format(self.channel_status.run_data['run_id']))
+					else:
+						logger.warning("WARNING: NOT SAVING REPORT because it is not absolutely clear if it a qc or sequencing run")
 				fn.append("QC")
+			else:
+				fn.append(self.channel_status.run_data['user_filename_input'])
 			if self.channel_status.flowcell['flowcell_id']:
 				fn.append(self.channel_status.flowcell['flowcell_id'])
 			fn.append(self.channel_status.run_data['run_id'])
@@ -851,7 +825,7 @@ class Watcher():
 												 'run_data': data[1],
 												 'mux_scans': data[2]}
 		except:
-			logger.info("ERROR: could not save report for channel GA{}0000".format(self.channel+1))
+			logger.error("ERROR: could not save report for channel GA{}0000".format(self.channel+1))
 
 	def start_watchnchop(self):
 		logger.info("STARTING WATCHNCHOP")
@@ -859,32 +833,33 @@ class Watcher():
 			try:
 				relative_path = self.channel_status.run_data['relative_path']
 			except:
-				logger.info("ERROR: FAILED to start watchnchop, could not determine experiment base directory")
+				logger.error("ERROR: FAILED to start watchnchop, could not determine experiment base directory")
 				return
-			cmd = ["sleep 600;",
+			cmd = ["sleep 1800;",
 				   self.perl_path,
 				   self.watchnchop_path,
-				   '-b',
-				   '-v',
-				   os.path.join(self.data_basedir, relative_path)]
+				   '-v']
+			if len([kw for kw in self.bc_kws if kw in self.channel_status.run_data['user_filename_input']]) > 0:
+				cmd.append('-b')
+			cmd.append(os.path.join(self.data_basedir, relative_path, ''))
 			cmd = " ".join(cmd)
 			try:
 				#environment = os.environ.copy()
 				#subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 				subprocess.Popen(cmd, shell=True, stdout=self.logfile, stderr=self.logfile)
 			except:
-				logger.info("ERROR: FAILED to start watchnchop, popen failed")
+				logger.error("ERROR: FAILED to start watchnchop, popen failed")
 			#logger.info("STARTED WATCHNCHOP with arguments: " + " ".join(cmd))
 			logger.info("STARTED WATCHNCHOP with arguments: {}".format(cmd))
 		else:
-			logger.info("ERROR: FAILED to start watchnchop, no user_filename_input")
+			logger.error("ERROR: FAILED to start watchnchop, no user_filename_input")
 
 
 
 
 class OpenedFilesHandler():
 	'''manages a set of opened files, reads their contents and 
-	processes them lineby line. Incomplete lines are stored until
+	processes them line by line. Incomplete lines are stored until
 	they are "completed" by a newline character.'''
 	open_files = {}
 
@@ -965,7 +940,7 @@ class LogFilesEventHandler(FileSystemEventHandler):
 			#self.file_handler.close_file(event.src_path)
 			if self.control_server_log == event.src_path:
 				control_server_log = None
-				logger.info("WARNING: Current control_server_log file {} was deleted!".format(event.src_path))
+				logger.warning("WARNING: Current control_server_log file {} was deleted!".format(event.src_path))
 			elif self.bream_log == event.src_path:
 				self.bream_log = None
 				logger.info("EARNING: Current bream_log file {} was deleted".format(event.src_path))
@@ -983,7 +958,7 @@ class LogFilesEventHandler(FileSystemEventHandler):
 				elif self.bream_log == event.src_path:
 					process_function = self.parse_bream_log_line
 				else:
-					logger.info("WARNING: case not handled")
+					logger.warning("WARNING: case not handled")
 					return
 				self.file_handler.process_lines_until_EOF(process_function, event.src_path)
 			else:
