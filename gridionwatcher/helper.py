@@ -18,11 +18,8 @@ import argparse
 from setuptools import Distribution
 from setuptools.command.install import install
 
-# define logging configuration once for all submudules
-logging.basicConfig(level=logging.INFO,
-					format='[%(asctime)s] %(message)s',
-					datefmt='%Y-%m-%d %H:%M:%S')
-logger = logging.getLogger(__name__)
+
+
 
 package_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -108,3 +105,40 @@ def get_script_dir():
     command.ensure_finalized()
     command.run()
     return dist.install_scripts
+
+def initLogger(logfile=None, level=logging.INFO):
+	logger = logging.getLogger()
+	formatter = logging.Formatter(fmt='[%(asctime)s %(name)-10s] %(levelname)s - %(message)s',
+								  datefmt='%Y-%m-%d %H:%M:%S')
+	if logfile:
+		fh = logging.FileHandler(logfile)
+		fh.setFormatter(formatter)
+	ch = logging.StreamHandler()
+	ch.setFormatter(formatter)
+	if logfile:
+		logger.addHandler(fh)
+	logger.addHandler(ch)
+	logger.setLevel(level)
+
+#def getLogger(name=None):
+#	# define logging configuration once for all submudules
+#	#logging.basicConfig(level=logging.INFO,
+#	#					format='[%(asctime)s] %(message)s',
+#	#					datefmt='%Y-%m-%d %H:%M:%S')
+#	if name:
+#		logger = logging.getLogger(name)
+#	else:
+#		logger = logging.getLogger()
+#	formatter = logging.Formatter(fmt='[%(asctime)s %(name)-10s] %(levelname)s - %(message)s',
+#								  datefmt='%Y-%m-%d %H:%M:%S')
+#	if logfile:
+#		fh = logging.FileHandler(logfile)
+#		fh.setFormatter(formatter)
+#	ch = logging.StreamHandler()
+#	ch.setFormatter(formatter)
+#	if logfile:
+#		logger.addHandler(fh)
+#	logger.addHandler(ch)
+#	logger.setLevel(level)
+#	return logger
+

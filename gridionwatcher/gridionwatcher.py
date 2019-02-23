@@ -33,14 +33,14 @@ from operator import itemgetter
 from .version import __version__
 from .statsparser import get_argument_parser as sp_get_argument_parser
 from .statsparser import parse_args as sp_parse_args
-from .helper import logger, package_dir, ArgHelpFormatter, r_file, r_dir, rw_dir, get_script_dir
+from .helper import initLogger, package_dir, ArgHelpFormatter, r_file, r_dir, rw_dir, get_script_dir
 import threading
-#import logging
+import logging
+import queue
 
-VERBOSE = False
-QUIET = False
 ALL_RUNS = {}
 UPDATE_STATUS_PAGE = False
+logger = None
 
 class parse_statsparser_args(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
@@ -95,6 +95,8 @@ def main_and_args():
 						  default=os.path.join(package_dir,'resources'),
 						  help='''Path to the directory containing template files and resources 
 							   for the html pages (default: PACKAGE_DIR/resources)''')
+	io_group.add_argument('--logfile',
+						  help='''File in which logs will be safed''')
 
 	exe_group = parser.add_argument_group('Executables paths', 
 										  'Paths to mandatory executables')
@@ -121,7 +123,7 @@ def main_and_args():
 							   nargs='*',
 							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'barcod', 'Barcode'],
 							   help='''if at least one of these key words is a substring of the run name,
-							           then watchnchop is executed with argument -b for barcode''')
+									   then watchnchop is executed with argument -b for barcode''')
 	general_group.add_argument('-u', '--update_interval',
 							   type=int,
 							   default=300,
@@ -148,7 +150,7 @@ def main_and_args():
 							help='Additional status information is printed to stdout')
 	help_group.add_argument('-q', '--quiet', #TODO: implement
 							action='store_true',
-							help='No prints to stdout')
+							help='Only warning and error messages are printed to stdout')
 
 
 	args = parser.parse_args()
@@ -158,15 +160,18 @@ def main_and_args():
 
 	#### main #####
 
-	global QUIET
-	QUIET = args.quiet
-	global VERBOSE
-	VERBOSE = args.verbose
+	global logger
+	if args.verbose:
+		verbosity = logging.DEBUG
+	elif args.quiet:
+		verbosity = logging.WARNING
+	else:
+		verbosity = logging.INFO
+	initLogger(logfile=args.logfile, level=verbosity)
 
-	if not QUIET: print("#######################################\n" + \
-						"######## gridIONwatcher {} #########\n".format(__version__) + \
-						"#######################################\n")
-	sys.stdout.flush()
+	logger = logging.getLogger(name='gw')
+
+	logger.info("##### starting gridIONwatcher {} #####\n".format(__version__))
 
 	global ALL_RUNS
 
@@ -182,8 +187,6 @@ def main_and_args():
 
 	logger.info("loading previous runs from database:")
 	load_runs_from_database(args.database_dir)
-	print()
-	sys.stdout.flush()
 
 	logger.info("starting watchers:")
 	watchers = []
@@ -202,8 +205,6 @@ def main_and_args():
 								args.python3_path,
 								args.perl_path,
 								args.bc_kws))
-	print()
-	sys.stdout.flush()
 
 	logger.info("initiating GridION status page")
 	update_status_page(watchers, args.resources_dir, args.status_page_dir)
@@ -231,10 +232,10 @@ def main_and_args():
 			if watcher.spScheduler:
 				if watcher.spScheduler.is_alive():
 					watcher.spScheduler.join(timeout=0.05)
-			try:
-				watcher.logfile.close()
-			except:
-				logger.warning("WARNING: could not close watcher's logfile")
+			#try:
+			#	watcher.logfile.close()
+			#except:
+			#	logger.warning("could not close watcher's logfile")
 	for watcher in watchers:
 		logger.info("joining GA{}0000's observer".format(watcher.channel))
 		watcher.observer.join()
@@ -252,14 +253,14 @@ def load_runs_from_database(database_dir):
 				try:
 					flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
 				except:
-					logger.warning("WARNING: Failed to load {}, probably the json format is corrupt!".format(fn))
+					logger.warning("Failed to load {}, probably the json format is corrupt!".format(fn))
 					continue
 
 				asic_id_eeprom = flowcell['asic_id_eeprom']
 				run_id = run_data['run_id']
 				if asic_id_eeprom in ALL_RUNS:
 					if run_id in ALL_RUNS[asic_id_eeprom]:
-						logger.warning("WARNING: {} exists multiple times in database entry for flowcell {}!".format(run_id, 
+						logger.warning("{} exists multiple times in database entry for flowcell {}!".format(run_id, 
 																										  asic_id_eeprom))
 						logger.warning("conflicting runs: {}, {}".format(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input'],
 																		 run_data['user_filename_input']))
@@ -474,37 +475,38 @@ class ChannelStatus():
 
 	empty_mux = OrderedDict()
 
-	def __init__(self, minion_id):
+	def __init__(self, minion_id, channel):
 		self.minion_id = minion_id
 		self.flowcell = copy.deepcopy(self.empty_flowcell)
 		self.run_data = copy.deepcopy(self.empty_run_data)
 		self.mux_scans = []
 		self.run_data['minion_id'] = minion_id
+		self.logger = logging.getLogger(name='gw.w{}.cs'.format(channel+1))
 
 	def update(self, content, overwrite=False):
 		for key in content:
 			if key in self.flowcell:
 				if self.flowcell[key]:
 					if overwrite:
-						logger.info("changing the current value of {} ({}) to {}".format(key, self.flowcell[key], content[key]))
+						self.logger.info("changing the current value of {} ({}) to {}".format(key, self.flowcell[key], content[key]))
 						self.flowcell[key] = content[key]
 					else:
-						if VERBOSE: logger.info("not changing the current value of {} ({}) to {}".format(key, self.flowcell[key], content[key]))
+						self.logger.debug("not changing the current value of {} ({}) to {}".format(key, self.flowcell[key], content[key]))
 					continue
 				else:
 					self.flowcell[key] = content[key]
-					logger.info("new value for {} : {}".format(key, content[key]))
+					self.logger.info("new value for {} : {}".format(key, content[key]))
 					continue
 			elif key in self.run_data:
 				if self.run_data[key]:
 					if overwrite:
-						logger.info("changing the current value of {} ({}) to {}".format(key, self.run_data[key], content[key]))
+						self.logger.info("changing the current value of {} ({}) to {}".format(key, self.run_data[key], content[key]))
 						self.run_data[key] = content[key]
 					else:
-						if VERBOSE: logger.info("not changing the current value of {} ({}) to {}".format(key, self.run_data[key], content[key]))
+						self.logger.debug("not changing the current value of {} ({}) to {}".format(key, self.run_data[key], content[key]))
 					continue
 			self.run_data[key] = content[key]
-			logger.info("new value for {} : {}".format(key, content[key]))
+			self.logger.info("new value for {} : {}".format(key, content[key]))
 
 	def update_mux(self, group, channels, mux, timestamp):
 		if self.mux_scans:
@@ -512,21 +514,21 @@ class ChannelStatus():
 				self.mux_scans[-1][group] = []
 			if len(self.mux_scans[-1][group]) < 4:
 				self.mux_scans[-1][group].append(int(channels))
-				if VERBOSE: logger.info("update mux: group {} has {} active channels in mux {}".format(group, channels, mux))
+				self.logger.debug("update mux: group {} has {} active channels in mux {}".format(group, channels, mux))
 
 	def update_mux_group_totals(self, group, channels, timestamp):
 		if not self.mux_scans:
 			self.new_mux(timestamp)
 		self.mux_scans[-1]['group {} total'.format(group)] = channels
-		if VERBOSE: logger.info("update mux group totals: group {} has a total of {} active channels".format(group, channels))
+		self.logger.debug("update mux group totals: group {} has a total of {} active channels".format(group, channels))
 
 	def new_mux(self, timestamp):
 		if self.mux_scans:
 			self.mux_scans[-1]['total'] = sum([sum(self.mux_scans[-1][i]) for i in "1234" if i in self.mux_scans[-1]])
-			logger.info("calculated mux total to {}".format(self.mux_scans[-1]['total']))
+			self.logger.info("calculated mux total to {}".format(self.mux_scans[-1]['total']))
 		self.mux_scans.append(copy.deepcopy(self.empty_mux))
 		self.mux_scans[-1]['timestamp'] = timestamp
-		if VERBOSE: logger.info("added new mux result")
+		self.logger.debug("added new mux result")
 
 	def flowcell_disconnected(self):
 		self.flowcell = copy.deepcopy(self.empty_flowcell)
@@ -541,24 +543,24 @@ class ChannelStatus():
 
 	def find_relative_path(self, data_basedir):
 		if not self.run_data['user_filename_input']:
-			logger.error("ERROR: Could not determine relative data path, 'user_filename_input' is not set")
+			self.logger.error("Could not determine relative data path, 'user_filename_input' is not set")
 			return
 		rel_path = os.path.join(self.run_data['user_filename_input'],
 								self.run_data['user_filename_input'])	# TODO: change to sample_name
 		basedir = os.path.join(data_basedir, rel_path)	
 		if not os.path.isdir(basedir):
-			logger.error("ERROR: Could not determine relative data path, base directory {} does not exist!".format(basedir))
+			self.logger.error("Could not determine relative data path, base directory {} does not exist!".format(basedir))
 			return
 
 		if self.run_data['run_id']:
 			exp_id_substring = self.run_data['run_id'].split('-')[0]
 		else:
-			logger.warning("WARNING: 'run_id' is not set, therefore relative_path has to be guessed!")
+			self.logger.warning("'run_id' is not set, therefore relative_path has to be guessed!")
 			exp_id_substring = None
 		
 		sub_dirs = [item for item in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, item))]
 		if not sub_dirs:
-			logger.error("ERROR: Could not determine relative data path, no sub directories in {}".format(basedir))
+			self.logger.error("Could not determine relative data path, no sub directories in {}".format(basedir))
 			return
 		if exp_id_substring:
 			for sub_dir in sub_dirs:
@@ -571,9 +573,9 @@ class ChannelStatus():
 			for sub_dir in sub_dirs:
 				if self.flowcell['flowcell_id'] in sub_dir:
 					self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
-					logger.warning("WARNING: chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
+					self.logger.warning("chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
 					return
-		logger.error("ERROR: Could not determine any relative data path!")
+		self.logger.error("Could not determine any relative data path!")
 		return
 
 
@@ -581,13 +583,13 @@ class StatsparserScheduler(threading.Thread):
 
 	def __init__(self, update_interval, statsfp, statsparser_args, 
 				 user_filename_input, minion_id, flowcell_id, protocol_start,
-				 resources_dir, statsparser_path, python3_path):
+				 resources_dir, statsparser_path, python3_path, channel):
 		threading.Thread.__init__(self)
 		# make this thread a deamon, so that it will not block the process from exiting		
 		if getattr(self, 'daemon', None) is None:
-            self.daemon = True
-        else:
-            self.setDaemon(True)
+			self.daemon = True
+		else:
+			self.setDaemon(True)
 		self.stoprequest = threading.Event()
 		self.update_interval = update_interval
 		self.resources_dir = resources_dir
@@ -599,12 +601,13 @@ class StatsparserScheduler(threading.Thread):
 		self.flowcell_id = flowcell_id
 		self.protocol_start = protocol_start
 		self.python3_path = python3_path
+		self.logger = logging.getLogger(name='gw.w{}.sps'.format(channel+1))
 
 	def run(self):
 		page_opened = False
 		while not self.stoprequest.is_set():
 			last_time = time.time()
-			logger.info("STARTING STATSPARSING")
+			self.logger.info("STARTING STATSPARSING")
 
 			if os.path.exists(self.statsfp):
 				cmd = [self.statsparser_path, self.statsfp,
@@ -617,16 +620,16 @@ class StatsparserScheduler(threading.Thread):
 				cmd.extend(self.statsparser_args)
 				cp = subprocess.run(cmd) # waits for process to complete
 				if cp.returncode == 0:
-					logger.info("STATSPARSING COMPLETED")
+					self.logger.info("STATSPARSING COMPLETED")
 					if not page_opened:
 						basedir = os.path.abspath(os.path.dirname(self.statsfp))
 						fp = os.path.join(basedir, 'results.html')
-						logger.info("OPENING " + fp)
+						self.logger.info("OPENING " + fp)
 						page_opened = webbrowser.open('file://' + os.path.realpath(fp))
 				else:
-					logger.error("ERROR while running statsparser")
+					self.logger.error("ERROR while running statsparser")
 			else:
-				logger.warning("WARNING: statsfile does not exist (yet?)")
+				self.logger.warning("statsfile does not exist (yet?)")
 
 			this_time = time.time()
 			while (this_time - last_time < self.update_interval) and not self.stoprequest.is_set():
@@ -634,8 +637,8 @@ class StatsparserScheduler(threading.Thread):
 				this_time = time.time()
 
 	def join(self, timeout=None):
-        self.stoprequest.set()
-        super(StatsparserScheduler, self).join(timeout)
+		self.stoprequest.set()
+		super(StatsparserScheduler, self).join(timeout)
 
 
 class Watcher():
@@ -657,7 +660,7 @@ class Watcher():
 		self.python3_path = python3_path
 		self.perl_path = perl_path
 		self.observed_dir = os.path.join(minknow_log_basedir, "GA{}0000".format(channel+1))
-		self.event_handler = LogFilesEventHandler(self.q, ignore_file_modifications)
+		self.event_handler = LogFilesEventHandler(self.q, ignore_file_modifications, channel)
 		self.observer = Observer()
 		self.bc_kws = bc_kws
 
@@ -665,25 +668,26 @@ class Watcher():
 							   self.observed_dir, 
 							   recursive=False)
 		self.observer.start()
-		self.logfile = open(os.path.join(os.path.abspath(os.path.dirname(self.watchnchop_path)),
-										 "GA{}0000_watchnchop_log.txt".format(channel+1)), 'w')
-		print("...watcher for {} ready".format(self.observed_dir))
-
-		self.channel_status = ChannelStatus("GA{}0000".format(channel+1))
+		#self.logfile = open(os.path.join(os.path.abspath(os.path.dirname(self.watchnchop_path)),
+		#								 "GA{}0000_watchnchop_log.txt".format(channel+1)), 'w')
+		self.channel_status = ChannelStatus("GA{}0000".format(channel+1), channel)
 		self.spScheduler = None
+		self.logger = logging.getLogger(name='gw.w{}'.format(channel+1))
+
+		self.logger.info("...watcher for {} ready".format(self.observed_dir))
 
 	def check_q(self):
 		# checking sheduler queue
 		if not self.q.empty():
-			if VERBOSE: logger.info("Queue content for {}:".format(self.observed_dir))
+			self.logger.debug("Queue content for {}:".format(self.observed_dir))
 		while not self.q.empty():
 			timestamp, origin, line = self.q.get()
-			if VERBOSE: logger.info("received '{}' originating from '{} log' at '{}'".format(line, origin, timestamp))
+			self.logger.debug("received '{}' originating from '{} log' at '{}'".format(line, origin, timestamp))
 
 			if origin == 'server':
-				self.parse_server_log_line()
+				self.parse_server_log_line(line)
 			elif origin == 'bream':
-				self.parse_bream_log_line()
+				self.parse_bream_log_line(line)
 
 	def parse_server_log_line(self, line):
 		global UPDATE_STATUS_PAGE
@@ -694,12 +698,12 @@ class Watcher():
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 				dict_content[m.group(1)] = m.group(2)
 			overwrite = True
-			logger.info("PROTOCOL START")
+			self.logger.info("PROTOCOL START")
 			UPDATE_STATUS_PAGE = True
 			self.channel_status.run_data['protocol_start'] = line[:23]
 
 		elif	"protocol_finished" 									in line:
-			logger.info("PROTOCOL END")
+			self.logger.info("PROTOCOL END")
 			UPDATE_STATUS_PAGE = True
 			self.channel_status.run_data['protocol_end'] = line[:23]
 			if self.channel_status.mux_scans:
@@ -714,7 +718,7 @@ class Watcher():
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 				dict_content[m.group(1)] = m.group(2)
 			overwrite = True
-			logger.info("FLOWCELL DISCOVERED")
+			self.logger.info("FLOWCELL DISCOVERED")
 			UPDATE_STATUS_PAGE = True
 			self.channel_status.flowcell_disconnected()
 			if self.spScheduler:
@@ -728,7 +732,7 @@ class Watcher():
 			overwrite = True
 
 		elif	"flowcell_disconnected"									in line:
-			logger.info("FLOWCELL DISCONNECTED")
+			self.logger.info("FLOWCELL DISCONNECTED")
 			UPDATE_STATUS_PAGE = True
 			self.channel_status.flowcell_disconnected()
 
@@ -768,23 +772,23 @@ class Watcher():
 				UPDATE_STATUS_PAGE = True
 
 		elif	"INFO - [user message]--> Finished Mux Scan"			in line:
-			logger.info("MUX SCAN FINISHED")
+			self.logger.info("MUX SCAN FINISHED")
 			UPDATE_STATUS_PAGE = True
-			self.channel_status.new_mux(timestamp)
+			self.channel_status.new_mux(line[:23])
 			self.save_report()
 
 		elif	"platform_qc.PlatformQCExperiment'> finished"			in line:
-			logger.info("QC FINISHED")
+			self.logger.info("QC FINISHED")
 			UPDATE_STATUS_PAGE = True
 
 		elif	"INFO - STARTING MAIN LOOP"								in line:
 			dict_content["sequencing_start_time"] = line[:23]
-			logger.info("SEQUENCING STARTS")
+			self.logger.info("SEQUENCING STARTS")
 			UPDATE_STATUS_PAGE = True
 
 			#try to identify the path in which the experiment data is saved, relative to data_basedir
 			self.channel_status.find_relative_path(self.data_basedir)
-			if self.channel_status.run_data['relative_path']:
+			if self.channel_status.run_data['relative_path'] and False:
 				#start watchnchop (porechop & filter & rsync)
 				if self.watchnchop:
 					self.start_watchnchop()
@@ -799,7 +803,7 @@ class Watcher():
 									   relative_path,
 									   'filtered',
 									   'stats.txt')
-				logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for stats file '.format(self.update_interval/1000) + statsfp)
+				self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for stats file '.format(self.update_interval/1000) + statsfp)
 				self.spScheduler = StatsparserScheduler(self.update_interval, 
 														statsfp, 
 														self.statsparser_args, 
@@ -809,10 +813,11 @@ class Watcher():
 														self.channel_status.run_data['protocol_start'],
 														self.resources_dir,
 														self.statsparser_path,
-														self.python3_path)
+														self.python3_path,
+														self.channel)
 				self.spScheduler.start()
 			else:
-				logger.warning("WARNING: not started watchnchop and statsparser because relative path unknown")
+				self.logger.warning("not started watchnchop and statsparser because relative path unknown")
 
 		if dict_content:
 			self.channel_status.update(dict_content, overwrite)
@@ -825,7 +830,7 @@ class Watcher():
 			else:
 				break
 		else:
-			logger.warning("WARNING: NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
+			self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
 			return
 		for key in ['flowcell_id', 'asic_id_eeprom']:
 			if key in self.channel_status.flowcell:
@@ -834,22 +839,24 @@ class Watcher():
 			else:
 				break
 		else:
-			logger.warning("WARNING: NOT SAVING REPORT for channel GA{}0000 because flowcell is missing crucial attribute '{}'".format(self.channel+1, key))
+			self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because flowcell is missing crucial attribute '{}'".format(self.channel+1, key))
 			return
 			
 		fn = []
 		if "qc" in self.channel_status.run_data['experiment_type']:
 			if self.channel_status.run_data['user_filename_input']:
-				logger.warning("WARNING: NOT SAVING REPORT for {} because it is not absolutely clear if it a qc or sequencing run".format(self.channel_status.run_data['run_id']))
+				self.logger.warning("NOT SAVING REPORT for {} because it is not absolutely clear if it a qc or sequencing run".format(self.channel_status.run_data['run_id']))
 				return
 			fn.append("QC")
 		else:
 			if not self.channel_status.run_data['user_filename_input']:
-				logger.warning("WARNING: NOT SAVING REPORT because sequencing run is missing crucial attribute 'user_filename_input'")
+				self.logger.warning("NOT SAVING REPORT because sequencing run is missing crucial attribute 'user_filename_input'")
 				return
 			fn.append(self.channel_status.run_data['user_filename_input'])
 		fn.append(self.channel_status.flowcell['flowcell_id'])
 		fn.append(self.channel_status.run_data['run_id'])
+		for i,j in enumerate(fn):
+			self.logger.info("{} : {}".format(i,j))
 		fn = "_".join(fn) + ".txt"
 
 		data = (self.channel_status.flowcell, self.channel_status.run_data, self.channel_status.mux_scans)
@@ -876,7 +883,7 @@ class Watcher():
 			else:
 				break
 		else:
-			logger.warning("WARNING: NOT STARTING WATCHNCHOP for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
+			self.logger.warning("NOT STARTING WATCHNCHOP for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
 			return
 
 		relative_path = self.channel_status.run_data['relative_path']
@@ -891,32 +898,35 @@ class Watcher():
 		try:
 			#environment = os.environ.copy()
 			#subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-			subprocess.Popen(cmd, shell=True, stdout=self.logfile, stderr=self.logfile)
+			#subprocess.Popen(cmd, shell=True, stdout=self.logfile, stderr=self.logfile)
+			subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		except:
-			logger.error("ERROR: FAILED to start watchnchop, popen failed")
+			self.logger.error("FAILED to start watchnchop, popen failed")
 			return
-		logger.info("STARTED WATCHNCHOP with arguments: {}".format(cmd))
+		self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(cmd))
 
 
 class OpenedFilesHandler():
 	'''manages a set of opened files, reads their contents and 
 	processes them line by line. Incomplete lines are stored until
 	they are "completed" by a newline character.'''
-	open_files = {}
+	def __init__(self, channel):
+		self.logger = logging.getLogger(name='gw.w{}.ofh'.format(channel+1))
+		self.open_files = {}
 
 	def open_new_file(self, path):
-		logger.info("Opening file {}".format(path))
+		self.logger.info("Opening file {}".format(path))
 		self.open_files[path] = [open(path, 'r'), ""]
 
 	def close_file(self, path):
-		if VERBOSE: logger.info("Attempting to close file {}".format(path))
+		self.logger.debug("Attempting to close file {}".format(path))
 		try:
 			self.open_files[path][0].close()
 		except:
-			if VERBOSE: logger.info("File handle of file {} couldn't be closed".format(path))
+			self.logger.debug("File handle of file {} couldn't be closed".format(path))
 		if path in self.open_files:
 			del self.open_files[path]
-			if VERBOSE: logger.info("Deleted entry in open_files for file {}".format(path))
+			self.logger.debug("Deleted entry in open_files for file {}".format(path))
 
 	def process_lines_until_EOF(self, process_function, path):
 		file = self.open_files[path][0]
@@ -939,15 +949,16 @@ class LogFilesEventHandler(FileSystemEventHandler):
 	control_server_log = None
 	bream_log = None
 
-	def __init__(self, q, ignore_file_modifications):
+	def __init__(self, q, ignore_file_modifications, channel):
 		super(LogFilesEventHandler, self).__init__()
 		self.ignore_file_modifications = ignore_file_modifications
-		self.file_handler = OpenedFilesHandler()
+		self.file_handler = OpenedFilesHandler(channel)
 		self.comm_q = q
 
 		# while no server log file is opened, all lines read are buffered in a seperate Priority Queue
 		self.buff_q = queue.PriorityQueue()
-		self.q = buff_q
+		self.q = self.buff_q
+		self.logger = logging.getLogger(name='gw.w{}.lfeh'.format(channel+1))
 
 	def on_moved(self, event):
 		pass
@@ -955,29 +966,29 @@ class LogFilesEventHandler(FileSystemEventHandler):
 	def on_created(self, event):
 		if not event.is_directory:
 			activate_q = False
-			if VERBOSE: logger.info("File {} was created".format(event.src_path))
+			self.logger.debug("File {} was created".format(event.src_path))
 			basename = os.path.basename(event.src_path)
 			if basename.startswith("control_server_log"):
 				if self.control_server_log:
 					self.file_handler.close_file(event.src_path)
-					logger.info("Replacing current control_server_log file {} with {}".format(self.control_server_log, event.src_path))
+					self.logger.info("Replacing current control_server_log file {} with {}".format(self.control_server_log, event.src_path))
 				else:
 					# read lines of server file first, then activate the real communication q
 					activate_q = True
 				self.control_server_log = event.src_path
-				logger.info("New control_server_log file {}".format(self.control_server_log))
+				self.logger.info("New control_server_log file {}".format(self.control_server_log))
 				process_function = self.enqueue_server_log_line
 			elif basename.startswith("bream"):
 				if self.bream_log:
 					self.file_handler.close_file(event.src_path)
-					logger.info("Replacing current bream_log file {} with {}".format(self.bream_log, event.src_path))
+					self.logger.info("Replacing current bream_log file {} with {}".format(self.bream_log, event.src_path))
 					#TODO: Find out if more than one bream log file can belong to a running experiment (probably not)
 				self.bream_log = event.src_path
-				logger.info("New bream_log file {}".format(self.bream_log))
+				self.logger.info("New bream_log file {}".format(self.bream_log))
 				process_function = self.enqueue_bream_log_line
-				logger.info("NEW EXPERIMENT")
+				self.logger.info("NEW EXPERIMENT")
 			else:
-				if VERBOSE: logger.info("File {} is not of concern for this tool".format(event.src_path))
+				self.logger.debug("File {} is not of concern for this tool".format(event.src_path))
 				return
 			self.file_handler.open_new_file(event.src_path)
 			self.file_handler.process_lines_until_EOF(process_function, event.src_path)
@@ -985,53 +996,54 @@ class LogFilesEventHandler(FileSystemEventHandler):
 				self.activate_q()
 
 	def activate_q(self):
+		self.logger.info("activating communication queue")
 		self.q = self.comm_q
 		while not self.comm_q.empty():
 			self.q.put(self.buff_q.get())
 
 	def on_deleted(self, event):
 		if not event.is_directory:
-			if VERBOSE: logger.info("File {} was deleted".format(event.src_path))
+			self.logger.debug("File {} was deleted".format(event.src_path))
 			#self.file_handler.close_file(event.src_path)
 			if self.control_server_log == event.src_path:
 				control_server_log = None
-				logger.warning("WARNING: Current control_server_log file {} was deleted!".format(event.src_path))
+				self.logger.warning("Current control_server_log file {} was deleted!".format(event.src_path))
 			elif self.bream_log == event.src_path:
 				self.bream_log = None
-				logger.info("EARNING: Current bream_log file {} was deleted".format(event.src_path))
+				self.logger.info("EARNING: Current bream_log file {} was deleted".format(event.src_path))
 			else:
-				if VERBOSE: logger.info("File {} is not opened and is therefore not closed.".format(event.src_path))
+				self.logger.debug("File {} is not opened and is therefore not closed.".format(event.src_path))
 				#return 
 			self.file_handler.close_file(event.src_path)
 
 	def on_modified(self, event):
 		if not event.is_directory:
-			if VERBOSE: logger.info("File {} was modified".format(event.src_path))
+			self.logger.debug("File {} was modified".format(event.src_path))
 			if event.src_path in self.file_handler.open_files:
 				if self.control_server_log == event.src_path:
 					self.file_handler.process_lines_until_EOF(self.enqueue_server_log_line, event.src_path)
 				elif self.bream_log == event.src_path:
 					self.file_handler.process_lines_until_EOF(self.enqueue_bream_log_line, event.src_path)
 				else:
-					logger.warning("WARNING: case not handled")
+					self.logger.warning("case not handled")
 					return
 			else:
 				if not self.ignore_file_modifications:
 					self.on_created(event)
 				else:
-					if VERBOSE: logger.info("File {} existed before this script was started".format(event.src_path))
+					self.logger.debug("File {} existed before this script was started".format(event.src_path))
 
 	def enqueue_server_log_line(self, line):
 		try:
 			self.q.put( (dateutil.parser.parse(line[:23]), 'server', line) )
 		except ValueError:
-			logger.warning("WARNING: the timestamp of the following line in the server log file could not be parsed:\n{}".format(line))
+			self.logger.warning("the timestamp of the following line in the server log file could not be parsed:\n{}".format(line))
 
 	def enqueue_bream_log_line(self, line):
 		try:
 			self.q.put( (dateutil.parser.parse(line[:23]), 'bream', line) )
 		except ValueError:
-			logger.warning("WARNING: the timestamp of the following line in the bream log file could not be parsed:\n{}".format(line))
+			self.logger.warning("the timestamp of the following line in the bream log file could not be parsed:\n{}".format(line))
 
 if __name__ == "__main__":
 	main_and_args()

@@ -33,7 +33,7 @@ import re
 from shutil import copyfile
 import warnings
 from .version import __version__
-from .helper import logger, package_dir, ArgHelpFormatter, r_file, r_dir, w_dir
+from .helper import package_dir, ArgHelpFormatter, r_file, r_dir, w_dir
 import json
 
 warnings.filterwarnings("ignore")
