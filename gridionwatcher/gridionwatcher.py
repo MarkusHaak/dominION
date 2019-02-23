@@ -18,13 +18,13 @@ import time
 from watchdog.observers import Observer
 from watchdog.events import LoggingEventHandler
 from watchdog.events import FileSystemEventHandler
-import multiprocessing as mp
+#import multiprocessing as mp
 from collections import OrderedDict
 import re
 import copy
 import json
 import subprocess
-import sched
+#import sched
 import webbrowser
 from shutil import copyfile
 import dateutil
@@ -34,6 +34,7 @@ from .version import __version__
 from .statsparser import get_argument_parser as sp_get_argument_parser
 from .statsparser import parse_args as sp_parse_args
 from .helper import logger, package_dir, ArgHelpFormatter, r_file, r_dir, rw_dir, get_script_dir
+import threading
 #import logging
 
 VERBOSE = False
@@ -46,7 +47,6 @@ class parse_statsparser_args(argparse.Action):
 		to_test = values.split(' ')
 		argument_parser = sp_get_argument_parser()
 		args = sp_parse_args(argument_parser, to_test)
-		print (to_test)
 		setattr(namespace,self.dest,to_test)
 
 def main_and_args():
@@ -218,9 +218,9 @@ def main_and_args():
 			if UPDATE_STATUS_PAGE:
 				update_status_page(watchers, args.resources_dir, args.status_page_dir)
 				UPDATE_STATUS_PAGE = False
-			time.sleep(1)
+			time.sleep(0.25)
 			n += 1
-			if n == 20:
+			if n == 80:
 				n = 0
 				UPDATE_STATUS_PAGE = True
 	except KeyboardInterrupt:
@@ -228,31 +228,21 @@ def main_and_args():
 		#logger.info("### Collected information ###")
 		for watcher in watchers:
 			watcher.observer.stop()
-			if watcher.scheduler:
-				watcher.scheduler.terminate()
-			#print('')
-			#for key in watcher.channel_status.run_data:
-			#	if watcher.channel_status.run_data[key]:
-			#		print(key, ":\t\t", watcher.channel_status.run_data[key])
-			#print('')
-			#for i,mux_scan in enumerate(watcher.channel_status.mux_scans):
-			#	print("mux_scan {}:".format(i))
-			#	for key in mux_scan:
-			#		print(key, ":\t\t", mux_scan[key])
-			##print(watcher.channel_status.mux_scans)
-			#print('')
+			if watcher.spScheduler:
+				if watcher.spScheduler.is_alive():
+					watcher.spScheduler.join(timeout=0.05)
 			try:
 				watcher.logfile.close()
 			except:
-				print("WARNING: could not close watcher's logfile")
-			sys.stdout.flush()
+				logger.warning("WARNING: could not close watcher's logfile")
 	for watcher in watchers:
-		print("joining GA{}0000's observer".format(watcher.channel))
+		logger.info("joining GA{}0000's observer".format(watcher.channel))
 		watcher.observer.join()
-		if watcher.scheduler:
-			print("joining GA{}0000's scheduler".format(watcher.channel))
-			watcher.scheduler.join()
-		sys.stdout.flush()
+		if watcher.spScheduler:
+			if watcher.spScheduler.is_alive():
+				logger.info("joining GA{}0000's scheduler".format(watcher.channel))
+				if self.spScheduler.is_alive():
+					watcher.spScheduler.join(1.2)
 
 def load_runs_from_database(database_dir):
 	for fn in os.listdir(database_dir):
@@ -364,24 +354,11 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 				elif latest_qc == None and flowcell_runs:
 					runs_string = '<p><u>Runs</u>:<br><br>'
 					for run in flowcell_runs:
-						#exp_dir = get_experiment_dir(os.path.join(
-						#								watcher.data_basedir,
-						#								ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
-						#								ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input']), # TODO: change to sample_name
-						#							 ALL_RUNS[asic_id_eeprom][run]['run_data']['run_id'].split("-")[0])
-						#if not exp_dir:
-						#	logger.error("ERROR: experiment directory not found")
-						#	return
-						try:
-							relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
-						except:
-							relative_path = "NA"
+						relative_path = "NA"
+						if 'relative_path' in ALL_RUNS[asic_id_eeprom][run]['run_data']:
+							if ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']:
+								relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
 						runs_string += '<a href="{0}" target="_blank">{1}</a><br>'.format(
-							#os.path.join(watcher.data_basedir, 
-							#			 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
-							#			 ALL_RUNS[asic_id_eeprom][run]['run_data']['minion_id'],
-							#			 'filtered',
-							#			 'results.html'),
 							os.path.join(watcher.data_basedir,relative_path,'filtered','results.html'),
 							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
 					runs_string += '</p>'
@@ -396,19 +373,14 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 				else:
 					runs_string = '<p><u>Runs</u>:<br><br>'
 					for run in flowcell_runs:
-						try:
-							relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
-						except:
-							relative_path = "NA"
+						relative_path = "NA"
+						if 'relative_path' in ALL_RUNS[asic_id_eeprom][run]['run_data']:
+							if ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']:
+								relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
 						runs_string += '<a href="{0}" target="_blank">{1}</a><br>'.format(
-							#os.path.join(watcher.data_basedir, 
-							#			 ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'],
-							#			 ALL_RUNS[asic_id_eeprom][run]['run_data']['minion_id'],
-							#			 'filtered',
-							#			 'results.html'),
 							os.path.join(watcher.data_basedir,relative_path,'filtered','results.html'),
 							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
-					runs_string = runs_string + '</p>'
+					runs_string += '</p>'
 
 					flowcell_info_brick = flowcell_info_brick.format(
 						channel_to_css[watcher.channel],
@@ -457,10 +429,10 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 				#					minion_id,
 				#					'filtered',
 				#					'results.html')
-				try:
-					relative_path = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['relative_path']
-				except:
-					relative_path = "NA"
+				relative_path = "NA"
+				if 'relative_path' in ALL_RUNS[asic_id_eeprom][run]['run_data']:
+					if ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']:
+						relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
 				link = os.path.join(watchers[0].data_basedir,
 									relative_path,
 									'filtered',
@@ -489,7 +461,8 @@ class ChannelStatus():
 		('minion_id', None),
 		('sequencing_kit', None),
 		('protocol_start', None),
-		('protocol_end', None)
+		('protocol_end', None),
+		('relative_path', None)
 		])
 
 	empty_flowcell = OrderedDict([
@@ -574,18 +547,18 @@ class ChannelStatus():
 								self.run_data['user_filename_input'])	# TODO: change to sample_name
 		basedir = os.path.join(data_basedir, rel_path)	
 		if not os.path.isdir(basedir):
-			logger.error("ERROR: Could not determine relative data path, directory {} does not exist!".format(basedir))
+			logger.error("ERROR: Could not determine relative data path, base directory {} does not exist!".format(basedir))
 			return
 
-		if not self.run_data['run_id']:
+		if self.run_data['run_id']:
+			exp_id_substring = self.run_data['run_id'].split('-')[0]
+		else:
 			logger.warning("WARNING: 'run_id' is not set, therefore relative_path has to be guessed!")
 			exp_id_substring = None
-		else:
-			exp_id_substring = self.run_data['run_id'].split('-')[0]
 		
 		sub_dirs = [item for item in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, item))]
 		if not sub_dirs:
-			logger.warning("WARNING: Could not determine relative data path, no sub directories in {}".format(basedir))
+			logger.error("ERROR: Could not determine relative data path, no sub directories in {}".format(basedir))
 			return
 		if exp_id_substring:
 			for sub_dir in sub_dirs:
@@ -594,22 +567,28 @@ class ChannelStatus():
 					return
 		# if no relative path was found by now, then it is probably the case that the run_id was not parsed correctly
 		# --> attempt to choose a subdirectory which belongs to the correct flowcell
-		for sub_dir in sub_dirs:
-			if self.flowcell['flowcell_id'] in sub_dir:
-				self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
-				logger.warning("WARNING: chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
-				return
+		if self.flowcell['flowcell_id']:
+			for sub_dir in sub_dirs:
+				if self.flowcell['flowcell_id'] in sub_dir:
+					self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
+					logger.warning("WARNING: chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
+					return
 		logger.error("ERROR: Could not determine any relative data path!")
 		return
 
 
-class Scheduler(mp.Process):
+class StatsparserScheduler(threading.Thread):
 
 	def __init__(self, update_interval, statsfp, statsparser_args, 
 				 user_filename_input, minion_id, flowcell_id, protocol_start,
 				 resources_dir, statsparser_path, python3_path):
-		mp.Process.__init__(self)
-		self.exit = mp.Event()
+		threading.Thread.__init__(self)
+		# make this thread a deamon, so that it will not block the process from exiting		
+		if getattr(self, 'daemon', None) is None:
+            self.daemon = True
+        else:
+            self.setDaemon(True)
+		self.stoprequest = threading.Event()
 		self.update_interval = update_interval
 		self.resources_dir = resources_dir
 		self.statsfp = statsfp
@@ -623,7 +602,7 @@ class Scheduler(mp.Process):
 
 	def run(self):
 		page_opened = False
-		while not self.exit.is_set():
+		while not self.stoprequest.is_set():
 			last_time = time.time()
 			logger.info("STARTING STATSPARSING")
 
@@ -650,9 +629,13 @@ class Scheduler(mp.Process):
 				logger.warning("WARNING: statsfile does not exist (yet?)")
 
 			this_time = time.time()
-			while (this_time - last_time < self.update_interval) and not self.exit.is_set():
+			while (this_time - last_time < self.update_interval) and not self.stoprequest.is_set():
 				time.sleep(1)
 				this_time = time.time()
+
+	def join(self, timeout=None):
+        self.stoprequest.set()
+        super(StatsparserScheduler, self).join(timeout)
 
 
 class Watcher():
@@ -660,7 +643,8 @@ class Watcher():
 	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, database_dir, 
 				 data_basedir, statsparser_args, update_interval, no_watchnchop,
 				 resources_dir, watchnchop_path, statsparser_path, python3_path, perl_path, bc_kws):
-		self.q = mp.SimpleQueue()
+		#self.q = queue.SimpleQueue()
+		self.q = queue.PriorityQueue()
 		self.watchnchop = not no_watchnchop
 		self.channel = channel
 		self.database_dir = database_dir
@@ -686,175 +670,232 @@ class Watcher():
 		print("...watcher for {} ready".format(self.observed_dir))
 
 		self.channel_status = ChannelStatus("GA{}0000".format(channel+1))
-		self.scheduler = None
+		self.spScheduler = None
 
 	def check_q(self):
 		# checking sheduler queue
-		if not self.q.empty:
+		if not self.q.empty():
 			if VERBOSE: logger.info("Queue content for {}:".format(self.observed_dir))
 		while not self.q.empty():
-			content = self.q.get()
-			#logger.info(content)
-			if VERBOSE: print("received:", content)
+			timestamp, origin, line = self.q.get()
+			if VERBOSE: logger.info("received '{}' originating from '{} log' at '{}'".format(line, origin, timestamp))
 
-			# case content is new data for channel report
-			if isinstance(content[0], dict):
-				self.channel_status.update(content[0], content[1])
+			if origin == 'server':
+				self.parse_server_log_line()
+			elif origin == 'bream':
+				self.parse_bream_log_line()
 
-			# case timestamped information
-			else:
-				timestamp = content[0]
-				global UPDATE_STATUS_PAGE
+	def parse_server_log_line(self, line):
+		global UPDATE_STATUS_PAGE
+		dict_content = {}
+		overwrite = False
+
+		if   	"protocol_started"										in line:
+			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
+				dict_content[m.group(1)] = m.group(2)
+			overwrite = True
+			logger.info("PROTOCOL START")
+			UPDATE_STATUS_PAGE = True
+			self.channel_status.run_data['protocol_start'] = line[:23]
+
+		elif	"protocol_finished" 									in line:
+			logger.info("PROTOCOL END")
+			UPDATE_STATUS_PAGE = True
+			self.channel_status.run_data['protocol_end'] = line[:23]
+			if self.channel_status.mux_scans:
+				self.save_report()
+			self.channel_status.run_finished()
+			if self.spScheduler:
+				if self.spScheduler.is_alive():
+					self.spScheduler.join(1.2)
+			self.spScheduler = None
+
+		elif	"[engine/info]: : flowcell_discovered" 					in line:
+			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
+				dict_content[m.group(1)] = m.group(2)
+			overwrite = True
+			logger.info("FLOWCELL DISCOVERED")
+			UPDATE_STATUS_PAGE = True
+			self.channel_status.flowcell_disconnected()
+			if self.spScheduler:
+				if self.spScheduler.is_alive():
+					self.spScheduler.join(1.2)
+			self.spScheduler = None
+
+		elif   	"[engine/info]: : data_acquisition_started"				in line:# or \
+			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
+				dict_content[m.group(1)] = m.group(2)
+			overwrite = True
+
+		elif	"flowcell_disconnected"									in line:
+			logger.info("FLOWCELL DISCONNECTED")
+			UPDATE_STATUS_PAGE = True
+			self.channel_status.flowcell_disconnected()
+
+
+		if dict_content:
+			self.channel_status.update(dict_content, overwrite)
+
+	def parse_bream_log_line(self, line):
+		global UPDATE_STATUS_PAGE
+		dict_content = {}
+		overwrite = False
+
+		if 		"root - INFO - argument"								in line:
+			for m in re.finditer("([^\s,]+) was set to (.+)", line): 
+				dict_content[m.group(1)] = m.group(2)
+
+		elif 	"INFO - Adding the following context_tags:" 			in line or \
+				"INFO - Context tags set to"							in line:
+			for m in re.finditer("'([^\s,]+)'[:,] u?'([^\s,]+)'", line):
+				dict_content[m.group(1)] = m.group(2)
+			if 'filename' in dict_content:
+				dict_content['flowcell_id'] = dict_content['filename'].split("_")[2]
+
+		elif	"bream.core.base.database - INFO - group"				in line:
+			for m in re.finditer("group ([0-9]+) has ([0-9]+) channels in mux ([0-9]+)", line):
+				self.channel_status.update_mux(m.group(1), m.group(2), m.group(3), line[:23])
 				UPDATE_STATUS_PAGE = True
-				# case content is mux information
-				if isinstance(content[1], tuple):
-					if len(content[1]) == 3:
-						self.channel_status.update_mux(content[1][0], content[1][1], content[1][2], timestamp)
-					elif len(content[1]) == 2:
-						self.channel_status.update_mux_group_totals(content[1][0], content[1][1], timestamp)
-					elif len(content[1]) == 1:
-						self.channel_status.update_mux_group_totals("*", content[1][0], timestamp)
-				elif content[1] == "Finished Mux Scan":
-					logger.info("MUXSCAN FINISHED")
-					self.channel_status.new_mux(timestamp)
-					self.save_report()
-				elif content[1] == "sequencing start":
-					logger.info("SEQUENCING STARTS")
 
-					#try to identify the path in which the experiment data is saved, relative to data_basedir
-					self.channel_status.find_relative_path(self.data_basedir)
+		elif	"[user message]--> group "								in line.lower():
+			for m in re.finditer("roup ([0-9]+) has ([0-9]+) active", line):
+				self.channel_status.update_mux_group_totals(m.group(1), m.group(2), line[:23])
+				UPDATE_STATUS_PAGE = True
 
-					#start porechop & filter & rsync
-					if self.watchnchop:
-						self.start_watchnchop()
+		elif	"[user message]--> A total of"							in line:
+			for m in re.finditer("total of ([0-9]+) single pores", line):
+				self.channel_status.update_mux_group_totals("*", m.group(1), line[:23])
+				UPDATE_STATUS_PAGE = True
 
-					#start creation of plots at regular time intervals
-					if self.scheduler:
-						self.scheduler.terminate()
-						self.scheduler.join()
+		elif	"INFO - [user message]--> Finished Mux Scan"			in line:
+			logger.info("MUX SCAN FINISHED")
+			UPDATE_STATUS_PAGE = True
+			self.channel_status.new_mux(timestamp)
+			self.save_report()
 
-					try:
-						relative_path = self.channel_status.run_data['relative_path']
-					except:
-						relative_path = "NA"
-					statsfp = os.path.join(self.data_basedir,
-										   relative_path,
-										   'filtered',
-										   'stats.txt')
-					logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for stats file '.format(self.update_interval/1000) + statsfp)
-					self.scheduler = Scheduler(self.update_interval, 
-											   statsfp, 
-											   self.statsparser_args, 
-											   self.channel_status.run_data['user_filename_input'], 
-											   "GA{}0000".format(self.channel+1), 
-											   self.channel_status.flowcell['flowcell_id'], 
-											   self.channel_status.run_data['protocol_start'],
-											   self.resources_dir,
-											   self.statsparser_path,
-											   self.python3_path)
-					self.scheduler.start()
+		elif	"platform_qc.PlatformQCExperiment'> finished"			in line:
+			logger.info("QC FINISHED")
+			UPDATE_STATUS_PAGE = True
 
-				elif content[1] == "flowcell discovered":
-					logger.info("FLOWCELL DISCOVERED")
-					self.channel_status.flowcell_disconnected()
-					if self.scheduler:
-						self.scheduler.terminate()
-						self.scheduler.join()
-					self.scheduler = None
+		elif	"INFO - STARTING MAIN LOOP"								in line:
+			dict_content["sequencing_start_time"] = line[:23]
+			logger.info("SEQUENCING STARTS")
+			UPDATE_STATUS_PAGE = True
 
-				elif content[1] == "Finished QC":
-					logger.info("QC FINISHED")
-					#self.save_report()
-					#self.channel_status.run_finished()
-				elif content[1] == "new bream_log file":
-					logger.info("NEW EXPERIMENT")
-					#self.channel_status.run_finished()
-				elif content[1] == "flowcell disconnected":
-					logger.info("FLOWCELL DISCONNECTED")
-					self.channel_status.flowcell_disconnected()
-				elif content[1] == "protocol started":
-					logger.info("PROTOCOL START")
-					self.channel_status.run_data['protocol_start'] = content[0]
-				elif content[1] == "protocol finished":
-					logger.info("PROTOCOL END")
-					self.channel_status.run_data['protocol_end'] = content[0]
-					if self.channel_status.mux_scans:
-						self.save_report()
-					self.channel_status.run_finished()
-					if self.scheduler:
-						self.scheduler.terminate()
-						self.scheduler.join()
-					self.scheduler = None
+			#try to identify the path in which the experiment data is saved, relative to data_basedir
+			self.channel_status.find_relative_path(self.data_basedir)
+			if self.channel_status.run_data['relative_path']:
+				#start watchnchop (porechop & filter & rsync)
+				if self.watchnchop:
+					self.start_watchnchop()
 
+				#start creation of plots at regular time intervals
+				if self.spScheduler:
+					if self.spScheduler.is_alive():
+						self.spScheduler.join(1.1)
+				
+				relative_path = self.channel_status.run_data['relative_path']
+				statsfp = os.path.join(self.data_basedir,
+									   relative_path,
+									   'filtered',
+									   'stats.txt')
+				logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for stats file '.format(self.update_interval/1000) + statsfp)
+				self.spScheduler = StatsparserScheduler(self.update_interval, 
+														statsfp, 
+														self.statsparser_args, 
+														self.channel_status.run_data['user_filename_input'], 
+														"GA{}0000".format(self.channel+1), 
+														self.channel_status.flowcell['flowcell_id'], 
+														self.channel_status.run_data['protocol_start'],
+														self.resources_dir,
+														self.statsparser_path,
+														self.python3_path)
+				self.spScheduler.start()
+			else:
+				logger.warning("WARNING: not started watchnchop and statsparser because relative path unknown")
+
+		if dict_content:
+			self.channel_status.update(dict_content, overwrite)
 
 	def save_report(self):
-		try:
-			fn = []
-			#if self.channel_status.run_data['user_filename_input']:
-			if "qc" in self.channel_status.run_data['experiment_type']:
-				if self.channel_status.run_data['user_filename_input']:
-					if 'run_id' in self.channel_status.run_data:
-						logger.warning("WARNING: NOT SAVING REPORT for {} because it is not absolutely clear if it a qc or sequencing run".format(self.channel_status.run_data['run_id']))
-					else:
-						logger.warning("WARNING: NOT SAVING REPORT because it is not absolutely clear if it a qc or sequencing run")
-				fn.append("QC")
+		for key in ['experiment_type', 'run_id']:
+			if key in self.channel_status.run_data:
+				if not self.channel_status.run_data[key]:
+					break
 			else:
-				fn.append(self.channel_status.run_data['user_filename_input'])
-			if self.channel_status.flowcell['flowcell_id']:
-				fn.append(self.channel_status.flowcell['flowcell_id'])
-			fn.append(self.channel_status.run_data['run_id'])
-			fn = "_".join(fn) + ".txt"
-
-			data = (self.channel_status.flowcell, self.channel_status.run_data, self.channel_status.mux_scans)
-
-			with open( os.path.join(self.database_dir, fn), 'w') as f:
-				print(json.dumps(data, indent=4), file=f)
-
-			#key = self.channel_status.run_data['run_id'] + self.channel_status.flowcell['flowcell_id']
-			run_id = self.channel_status.run_data['run_id']
-			#flowcell_id = self.channel_status.flowcell['flowcell_id']
-			#flowcell_id = self.channel_status.flowcell['asic_id'] + self.channel_status.flowcell['asic_id_eeprom']
-			asic_id_eeprom = self.channel_status.flowcell['asic_id_eeprom']
-			if asic_id_eeprom in ALL_RUNS:
-				ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': data[0],
-												 'run_data': data[1],
-												 'mux_scans': data[2]}
+				break
+		else:
+			logger.warning("WARNING: NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
+			return
+		for key in ['flowcell_id', 'asic_id_eeprom']:
+			if key in self.channel_status.flowcell:
+				if not self.channel_status.flowcell[key]:
+					break
 			else:
-				ALL_RUNS[asic_id_eeprom] = {}
-				ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': data[0],
-												 'run_data': data[1],
-												 'mux_scans': data[2]}
-		except:
-			logger.error("ERROR: could not save report for channel GA{}0000".format(self.channel+1))
+				break
+		else:
+			logger.warning("WARNING: NOT SAVING REPORT for channel GA{}0000 because flowcell is missing crucial attribute '{}'".format(self.channel+1, key))
+			return
+			
+		fn = []
+		if "qc" in self.channel_status.run_data['experiment_type']:
+			if self.channel_status.run_data['user_filename_input']:
+				logger.warning("WARNING: NOT SAVING REPORT for {} because it is not absolutely clear if it a qc or sequencing run".format(self.channel_status.run_data['run_id']))
+				return
+			fn.append("QC")
+		else:
+			if not self.channel_status.run_data['user_filename_input']:
+				logger.warning("WARNING: NOT SAVING REPORT because sequencing run is missing crucial attribute 'user_filename_input'")
+				return
+			fn.append(self.channel_status.run_data['user_filename_input'])
+		fn.append(self.channel_status.flowcell['flowcell_id'])
+		fn.append(self.channel_status.run_data['run_id'])
+		fn = "_".join(fn) + ".txt"
+
+		data = (self.channel_status.flowcell, self.channel_status.run_data, self.channel_status.mux_scans)
+		with open( os.path.join(self.database_dir, fn), 'w') as f:
+			print(json.dumps(data, indent=4), file=f)
+
+		run_id = self.channel_status.run_data['run_id']
+		asic_id_eeprom = self.channel_status.flowcell['asic_id_eeprom']
+		if asic_id_eeprom in ALL_RUNS:
+			ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': data[0],
+											 'run_data': data[1],
+											 'mux_scans': data[2]}
+		else:
+			ALL_RUNS[asic_id_eeprom] = {}
+			ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': data[0],
+											 'run_data': data[1],
+											 'mux_scans': data[2]}
 
 	def start_watchnchop(self):
-		logger.info("STARTING WATCHNCHOP")
-		if self.channel_status.run_data['user_filename_input']:
-			try:
-				relative_path = self.channel_status.run_data['relative_path']
-			except:
-				logger.error("ERROR: FAILED to start watchnchop, could not determine experiment base directory")
-				return
-			cmd = ["sleep 1800;",
-				   self.perl_path,
-				   self.watchnchop_path,
-				   '-v']
-			if len([kw for kw in self.bc_kws if kw in self.channel_status.run_data['user_filename_input']]) > 0:
-				cmd.append('-b')
-			cmd.append(os.path.join(self.data_basedir, relative_path, ''))
-			cmd = " ".join(cmd)
-			try:
-				#environment = os.environ.copy()
-				#subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-				subprocess.Popen(cmd, shell=True, stdout=self.logfile, stderr=self.logfile)
-			except:
-				logger.error("ERROR: FAILED to start watchnchop, popen failed")
-			#logger.info("STARTED WATCHNCHOP with arguments: " + " ".join(cmd))
-			logger.info("STARTED WATCHNCHOP with arguments: {}".format(cmd))
+		for key in ['user_filename_input', 'relative_path']:
+			if key in self.channel_status.run_data:
+				if not self.channel_status.run_data[key]:
+					break
+			else:
+				break
 		else:
-			logger.error("ERROR: FAILED to start watchnchop, no user_filename_input")
+			logger.warning("WARNING: NOT STARTING WATCHNCHOP for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
+			return
 
-
+		relative_path = self.channel_status.run_data['relative_path']
+		cmd = ["sleep 1800;",
+			   self.perl_path,
+			   self.watchnchop_path,
+			   '-v']
+		if len([kw for kw in self.bc_kws if kw in self.channel_status.run_data['user_filename_input']]) > 0:
+			cmd.append('-b')
+		cmd.append(os.path.join(self.data_basedir, relative_path, ''))
+		cmd = " ".join(cmd)
+		try:
+			#environment = os.environ.copy()
+			#subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+			subprocess.Popen(cmd, shell=True, stdout=self.logfile, stderr=self.logfile)
+		except:
+			logger.error("ERROR: FAILED to start watchnchop, popen failed")
+			return
+		logger.info("STARTED WATCHNCHOP with arguments: {}".format(cmd))
 
 
 class OpenedFilesHandler():
@@ -875,7 +916,7 @@ class OpenedFilesHandler():
 			if VERBOSE: logger.info("File handle of file {} couldn't be closed".format(path))
 		if path in self.open_files:
 			del self.open_files[path]
-		if VERBOSE: logger.info("Deleted entry in open_files for file {}".format(path))
+			if VERBOSE: logger.info("Deleted entry in open_files for file {}".format(path))
 
 	def process_lines_until_EOF(self, process_function, path):
 		file = self.open_files[path][0]
@@ -895,29 +936,37 @@ class OpenedFilesHandler():
 
 
 class LogFilesEventHandler(FileSystemEventHandler):
-	file_handler = OpenedFilesHandler()
 	control_server_log = None
 	bream_log = None
 
 	def __init__(self, q, ignore_file_modifications):
 		super(LogFilesEventHandler, self).__init__()
-		self.q = q
 		self.ignore_file_modifications = ignore_file_modifications
+		self.file_handler = OpenedFilesHandler()
+		self.comm_q = q
+
+		# while no server log file is opened, all lines read are buffered in a seperate Priority Queue
+		self.buff_q = queue.PriorityQueue()
+		self.q = buff_q
 
 	def on_moved(self, event):
 		pass
 
 	def on_created(self, event):
 		if not event.is_directory:
+			activate_q = False
 			if VERBOSE: logger.info("File {} was created".format(event.src_path))
 			basename = os.path.basename(event.src_path)
 			if basename.startswith("control_server_log"):
 				if self.control_server_log:
 					self.file_handler.close_file(event.src_path)
 					logger.info("Replacing current control_server_log file {} with {}".format(self.control_server_log, event.src_path))
+				else:
+					# read lines of server file first, then activate the real communication q
+					activate_q = True
 				self.control_server_log = event.src_path
 				logger.info("New control_server_log file {}".format(self.control_server_log))
-				process_function = self.parse_server_log_line
+				process_function = self.enqueue_server_log_line
 			elif basename.startswith("bream"):
 				if self.bream_log:
 					self.file_handler.close_file(event.src_path)
@@ -925,14 +974,20 @@ class LogFilesEventHandler(FileSystemEventHandler):
 					#TODO: Find out if more than one bream log file can belong to a running experiment (probably not)
 				self.bream_log = event.src_path
 				logger.info("New bream_log file {}".format(self.bream_log))
-				process_function = self.parse_bream_log_line
-				self.q.put( ("", "new bream_log file") )
+				process_function = self.enqueue_bream_log_line
+				logger.info("NEW EXPERIMENT")
 			else:
 				if VERBOSE: logger.info("File {} is not of concern for this tool".format(event.src_path))
 				return
 			self.file_handler.open_new_file(event.src_path)
-			#self.file_handler.process_lines_until_EOF(self, event.src_path)
 			self.file_handler.process_lines_until_EOF(process_function, event.src_path)
+			if activate_q:
+				self.activate_q()
+
+	def activate_q(self):
+		self.q = self.comm_q
+		while not self.comm_q.empty():
+			self.q.put(self.buff_q.get())
 
 	def on_deleted(self, event):
 		if not event.is_directory:
@@ -954,99 +1009,29 @@ class LogFilesEventHandler(FileSystemEventHandler):
 			if VERBOSE: logger.info("File {} was modified".format(event.src_path))
 			if event.src_path in self.file_handler.open_files:
 				if self.control_server_log == event.src_path:
-					process_function = self.parse_server_log_line
+					self.file_handler.process_lines_until_EOF(self.enqueue_server_log_line, event.src_path)
 				elif self.bream_log == event.src_path:
-					process_function = self.parse_bream_log_line
+					self.file_handler.process_lines_until_EOF(self.enqueue_bream_log_line, event.src_path)
 				else:
 					logger.warning("WARNING: case not handled")
 					return
-				self.file_handler.process_lines_until_EOF(process_function, event.src_path)
 			else:
 				if not self.ignore_file_modifications:
 					self.on_created(event)
 				else:
 					if VERBOSE: logger.info("File {} existed before this script was started".format(event.src_path))
 
-	def parse_server_log_line(self, line):
-		dict_content = {}
-		send_after = None
-		overwrite = False
+	def enqueue_server_log_line(self, line):
+		try:
+			self.q.put( (dateutil.parser.parse(line[:23]), 'server', line) )
+		except ValueError:
+			logger.warning("WARNING: the timestamp of the following line in the server log file could not be parsed:\n{}".format(line))
 
-		#if 		"[mgmt/info]: : active_device_set" 						in line or \
-		if   		"protocol_started"									in line:
-			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
-				dict_content[m.group(1)] = m.group(2)
-			overwrite = True
-			self.q.put( (line[:23], "protocol started") )
-
-		elif		"protocol_finished" 								in line:
-			self.q.put( (line[:23], "protocol finished") )
-
-		elif	"[engine/info]: : flowcell_discovered" 					in line:
-			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
-				dict_content[m.group(1)] = m.group(2)
-				overwrite = True
-			self.q.put( (line[:23], "flowcell discovered") )
-			#send_after = (line[:23], "flowcell lookup")
-
-		#elif 	"asic_id_changed"										in line:
-		#	for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
-
-		elif   	"[engine/info]: : data_acquisition_started"				in line:# or \
-				#"[saturation_control/info]: : saturation_mode_changed" 	in line:
-			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
-				dict_content[m.group(1)] = m.group(2)
-				overwrite = True
-
-		elif	"flowcell_disconnected"									in line:
-			self.q.put( (line[:23], "flowcell disconnected") )
-
-		if dict_content:
-			self.q.put( (dict_content, overwrite) )
-		if send_after:
-			self.q.put( send_after )
-
-
-	def parse_bream_log_line(self, line):
-		dict_content = {}
-		overwrite = False
-
-		if 		"root - INFO - argument"								in line:
-			#for m in re.finditer("([^\s,]+) was set to ([^\s,]+)", line):
-			for m in re.finditer("([^\s,]+) was set to (.+)", line): 
-				dict_content[m.group(1)] = m.group(2)
-
-		elif 	"INFO - Adding the following context_tags:" 			in line or \
-				"INFO - Context tags set to"							in line:
-			for m in re.finditer("'([^\s,]+)'[:,] u?'([^\s,]+)'", line):
-				dict_content[m.group(1)] = m.group(2)
-			if 'filename' in dict_content:
-				dict_content['flowcell_id'] = dict_content['filename'].split("_")[2]
-
-		elif	"bream.core.base.database - INFO - group"				in line:
-			for m in re.finditer("group ([0-9]+) has ([0-9]+) channels in mux ([0-9]+)", line):
-				self.q.put( (line[:23], (m.group(1), m.group(2), m.group(3))) )
-
-		elif	"[user message]--> group "								in line.lower():
-			for m in re.finditer("roup ([0-9]+) has ([0-9]+) active", line):
-				self.q.put( (line[:23], (m.group(1), m.group(2))) )
-
-		elif	"[user message]--> A total of"							in line:
-			for m in re.finditer("total of ([0-9]+) single pores", line):
-				self.q.put( (line[:23], (m.group(1),) ) )
-
-		elif	"INFO - [user message]--> Finished Mux Scan"			in line:
-			self.q.put( (line[:23], "Finished Mux Scan") )
-
-		elif	"platform_qc.PlatformQCExperiment'> finished"			in line:
-			self.q.put( (line[:23], "Finished QC") )
-
-		elif	"INFO - STARTING MAIN LOOP"								in line:
-			dict_content["sequencing_start_time"] = line[:23]
-			self.q.put( (line[:23], "sequencing start") )
-
-		if dict_content:
-			self.q.put( (dict_content, overwrite) )
+	def enqueue_bream_log_line(self, line):
+		try:
+			self.q.put( (dateutil.parser.parse(line[:23]), 'bream', line) )
+		except ValueError:
+			logger.warning("WARNING: the timestamp of the following line in the bream log file could not be parsed:\n{}".format(line))
 
 if __name__ == "__main__":
 	main_and_args()
