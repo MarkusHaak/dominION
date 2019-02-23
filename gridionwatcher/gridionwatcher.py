@@ -495,7 +495,7 @@ class ChannelStatus():
 					continue
 				else:
 					self.flowcell[key] = content[key]
-					self.logger.info("new value for {} : {}".format(key, content[key]))
+					self.logger.info("new flowcell value for {} : {}".format(key, content[key]))
 					continue
 			elif key in self.run_data:
 				if self.run_data[key]:
@@ -506,7 +506,7 @@ class ChannelStatus():
 						self.logger.debug("not changing the current value of {} ({}) to {}".format(key, self.run_data[key], content[key]))
 					continue
 			self.run_data[key] = content[key]
-			self.logger.info("new value for {} : {}".format(key, content[key]))
+			self.logger.info("new run value for {} : {}".format(key, content[key]))
 
 	def update_mux(self, group, channels, mux, timestamp):
 		if self.mux_scans:
@@ -531,12 +531,14 @@ class ChannelStatus():
 		self.logger.debug("added new mux result")
 
 	def flowcell_disconnected(self):
+		self.logger.info("executing FLOWCELL DISCONNECTED")
 		self.flowcell = copy.deepcopy(self.empty_flowcell)
 		self.run_data = copy.deepcopy(self.empty_run_data)
 		self.run_data['minion_id'] = self.minion_id
 		self.mux_scans = []
 
 	def run_finished(self):
+		self.logger.info("executing RUN FINISHED")
 		self.run_data = copy.deepcopy(self.empty_run_data)
 		self.run_data['minion_id'] = self.minion_id
 		self.mux_scans = []
@@ -824,24 +826,14 @@ class Watcher():
 
 	def save_report(self):
 		for key in ['experiment_type', 'run_id']:
-			if key in self.channel_status.run_data:
-				if not self.channel_status.run_data[key]:
-					break
-			else:
-				break
-		else:
-			self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
-			return
+			if not self.channel_status.run_data[key]:
+				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
+				return
 		for key in ['flowcell_id', 'asic_id_eeprom']:
-			if key in self.channel_status.flowcell:
-				if not self.channel_status.flowcell[key]:
-					break
-			else:
-				break
-		else:
-			self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because flowcell is missing crucial attribute '{}'".format(self.channel+1, key))
-			return
-			
+			if not self.channel_status.flowcell[key]:
+				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because flowcell is missing crucial attribute '{}'".format(self.channel+1, key))
+				return
+
 		fn = []
 		if "qc" in self.channel_status.run_data['experiment_type']:
 			if self.channel_status.run_data['user_filename_input']:
@@ -855,8 +847,6 @@ class Watcher():
 			fn.append(self.channel_status.run_data['user_filename_input'])
 		fn.append(self.channel_status.flowcell['flowcell_id'])
 		fn.append(self.channel_status.run_data['run_id'])
-		for i,j in enumerate(fn):
-			self.logger.info("{} : {}".format(i,j))
 		fn = "_".join(fn) + ".txt"
 
 		data = (self.channel_status.flowcell, self.channel_status.run_data, self.channel_status.mux_scans)
@@ -877,14 +867,9 @@ class Watcher():
 
 	def start_watchnchop(self):
 		for key in ['user_filename_input', 'relative_path']:
-			if key in self.channel_status.run_data:
-				if not self.channel_status.run_data[key]:
-					break
-			else:
-				break
-		else:
-			self.logger.warning("NOT STARTING WATCHNCHOP for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
-			return
+			if not self.channel_status.run_data[key]:
+				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
+				return
 
 		relative_path = self.channel_status.run_data['relative_path']
 		cmd = ["sleep 1800;",
@@ -998,7 +983,7 @@ class LogFilesEventHandler(FileSystemEventHandler):
 	def activate_q(self):
 		self.logger.info("activating communication queue")
 		self.q = self.comm_q
-		while not self.comm_q.empty():
+		while not self.buff_q.empty():
 			self.q.put(self.buff_q.get())
 
 	def on_deleted(self, event):
