@@ -37,6 +37,7 @@ from .helper import initLogger, package_dir, ArgHelpFormatter, r_file, r_dir, rw
 import threading
 import logging
 import queue
+from pathlib import Path
 
 ALL_RUNS = {}
 UPDATE_STATUS_PAGE = False
@@ -150,7 +151,7 @@ def main_and_args():
 							help='Additional status information is printed to stdout')
 	help_group.add_argument('-q', '--quiet', #TODO: implement
 							action='store_true',
-							help='Only warning and error messages are printed to stdout')
+							help='Only error messages are printed to stdout')
 
 
 	args = parser.parse_args()
@@ -209,6 +210,26 @@ def main_and_args():
 	logger.info("initiating GridION status page")
 	update_status_page(watchers, args.resources_dir, args.status_page_dir)
 	webbrowser.open('file://' + os.path.realpath(os.path.join(args.status_page_dir, "GridIONstatus.html")))
+
+	#w_fps = [[],[],[],[],[]]
+	#for i,watcher in enumerate(watchers):
+	#	for fn in os.listdir(watcher.observed_dir):
+	#		fp = os.path.join(watcher.observed_dir, fn)
+	#		if os.path.isfile(fp):
+	#			if "server" in fp or "bream" in fp:
+	#				w_fps[i].append(fp)
+	#
+	#time.sleep(0.01)
+	#logger.error("attempting to restore history")
+	#while len([item for sublist in w_fps for item in sublist]):
+	#	for i,watcher in enumerate(watchers):
+	#		if len(w_fps[i]):
+	#			fp = w_fps[i].pop()
+	#			watcher.logger.error("touching {}".format(fp))
+	#			Path(fp).touch()
+	#	time.sleep(4)
+	#time.sleep(600)
+	#logger.error("restoring history complete")
 
 	logger.info("entering main loop")
 	try:
@@ -431,9 +452,9 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 				#					'filtered',
 				#					'results.html')
 				relative_path = "NA"
-				if 'relative_path' in ALL_RUNS[asic_id_eeprom][run]['run_data']:
-					if ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']:
-						relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
+				if 'relative_path' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']:
+					if ALL_RUNS[asic_id_eeprom][run_id]['run_data']['relative_path']:
+						relative_path = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['relative_path']
 				link = os.path.join(watchers[0].data_basedir,
 									relative_path,
 									'filtered',
@@ -581,18 +602,58 @@ class ChannelStatus():
 		return
 
 
+class WatchnchopScheduler(threading.Thread):
+
+	def __init__(self, perl_path, watchnchop_path, data_basedir, relative_path, user_filename_input, bc_kws, channel):
+		threading.Thread.__init__(self)
+		if getattr(self, 'daemon', None) is None:
+			self.daemon = True
+		else:
+			self.setDaemon(True)
+		self.stoprequest = threading.Event()
+		self.logger = logging.getLogger(name='gw.w{}.wcs'.format(channel+1))
+
+		self.observed_dir = os.path.join(data_basedir, relative_path, 'fastq_pass')
+		# define the command that is to be executed
+		self.cmd = [perl_path,
+					watchnchop_path,
+					'-v']
+		if len([kw for kw in bc_kws if kw in user_filename_input]) > 0:
+			self.cmd.append('-b')
+		self.cmd.append(os.path.join(data_basedir, relative_path, ''))
+		self.cmd = " ".join(self.cmd)
+
+	def run(self):
+		while not self.stoprequest.is_set():
+			if os.path.exists(self.observed_dir):
+				if [fn for fn in os.listdir(self.observed_dir) if fn.endswith('.fastq')]:
+					try:
+						subprocess.Popen(self.cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+					except:
+						self.logger.error("FAILED to start watchnchop, Popen failed")
+						return
+					self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(self.cmd))
+					return
+			time.sleep(1)
+
+	def join(self, timeout=None):
+		self.stoprequest.set()
+		super(WatchnchopScheduler, self).join(timeout)
+
+
 class StatsparserScheduler(threading.Thread):
 
 	def __init__(self, update_interval, statsfp, statsparser_args, 
 				 user_filename_input, minion_id, flowcell_id, protocol_start,
 				 resources_dir, statsparser_path, python3_path, channel):
 		threading.Thread.__init__(self)
-		# make this thread a deamon, so that it will not block the process from exiting		
 		if getattr(self, 'daemon', None) is None:
 			self.daemon = True
 		else:
 			self.setDaemon(True)
 		self.stoprequest = threading.Event()
+		self.logger = logging.getLogger(name='gw.w{}.sps'.format(channel+1))
+
 		self.update_interval = update_interval
 		self.resources_dir = resources_dir
 		self.statsfp = statsfp
@@ -603,7 +664,7 @@ class StatsparserScheduler(threading.Thread):
 		self.flowcell_id = flowcell_id
 		self.protocol_start = protocol_start
 		self.python3_path = python3_path
-		self.logger = logging.getLogger(name='gw.w{}.sps'.format(channel+1))
+		
 
 	def run(self):
 		page_opened = False
@@ -674,6 +735,7 @@ class Watcher():
 		#								 "GA{}0000_watchnchop_log.txt".format(channel+1)), 'w')
 		self.channel_status = ChannelStatus("GA{}0000".format(channel+1), channel)
 		self.spScheduler = None
+		self.wcScheduler = None
 		self.logger = logging.getLogger(name='gw.w{}'.format(channel+1))
 
 		self.logger.info("...watcher for {} ready".format(self.observed_dir))
@@ -868,27 +930,23 @@ class Watcher():
 	def start_watchnchop(self):
 		for key in ['user_filename_input', 'relative_path']:
 			if not self.channel_status.run_data[key]:
-				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
+				self.logger.warning("NOT executing watchnchop for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
 				return
 
-		relative_path = self.channel_status.run_data['relative_path']
-		cmd = ["sleep 1800;",
-			   self.perl_path,
-			   self.watchnchop_path,
-			   '-v']
-		if len([kw for kw in self.bc_kws if kw in self.channel_status.run_data['user_filename_input']]) > 0:
-			cmd.append('-b')
-		cmd.append(os.path.join(self.data_basedir, relative_path, ''))
-		cmd = " ".join(cmd)
-		try:
-			#environment = os.environ.copy()
-			#subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-			#subprocess.Popen(cmd, shell=True, stdout=self.logfile, stderr=self.logfile)
-			subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-		except:
-			self.logger.error("FAILED to start watchnchop, popen failed")
-			return
-		self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(cmd))
+		if self.wcScheduler:
+			if self.wcScheduler.is_alive():
+				self.logger.error("watchnchop was not started successfully for previous run!")
+				self.wcScheduler.join(1.2)
+
+		self.wcScheduler = WatchnchopScheduler(self.perl_path,
+											   self.watchnchop_path,
+											   self.data_basedir,
+											   self.channel_status.run_data['relative_path'],
+											   self.channel_status.run_data['user_filename_input'],
+											   self.bc_kws,
+											   self.channel)
+		self.wcScheduler.start()
+		return
 
 
 class OpenedFilesHandler():
@@ -977,6 +1035,7 @@ class LogFilesEventHandler(FileSystemEventHandler):
 				return
 			self.file_handler.open_new_file(event.src_path)
 			self.file_handler.process_lines_until_EOF(process_function, event.src_path)
+			self.logger.info("approx. queue size: {}".format(self.q.qsize()))
 			if activate_q:
 				self.activate_q()
 
@@ -1022,13 +1081,13 @@ class LogFilesEventHandler(FileSystemEventHandler):
 		try:
 			self.q.put( (dateutil.parser.parse(line[:23]), 'server', line) )
 		except ValueError:
-			self.logger.warning("the timestamp of the following line in the server log file could not be parsed:\n{}".format(line))
+			self.logger.debug("the timestamp of the following line in the server log file could not be parsed:\n{}".format(line))
 
 	def enqueue_bream_log_line(self, line):
 		try:
 			self.q.put( (dateutil.parser.parse(line[:23]), 'bream', line) )
 		except ValueError:
-			self.logger.warning("the timestamp of the following line in the bream log file could not be parsed:\n{}".format(line))
+			self.logger.debug("the timestamp of the following line in the bream log file could not be parsed:\n{}".format(line))
 
 if __name__ == "__main__":
 	main_and_args()
