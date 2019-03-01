@@ -552,14 +552,14 @@ class ChannelStatus():
 		self.logger.debug("added new mux result")
 
 	def flowcell_disconnected(self):
-		self.logger.info("executing FLOWCELL DISCONNECTED")
+		self.logger.info("resetting flowcell and run data")
 		self.flowcell = copy.deepcopy(self.empty_flowcell)
 		self.run_data = copy.deepcopy(self.empty_run_data)
 		self.run_data['minion_id'] = self.minion_id
 		self.mux_scans = []
 
 	def run_finished(self):
-		self.logger.info("executing RUN FINISHED")
+		self.logger.info("resetting run data")
 		self.run_data = copy.deepcopy(self.empty_run_data)
 		self.run_data['minion_id'] = self.minion_id
 		self.mux_scans = []
@@ -628,7 +628,8 @@ class WatchnchopScheduler(threading.Thread):
 			if os.path.exists(self.observed_dir):
 				if [fn for fn in os.listdir(self.observed_dir) if fn.endswith('.fastq')]:
 					try:
-						subprocess.Popen(self.cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+						#subprocess.Popen(self.cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+						pass
 					except:
 						self.logger.error("FAILED to start watchnchop, Popen failed")
 						return
@@ -681,16 +682,16 @@ class StatsparserScheduler(threading.Thread):
 					   '--resources_dir', self.resources_dir,
 					   '-q']
 				cmd.extend(self.statsparser_args)
-				cp = subprocess.run(cmd) # waits for process to complete
-				if cp.returncode == 0:
-					self.logger.info("STATSPARSING COMPLETED")
-					if not page_opened:
-						basedir = os.path.abspath(os.path.dirname(self.statsfp))
-						fp = os.path.join(basedir, 'results.html')
-						self.logger.info("OPENING " + fp)
-						page_opened = webbrowser.open('file://' + os.path.realpath(fp))
-				else:
-					self.logger.error("ERROR while running statsparser")
+				#cp = subprocess.run(cmd) # waits for process to complete
+				#if cp.returncode == 0:
+				#	self.logger.info("STATSPARSING COMPLETED")
+				#	if not page_opened:
+				#		basedir = os.path.abspath(os.path.dirname(self.statsfp))
+				#		fp = os.path.join(basedir, 'results.html')
+				#		self.logger.info("OPENING " + fp)
+				#		page_opened = webbrowser.open('file://' + os.path.realpath(fp))
+				#else:
+				#	self.logger.error("ERROR while running statsparser")
 			else:
 				self.logger.warning("statsfile does not exist (yet?)")
 
@@ -852,7 +853,7 @@ class Watcher():
 
 			#try to identify the path in which the experiment data is saved, relative to data_basedir
 			self.channel_status.find_relative_path(self.data_basedir)
-			if self.channel_status.run_data['relative_path'] and False:
+			if self.channel_status.run_data['relative_path']:
 				#start watchnchop (porechop & filter & rsync)
 				if self.watchnchop:
 					self.start_watchnchop()
