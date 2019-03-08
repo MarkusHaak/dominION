@@ -251,6 +251,7 @@ h6 {
 table, th, td {
 	border-collapse: collapse;
 	border: 1px solid #aaaaaa;
+	font-size: 12px;
 }
 
 table {
@@ -268,10 +269,11 @@ table.parts {
 }
 
 th {
-	font-family: Verdana, "Bitstream Vera Sans", "DejaVu Sans", Tahoma, Geneva, Arial, Sans-serif;
+	/*font-family: Verdana, "Bitstream Vera Sans", "DejaVu Sans", Tahoma, Geneva, Arial, Sans-serif;*/
+	font-family: courier;
 	background-color: #e5e5e5;
-	text-align: center;
-	padding: 5px;
+	text-align: left;
+	padding: 2px;
 }
 
 tr {

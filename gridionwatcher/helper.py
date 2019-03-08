@@ -17,11 +17,11 @@ import shutil
 import argparse
 from setuptools import Distribution
 from setuptools.command.install import install
-
-
-
+import socket
 
 package_dir = os.path.dirname(os.path.abspath(__file__))
+resources_dir = os.path.join(package_dir,'resources')
+hostname = socket.gethostname()
 
 class ArgHelpFormatter(argparse.HelpFormatter):
 	'''

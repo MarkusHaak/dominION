@@ -26,21 +26,22 @@ import json
 import subprocess
 #import sched
 import webbrowser
-from shutil import copyfile
+from shutil import copyfile, which
 import dateutil
 from datetime import datetime
 from operator import itemgetter
 from .version import __version__
 from .statsparser import get_argument_parser as sp_get_argument_parser
 from .statsparser import parse_args as sp_parse_args
-from .helper import initLogger, package_dir, ArgHelpFormatter, r_file, r_dir, rw_dir, get_script_dir
+from .helper import initLogger, resources_dir, get_script_dir, hostname, ArgHelpFormatter, r_file, r_dir, rw_dir
 import threading
 import logging
 import queue
 from pathlib import Path
 
 ALL_RUNS = {}
-UPDATE_STATUS_PAGE = False
+ALL_RUNS_LOCK = threading.RLock()
+UPDATE_OVERVIEW = False
 logger = None
 
 class parse_statsparser_args(argparse.Action):
@@ -62,28 +63,24 @@ def main_and_args():
 									 formatter_class=ArgHelpFormatter, 
 									 add_help=False)
 
-	main_options = parser.add_argument_group('Main options')
-	main_options.add_argument('-d', '--database_dir',
-							  action=rw_dir,
-							  default='reports',
-							  help='Path to the base directory where experiment reports shall be saved')
-	main_options.add_argument('-s', '--status_page_dir',
-							  default='GridIONstatus',
-							  help='''Path to the directory where all files for the GridION status page 
-								   will be stored''')
+	#main_arguments = parser.add_argument_group('Main arguments')
+	#main_arguments.add_argument('-d', '--database_dir',
+	#						  action=rw_dir,
+	#						  default='reports',
+	#						  help='Path to the base directory where experiment reports shall be saved')
+	#main_arguments.add_argument('-s', '--status_page_dir',
+	#						  default='GridIONstatus',
+	#						  help='''Path to the directory where all files for the GridION overview page 
+	#							   will be stored''')
 
-	sp_options = parser.add_argument_group('Statsparser arguments',
-										   'Arguments passed to statsparser for formatting html pages')
-	sp_options.add_argument('--statsparser_args',
-							action=parse_statsparser_args,
-							default=[],
-							help='''Arguments that are passed to the statsparser.
-								   See a full list of possible options with --statsparser_args " -h" ''')
-
-	io_group = parser.add_argument_group('I/O options', 
-										 'Further input/output options. Only for special use cases')
-	arg_basedir = \
-	io_group.add_argument('-b', '--data_basedir',
+	io_group = parser.add_argument_group('I/O arguments', 
+										 'Further input/output arguments. Only for special use cases')
+	io_group.add_argument('-o', '--output_dir',
+						  action=rw_dir,
+						  default=os.path.join(str(Path.home()), "gridionwatcher_output"),
+						  help='Path to the base directory where experiment reports shall be saved')
+	arg_data_basedir = \
+	io_group.add_argument('-d', '--data_basedir',
 						  action=rw_dir,
 						  default='/data',
 						  help='Path to the directory where basecalled data is saved')
@@ -91,44 +88,52 @@ def main_and_args():
 						  action=r_dir,
 						  default='/var/log/MinKNOW',
 						  help='''Path to the base directory of GridIONs log files''')
-	io_group.add_argument('-r', '--resources_dir',
-						  action=r_dir,
-						  default=os.path.join(package_dir,'resources'),
-						  help='''Path to the directory containing template files and resources 
-							   for the html pages (default: PACKAGE_DIR/resources)''')
+	#io_group.add_argument('-r', '--resources_dir',
+	#					  action=r_dir,
+	#					  default=os.path.join(package_dir,'resources'),
+	#					  help='''Path to the directory containing template files and resources 
+	#						   for the html pages (default: PACKAGE_DIR/resources)''')
 	io_group.add_argument('--logfile',
 						  help='''File in which logs will be safed''')
+
+	sp_arguments = parser.add_argument_group('Statsparser arguments',
+										   'Arguments passed to statsparser for formatting html pages')
+	sp_arguments.add_argument('--statsparser_args',
+							action=parse_statsparser_args,
+							default=[],
+							help='''Arguments that are passed to the statsparser.
+								   See a full list of available arguments with --statsparser_args " -h" ''')
 
 	exe_group = parser.add_argument_group('Executables paths', 
 										  'Paths to mandatory executables')
 	exe_group.add_argument('--watchnchop_path',
 						   action=r_file,
-						   default='/home/grid/scripts/watchnchop_update1.pl',
+						   default='/home/grid/scripts/watchnchop_update2.pl',
 						   help='''Path to the watchnchop executable''')
-	exe_group.add_argument('--statsparser_path',
-						   action=r_file,
-						   default=os.path.join(get_script_dir(),'statsparser'),
-						   help='''Path to statsparser.py (default: PACKAGE_SCRIPT_PATH/statsparser)''')
-	exe_group.add_argument('--python3_path',
-						   action=r_file,
-						   default=sys.executable,
-						   help='''Path to the python3 executable (default: sys.executable)''')
-	exe_group.add_argument('--perl_path',
-						   action=r_file,
-						   default='/usr/bin/perl',
-						   help='''Path to the perl executable''')
+	#exe_group.add_argument('--statsparser_path',
+	#					   action=r_file,
+	#					   default=os.path.join(get_script_dir(),'statsparser'),
+	#					   help='''Path to statsparser.py (default: PACKAGE_SCRIPT_PATH/statsparser)''')
+	#exe_group.add_argument('--python3_path',
+	#					   action=r_file,
+	#					   default=sys.executable,
+	#					   help='''Path to the python3 executable (default: sys.executable)''')
+	#exe_group.add_argument('--perl_path',
+	#					   action=r_file,
+	#					   default='/usr/bin/perl',
+	#					   help='''Path to the perl executable''')
 
-	general_group = parser.add_argument_group('General options', 
-											  'Advanced options influencing the program execution')
+	general_group = parser.add_argument_group('General arguments', 
+											  'Advanced arguments influencing the program execution')
 	general_group.add_argument('--bc_kws',
 							   nargs='*',
-							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'barcod', 'Barcode'],
+							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'arcod'],
 							   help='''if at least one of these key words is a substring of the run name,
 									   then watchnchop is executed with argument -b for barcode''')
 	general_group.add_argument('-u', '--update_interval',
 							   type=int,
-							   default=300,
-							   help='Time inverval (in seconds) for updating the stats webpage contents')
+							   default=200,
+							   help='time inverval (in seconds) for updating the overview page content')
 	general_group.add_argument('-m', '--ignore_file_modifications',
 							   action='store_true',
 							   help='''Ignore file modifications and only consider file creations regarding 
@@ -148,68 +153,87 @@ def main_and_args():
 							help="Show program's version number and exit")
 	help_group.add_argument('-v', '--verbose',
 							action='store_true',
-							help='Additional status information is printed to stdout')
-	help_group.add_argument('-q', '--quiet', #TODO: implement
+							help='Additional debug messages are printed to stdout')
+	help_group.add_argument('-q', '--quiet',
 							action='store_true',
-							help='Only error messages are printed to stdout')
-
+							help='Only errors and warnings are printed to stdout')
 
 	args = parser.parse_args()
 
+
 	ns = argparse.Namespace()
-	arg_basedir(parser, ns, args.database_dir, '') # call action
+	arg_data_basedir(parser, ns, args.data_basedir, '') # call action
 
 	#### main #####
 
+	for p in [args.output_dir,
+			  os.path.join(args.output_dir, 'runs'),
+			  os.path.join(args.output_dir, 'qc'),
+			  os.path.join(args.output_dir, 'logs')]:
+		if not os.path.exists(p):
+			os.makedirs(p)
+
 	global logger
 	if args.verbose:
-		verbosity = logging.DEBUG
+		loglvl = logging.DEBUG
 	elif args.quiet:
-		verbosity = logging.WARNING
+		loglvl = logging.WARNING
 	else:
-		verbosity = logging.INFO
-	initLogger(logfile=args.logfile, level=verbosity)
+		loglvl = logging.INFO
+	if not args.logfile:
+		args.logfile = os.path.join(args.output_dir, 
+									'logs', 
+									"{}_{}_{}.log".format(datetime.now().strftime("%Y-%m-%d_%H:%M"),
+														  hostname,
+														  loglvl))
+	initLogger(logfile=args.logfile, level=loglvl)
 
 	logger = logging.getLogger(name='gw')
 
 	logger.info("##### starting gridIONwatcher {} #####\n".format(__version__))
 
-	global ALL_RUNS
-
-	logger.info("setting up GridION status page environment")
-	global UPDATE_STATUS_PAGE
-	if not os.path.exists(args.status_page_dir):
-		os.makedirs(args.status_page_dir)
-	if not os.path.exists(os.path.join(args.status_page_dir, 'res')):
-		os.makedirs(os.path.join(args.status_page_dir, 'res'))
+	global UPDATE_OVERVIEW
+	logger.info("setting up GridION overview page environment")
+	if not os.path.exists(os.path.join(args.output_dir, 'res')):
+		os.makedirs(os.path.join(args.output_dir, 'res'))
 	for res_file in ['style.css', 'flowcell.png', 'no_flowcell.png']:
-		copyfile(os.path.join(args.resources_dir, res_file), 
-				 os.path.join(args.status_page_dir, 'res', res_file))
+		copyfile(os.path.join(resources_dir, res_file), 
+				 os.path.join(args.output_dir, 'res', res_file))
 
-	logger.info("loading previous runs from database:")
-	load_runs_from_database(args.database_dir)
+	global ALL_RUNS
+	global ALL_RUNS_LOCK
+	global UPDATE_OVERVIEW
+	#logger.info("loading previous runs from database:")
+	#load_runs_from_database(args.database_dir)
+	import_qcs(os.path.join(args.output_dir, "qc"))
+	import_runs(os.path.join(args.output_dir, "runs"))
 
-	logger.info("starting watchers:")
+	logger.info("starting to observe runs directory for changes to directory names")
+	observed_dir = os.path.join(args.output_dir, 'runs')
+	event_handler = RunsDirsEventHandler(observed_dir)
+	observer = Observer()
+	observer.schedule(event_handler, 
+					  observed_dir, 
+					  recursive=True)
+	observer.start()
+
+	logger.info("starting channel watchers:")
 	watchers = []
 	for channel in range(5):
 		watchers.append(Watcher(args.minknow_log_basedir, 
 								channel, 
 								args.ignore_file_modifications, 
-								args.database_dir, 
+								args.output_dir, 
 								args.data_basedir, 
 								args.statsparser_args,
 								args.update_interval,
 								args.no_watchnchop,
-								args.resources_dir,
 								args.watchnchop_path,
-								args.statsparser_path,
-								args.python3_path,
-								args.perl_path,
 								args.bc_kws))
 
-	logger.info("initiating GridION status page")
-	update_status_page(watchers, args.resources_dir, args.status_page_dir)
-	webbrowser.open('file://' + os.path.realpath(os.path.join(args.status_page_dir, "GridIONstatus.html")))
+	logger.info("initiating GridION overview page")
+	update_overview(watchers, args.output_dir)
+	webbrowser.open('file://' + os.path.realpath(os.path.join(args.output_dir, "{}_overview.html".format(hostname))))
 
 	#w_fps = [[],[],[],[],[]]
 	#for i,watcher in enumerate(watchers):
@@ -237,71 +261,109 @@ def main_and_args():
 		while True:
 			for watcher in watchers:
 				watcher.check_q()
-			if UPDATE_STATUS_PAGE:
-				update_status_page(watchers, args.resources_dir, args.status_page_dir)
-				UPDATE_STATUS_PAGE = False
-			time.sleep(0.25)
+			if UPDATE_OVERVIEW:
+				update_overview(watchers, args.output_dir)
+				UPDATE_OVERVIEW = False
+			time.sleep(0.2)
 			n += 1
-			if n == 80:
+			if n == 100:
 				n = 0
-				UPDATE_STATUS_PAGE = True
+				UPDATE_OVERVIEW = True
 	except KeyboardInterrupt:
-	#except:
-		#logger.info("### Collected information ###")
 		for watcher in watchers:
 			watcher.observer.stop()
 			if watcher.spScheduler:
 				if watcher.spScheduler.is_alive():
 					watcher.spScheduler.join(timeout=0.05)
-			#try:
-			#	watcher.logfile.close()
-			#except:
-			#	logger.warning("could not close watcher's logfile")
+			if watcher.wcScheduler:
+				if watcher.wcScheduler.is_alive():
+					watcher.wcScheduler.join(timeout=0.05)
 	for watcher in watchers:
 		logger.info("joining GA{}0000's observer".format(watcher.channel))
 		watcher.observer.join()
 		if watcher.spScheduler:
-			if watcher.spScheduler.is_alive():
-				logger.info("joining GA{}0000's scheduler".format(watcher.channel))
-				if self.spScheduler.is_alive():
-					watcher.spScheduler.join(1.2)
+			if watcher.spScheduler:
+				if watcher.spScheduler.is_alive():
+					logger.info("joining GA{}0000's statsparser scheduler".format(watcher.channel))
+					watcher.spScheduler.join(timeout=1.2)
+			if watcher.wcScheduler:
+				if watcher.wcScheduler.is_alive():
+					logger.info("joining GA{}0000's watchnchop scheduler".format(watcher.channel))
+					watcher.wcScheduler.join(timeout=1.2)
 
-def load_runs_from_database(database_dir):
-	for fn in os.listdir(database_dir):
-		fp = os.path.join(database_dir, fn)
+def add_database_entry(flowcell, run_data, mux_scans):
+	ALL_RUNS_LOCK.acquire()
+	#TODO: check for all mandatory entries
+	asic_id_eeprom = flowcell['asic_id_eeprom']
+	run_id = run_data['run_id']
+	if asic_id_eeprom in ALL_RUNS:
+		if run_id in ALL_RUNS[asic_id_eeprom]:
+			logger.warning("{} exists multiple times in database!".format(run_id))
+			logger.warning("conflicting runs: {}, {}".format(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input'],
+															 run_data['user_filename_input']))
+			logger.warning("conflict generating report file: {}".format(fn))
+			ALL_RUNS_LOCK.release()
+			return False
+	else:
+		ALL_RUNS[asic_id_eeprom] = {}
+	
+	ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell'	: flowcell,
+										'run_data'	: run_data,
+										'mux_scans'	: mux_scans}
+	logger.info('{} - added experiment "{}" performed on flowcell "{}" on "{}"'.format(asic_id_eeprom, 
+																					   run_data['experiment_type'], 
+																					   flowcell['flowcell_id'], 
+																					   run_data['protocol_start']))
+	ALL_RUNS_LOCK.release()
+	return True
+
+def import_qcs(qc_dir):
+	logger.info("importing platform qc entries from files in directory {}".format(qc_dir))
+	for fp in [os.path.join(qc_dir, fn) for fn in os.listdir(qc_dir) if fn.endswith('.json')]:
 		if os.path.isfile(fp):
 			with open(fp, "r") as f:
 				try:
 					flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
 				except:
-					logger.warning("Failed to load {}, probably the json format is corrupt!".format(fn))
+					logger.warning("failed to parse {}, json format or data structure corrupt".format(fn))
 					continue
+			if not add_database_entry(flowcell, run_data, mux_scans):
+				logger.error("failed to add content from {} to the database".format(fp))
+				continue
 
-				asic_id_eeprom = flowcell['asic_id_eeprom']
-				run_id = run_data['run_id']
-				if asic_id_eeprom in ALL_RUNS:
-					if run_id in ALL_RUNS[asic_id_eeprom]:
-						logger.warning("{} exists multiple times in database entry for flowcell {}!".format(run_id, 
-																										  asic_id_eeprom))
-						logger.warning("conflicting runs: {}, {}".format(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input'],
-																		 run_data['user_filename_input']))
-						logger.warning("conflict generating report file: {}".format(fn))
+def import_runs(base_dir, refactor=False):
+	logger.info("importing sequencing run entries from files in directory {}".format(base_dir))
+	for user_filename_input in [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]:
+		run_dir = os.path.join(base_dir, user_filename_input)
+		for sample in [d for d in os.listdir(run_dir) if os.path.isdir(os.path.join(run_dir, d))]:
+			sample_dir = os.path.join(run_dir, sample)
+			for fp in [os.path.join(sample_dir, fn) for fn in os.listdir(sample_dir) if fn.endswith('.json')]:
+				if os.path.isfile(fp):
+					with open(fp, "r") as f:
+						try:
+							flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
+						except:
+							logger.warning("failed to parse {}, json format or data structure corrupt".format(fn))
+							continue
+					# temporarily change attributes user_filename_input and sample according to directory names
+					prev = (run_data['user_filename_input'] if 'user_filename_input' in run_data else None, 
+							run_data['sample'] if 'sample' in run_data else None)
+					changed = prev == (user_filename_input, sample)
+					run_data['user_filename_input'] = user_filename_input
+					run_data['sample'] = sample
+					if refactor and changed:
+						# make changes permanent
+						logging.info("writing changes to attributes 'user_filename_input' and 'sample' to file")
+						data = (flowcell, run_data, mux_scans)
+						with open( fp, 'w') as f:
+							print(json.dumps(data, indent=4), file=f)
+					
+					if not add_database_entry(flowcell, run_data, mux_scans):
+						logger.error("failed to add content from {} to the database".format(fp))
 						continue
-				else:
-					ALL_RUNS[asic_id_eeprom] = {}
-				
-				ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': flowcell,
-												 'run_data': run_data,
-												 'mux_scans': mux_scans}
-				try:
-					logger.info('{} - loaded experiment "{}" performed on flowcell "{}" on "{}"'.format(asic_id_eeprom, 
-																								  run_data['experiment_type'], 
-																								  flowcell['flowcell_id'], 
-																								  run_data['protocol_start']))
-				except:
-					pass
 
-def update_status_page(watchers, resources_dir, status_page_dir):
+def update_overview(watchers, output_dir):
+	ALL_RUNS_LOCK.acquire()
 	channel_to_css = {0:"one", 1:"two", 2:"three", 3:"four", 4:"five"}
 
 	with open(os.path.join(resources_dir, 'gridIONstatus_brick.html'), 'r') as f:
@@ -372,62 +434,43 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 4 total']),
 						""
 						)
-				# case only flowcell_runs:
-				elif latest_qc == None and flowcell_runs:
-					runs_string = '<p><u>Runs</u>:<br><br>'
-					for run in flowcell_runs:
-						relative_path = "NA"
-						if 'relative_path' in ALL_RUNS[asic_id_eeprom][run]['run_data']:
-							if ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']:
-								relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
-						runs_string += '<a href="{0}" target="_blank">{1}</a><br>'.format(
-							os.path.join(watcher.data_basedir,relative_path,'filtered','results.html'),
-							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
-					runs_string += '</p>'
-
-					flowcell_info_brick = flowcell_info_brick.format(
-						channel_to_css[watcher.channel],
-						ALL_RUNS[asic_id_eeprom][flowcell_runs[0]]['flowcell']['flowcell_id'],
-						"",
-						runs_string
-						)
-				# case both:
 				else:
 					runs_string = '<p><u>Runs</u>:<br><br>'
 					for run in flowcell_runs:
-						relative_path = "NA"
-						if 'relative_path' in ALL_RUNS[asic_id_eeprom][run]['run_data']:
-							if ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']:
-								relative_path = ALL_RUNS[asic_id_eeprom][run]['run_data']['relative_path']
-						runs_string += '<a href="{0}" target="_blank">{1}</a><br>'.format(
-							os.path.join(watcher.data_basedir,relative_path,'filtered','results.html'),
-							ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input'])
+						user_filename_input = ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input']
+						sample = ALL_RUNS[asic_id_eeprom][run]['run_data']['sample']
+						link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
+						runs_string += '<a href="{0}" target="_blank">{1}</a><br>'.format(link, user_filename_input)
 					runs_string += '</p>'
 
-					flowcell_info_brick = flowcell_info_brick.format(
-						channel_to_css[watcher.channel],
-						ALL_RUNS[asic_id_eeprom][latest_qc]['flowcell']['flowcell_id'],
-						'<p><u>Latest QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
-							dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start']).date(),
-							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group * total'],
-							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 1 total'],
-							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 2 total'],
-							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 3 total'],
-							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 4 total']),
-						runs_string
-						)
+					# case only flowcell_runs:
+					if latest_qc == None and flowcell_runs:
+						flowcell_info_brick = flowcell_info_brick.format(
+							channel_to_css[watcher.channel],
+							ALL_RUNS[asic_id_eeprom][flowcell_runs[0]]['flowcell']['flowcell_id'],
+							"",
+							runs_string
+							)
+					# case both:
+					else:
+						flowcell_info_brick = flowcell_info_brick.format(
+							channel_to_css[watcher.channel],
+							ALL_RUNS[asic_id_eeprom][latest_qc]['flowcell']['flowcell_id'],
+							'<p><u>Latest QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
+								dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start']).date(),
+								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group * total'],
+								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 1 total'],
+								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 2 total'],
+								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 3 total'],
+								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 4 total']),
+							runs_string
+							)
 
 		gridIONstatus_brick =  gridIONstatus_brick.format(flowcell_brick + "\n{0}",
 														  flowcell_info_brick + "\n{1}")
 
 
 	gridIONstatus_brick = gridIONstatus_brick.format("", "")
-
-	
-	with open(os.path.join(resources_dir, 'gridIONstatus_bottom_brick.html'), 'r') as f:
-		bottom_brick = f.read()
-
-	blank_line = '<tr>\n<th><a href="{}" target="_blank">{}</a></th>\n<td>{}</td>\n<td>{}</td>\n<td>{}</td>\n<td>{}</td></tr>'
 
 	all_runs_info = []
 	for asic_id_eeprom in ALL_RUNS:
@@ -439,41 +482,64 @@ def update_status_page(watchers, resources_dir, status_page_dir):
 				if 'protocol_end' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']:
 					if ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_end']:
 						protocol_end = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_end'])
-						#time_diff = "{}".format(protocol_end - protocol_start)[:-7]
 						time_diff = "{}".format(protocol_end - protocol_start).split('.')[0]
-				#protocol_start = "{}".format(protocol_start)[:-7]
-				protocol_start = "{}".format(protocol_start).split('.')[0]
 				sequencing_kit = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sequencing_kit']
 				user_filename_input = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input']
-				minion_id = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['minion_id']
-				#link = os.path.join(watchers[0].data_basedir, 
-				#					user_filename_input,
-				#					minion_id,
-				#					'filtered',
-				#					'results.html')
-				relative_path = "NA"
-				if 'relative_path' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']:
-					if ALL_RUNS[asic_id_eeprom][run_id]['run_data']['relative_path']:
-						relative_path = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['relative_path']
-				link = os.path.join(watchers[0].data_basedir,
-									relative_path,
-									'filtered',
-									'results.html')
-				all_runs_info.append( (link, user_filename_input, minion_id, sequencing_kit, protocol_start, time_diff) )
+				sample = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sample']
 
-	all_runs_info = sorted(all_runs_info, key=itemgetter(1), reverse=True)
+				link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
+				all_runs_info.append( (link, user_filename_input, sample, sequencing_kit, protocol_start, time_diff) )
 
-	for run_info in all_runs_info:
-		bottom_brick = bottom_brick.format(blank_line.format(run_info[0], 
-															 run_info[1], 
-															 run_info[2], 
+	all_runs_info = sorted(all_runs_info, key=itemgetter(4), reverse=True)
+
+	with open(os.path.join(resources_dir, 'gridIONstatus_bottom_brick.html'), 'r') as f:
+		bottom_brick = f.read()
+	th = '<th rowspan="{}">{}</th>'
+	td_sample = '<th rowspan="{}"><a href="{}" target="_blank">{}</a></th>'
+	blank_line = '<tr>\n{}\n{}\n<td>{}</td>\n<td>{}</td>\n<td>{}</td></tr>'
+
+	run = 0
+	sample = 0
+	grouped = [[[all_runs_info[0]]]] if all_runs_info else [[[]]]
+	for run_info in all_runs_info[1:]:
+		if grouped[run][sample][0][1] == run_info[1]:
+			if grouped[run][sample][0][2] == run_info[2]:
+				grouped[run][sample].append(run_info)
+			else:
+				grouped[run].append( [run_info] )
+				sample += 1
+		else:
+			grouped.append( [[run_info]] )
+			run += 1
+			sample = 0
+	ths = []
+	td_samples = []
+	for run in grouped:
+		ths.append(th.format(sum([len(sample) for sample in run]),		# row_span
+							 run[0][0][1]))	# user_filename_input
+		for sample in run:
+			td_samples.append(td_sample.format(len(sample),		# row_span
+											   sample[0][0],	# link
+											   sample[0][2]))	# sample
+			for i in range(len(sample)):
+				td_samples.append('')
+				ths.append('')
+			td_samples.pop()
+		ths.pop()
+
+	for i,run_info in enumerate(all_runs_info):
+		bottom_brick = bottom_brick.format(blank_line.format(ths[i], 
+															 td_samples[i], 
 															 run_info[3], 
-															 run_info[4], 
+															 run_info[4].strftime("%Y-%m-%d %H:%M"),
 															 run_info[5]) + "\n{0}")
 	bottom_brick = bottom_brick.format("")
 
-	with open(os.path.join(status_page_dir, 'GridIONstatus.html'), 'w') as f:
+	with open(os.path.join(output_dir, "{}_overview.html".format(hostname)), 'w') as f:
 		print(gridIONstatus_brick + bottom_brick, file=f)
+
+	ALL_RUNS_LOCK.release()
+	return
 
 
 class ChannelStatus():
@@ -484,7 +550,8 @@ class ChannelStatus():
 		('sequencing_kit', None),
 		('protocol_start', None),
 		('protocol_end', None),
-		('relative_path', None)
+		('relative_path', None),
+		('sample', None)
 		])
 
 	empty_flowcell = OrderedDict([
@@ -604,7 +671,7 @@ class ChannelStatus():
 
 class WatchnchopScheduler(threading.Thread):
 
-	def __init__(self, perl_path, watchnchop_path, data_basedir, relative_path, user_filename_input, bc_kws, channel):
+	def __init__(self, watchnchop_path, data_basedir, relative_path, user_filename_input, bc_kws, stats_fp, channel):
 		threading.Thread.__init__(self)
 		if getattr(self, 'daemon', None) is None:
 			self.daemon = True
@@ -615,27 +682,39 @@ class WatchnchopScheduler(threading.Thread):
 
 		self.observed_dir = os.path.join(data_basedir, relative_path, 'fastq_pass')
 		# define the command that is to be executed
-		self.cmd = [perl_path,
+		self.cmd = [which('perl'),
 					watchnchop_path,
+					'-o {}'.format(stats_fp),
 					'-v']
 		if len([kw for kw in bc_kws if kw in user_filename_input]) > 0:
 			self.cmd.append('-b')
 		self.cmd.append(os.path.join(data_basedir, relative_path, ''))
-		self.cmd = " ".join(self.cmd)
+		#self.cmd = " ".join(self.cmd)
+		self.process = None
 
 	def run(self):
 		while not self.stoprequest.is_set():
 			if os.path.exists(self.observed_dir):
 				if [fn for fn in os.listdir(self.observed_dir) if fn.endswith('.fastq')]:
 					try:
-						#subprocess.Popen(self.cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+						self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 						pass
 					except:
 						self.logger.error("FAILED to start watchnchop, Popen failed")
 						return
 					self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(self.cmd))
-					return
+					break
 			time.sleep(1)
+		while not self.stoprequest.is_set():
+			time.sleep(1)
+		if self.process:
+			try:
+				self.process.terminate()
+				self.logger.info("TERMINATED watchnchop process")
+			except:
+				self.logger.error("TERMINATING watchnchop process failed")
+		else:
+			self.logger.error("watchnchop was NEVER STARTED: this thread was ordered to kill the watchnchop subprocess before it was started")
 
 	def join(self, timeout=None):
 		self.stoprequest.set()
@@ -644,9 +723,7 @@ class WatchnchopScheduler(threading.Thread):
 
 class StatsparserScheduler(threading.Thread):
 
-	def __init__(self, update_interval, statsfp, statsparser_args, 
-				 user_filename_input, minion_id, flowcell_id, protocol_start,
-				 resources_dir, statsparser_path, python3_path, channel):
+	def __init__(self, update_interval, sample_dir, statsparser_args, channel):
 		threading.Thread.__init__(self)
 		if getattr(self, 'daemon', None) is None:
 			self.daemon = True
@@ -656,16 +733,8 @@ class StatsparserScheduler(threading.Thread):
 		self.logger = logging.getLogger(name='gw.w{}.sps'.format(channel+1))
 
 		self.update_interval = update_interval
-		self.resources_dir = resources_dir
-		self.statsfp = statsfp
-		self.statsparser_path = statsparser_path
+		self.sample_dir = sample_dir
 		self.statsparser_args = statsparser_args
-		self.user_filename_input = user_filename_input
-		self.minion_id = minion_id
-		self.flowcell_id = flowcell_id
-		self.protocol_start = protocol_start
-		self.python3_path = python3_path
-		
 
 	def run(self):
 		page_opened = False
@@ -673,25 +742,22 @@ class StatsparserScheduler(threading.Thread):
 			last_time = time.time()
 			self.logger.info("STARTING STATSPARSING")
 
-			if os.path.exists(self.statsfp):
-				cmd = [self.statsparser_path, self.statsfp,
-					   '--user_filename_input', self.user_filename_input,
-					   '--minion_id', self.minion_id,
-					   '--flowcell_id', self.flowcell_id,
-					   '--protocol_start', self.protocol_start,
-					   '--resources_dir', self.resources_dir,
+			stats_fns = [fn for fn in os.listdir(os.abspath(self.sample_dir)) if fn.endswith('stats.csv')] if os.path.exists(os.abspath(self.sample_dir)) else []
+			if stats_fns:
+				cmd = [os.path.join(get_script_dir(),'statsparser'),
+					   self.sample_dir,
 					   '-q']
 				cmd.extend(self.statsparser_args)
-				#cp = subprocess.run(cmd) # waits for process to complete
-				#if cp.returncode == 0:
-				#	self.logger.info("STATSPARSING COMPLETED")
-				#	if not page_opened:
-				#		basedir = os.path.abspath(os.path.dirname(self.statsfp))
-				#		fp = os.path.join(basedir, 'results.html')
-				#		self.logger.info("OPENING " + fp)
-				#		page_opened = webbrowser.open('file://' + os.path.realpath(fp))
-				#else:
-				#	self.logger.error("ERROR while running statsparser")
+				cp = subprocess.run(cmd) # waits for process to complete
+				if cp.returncode == 0:
+					self.logger.info("STATSPARSING COMPLETED")
+					if not page_opened:
+						basedir = os.path.abspath(self.sample_dir)
+						fp = os.path.join(basedir, 'report.html')
+						self.logger.info("OPENING " + fp)
+						page_opened = webbrowser.open('file://' + os.path.realpath(fp))
+				else:
+					self.logger.error("ERROR while running statsparser")
 			else:
 				self.logger.warning("statsfile does not exist (yet?)")
 
@@ -707,26 +773,21 @@ class StatsparserScheduler(threading.Thread):
 
 class Watcher():
 
-	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, database_dir, 
-				 data_basedir, statsparser_args, update_interval, no_watchnchop,
-				 resources_dir, watchnchop_path, statsparser_path, python3_path, perl_path, bc_kws):
-		#self.q = queue.SimpleQueue()
+	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, output_dir, data_basedir, 
+				 statsparser_args, update_interval, no_watchnchop, watchnchop_path, bc_kws):
 		self.q = queue.PriorityQueue()
 		self.watchnchop = not no_watchnchop
 		self.channel = channel
-		self.database_dir = database_dir
+		self.output_dir = output_dir
 		self.data_basedir = data_basedir
 		self.statsparser_args = statsparser_args
 		self.update_interval = update_interval
-		self.resources_dir = resources_dir
 		self.watchnchop_path = watchnchop_path
-		self.statsparser_path = statsparser_path
-		self.python3_path = python3_path
-		self.perl_path = perl_path
+		self.bc_kws = bc_kws
+
 		self.observed_dir = os.path.join(minknow_log_basedir, "GA{}0000".format(channel+1))
 		self.event_handler = LogFilesEventHandler(self.q, ignore_file_modifications, channel)
 		self.observer = Observer()
-		self.bc_kws = bc_kws
 
 		self.observer.schedule(self.event_handler, 
 							   self.observed_dir, 
@@ -755,7 +816,7 @@ class Watcher():
 				self.parse_bream_log_line(line)
 
 	def parse_server_log_line(self, line):
-		global UPDATE_STATUS_PAGE
+		global UPDATE_OVERVIEW
 		dict_content = {}
 		overwrite = False
 
@@ -764,32 +825,40 @@ class Watcher():
 				dict_content[m.group(1)] = m.group(2)
 			overwrite = True
 			self.logger.info("PROTOCOL START")
-			UPDATE_STATUS_PAGE = True
+			UPDATE_OVERVIEW = True
 			self.channel_status.run_data['protocol_start'] = line[:23]
 
 		elif	"protocol_finished" 									in line:
 			self.logger.info("PROTOCOL END")
-			UPDATE_STATUS_PAGE = True
+			UPDATE_OVERVIEW = True
 			self.channel_status.run_data['protocol_end'] = line[:23]
 			if self.channel_status.mux_scans:
-				self.save_report()
+				self.save_logdata()
 			self.channel_status.run_finished()
 			if self.spScheduler:
 				if self.spScheduler.is_alive():
 					self.spScheduler.join(1.2)
 			self.spScheduler = None
+			if self.wcScheduler:
+				if self.wcScheduler.is_alive():
+					self.wcScheduler.join(1.2)
+			self.wcScheduler = None
 
 		elif	"[engine/info]: : flowcell_discovered" 					in line:
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 				dict_content[m.group(1)] = m.group(2)
 			overwrite = True
 			self.logger.info("FLOWCELL DISCOVERED")
-			UPDATE_STATUS_PAGE = True
+			UPDATE_OVERVIEW = True
 			self.channel_status.flowcell_disconnected()
 			if self.spScheduler:
 				if self.spScheduler.is_alive():
 					self.spScheduler.join(1.2)
 			self.spScheduler = None
+			if self.wcScheduler:
+				if self.wcScheduler.is_alive():
+					self.wcScheduler.join(1.2)
+			self.wcScheduler = None
 
 		elif   	"[engine/info]: : data_acquisition_started"				in line:# or \
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
@@ -798,7 +867,7 @@ class Watcher():
 
 		elif	"flowcell_disconnected"									in line:
 			self.logger.info("FLOWCELL DISCONNECTED")
-			UPDATE_STATUS_PAGE = True
+			UPDATE_OVERVIEW = True
 			self.channel_status.flowcell_disconnected()
 
 
@@ -806,7 +875,7 @@ class Watcher():
 			self.channel_status.update(dict_content, overwrite)
 
 	def parse_bream_log_line(self, line):
-		global UPDATE_STATUS_PAGE
+		global UPDATE_OVERVIEW
 		dict_content = {}
 		overwrite = False
 
@@ -824,70 +893,60 @@ class Watcher():
 		elif	"bream.core.base.database - INFO - group"				in line:
 			for m in re.finditer("group ([0-9]+) has ([0-9]+) channels in mux ([0-9]+)", line):
 				self.channel_status.update_mux(m.group(1), m.group(2), m.group(3), line[:23])
-				UPDATE_STATUS_PAGE = True
+				UPDATE_OVERVIEW = True
 
 		elif	"[user message]--> group "								in line.lower():
 			for m in re.finditer("roup ([0-9]+) has ([0-9]+) active", line):
 				self.channel_status.update_mux_group_totals(m.group(1), m.group(2), line[:23])
-				UPDATE_STATUS_PAGE = True
+				UPDATE_OVERVIEW = True
 
 		elif	"[user message]--> A total of"							in line:
 			for m in re.finditer("total of ([0-9]+) single pores", line):
 				self.channel_status.update_mux_group_totals("*", m.group(1), line[:23])
-				UPDATE_STATUS_PAGE = True
+				UPDATE_OVERVIEW = True
 
 		elif	"INFO - [user message]--> Finished Mux Scan"			in line:
 			self.logger.info("MUX SCAN FINISHED")
-			UPDATE_STATUS_PAGE = True
+			UPDATE_OVERVIEW = True
 			self.channel_status.new_mux(line[:23])
-			self.save_report()
+			self.save_logdata()
 
 		elif	"platform_qc.PlatformQCExperiment'> finished"			in line:
 			self.logger.info("QC FINISHED")
-			UPDATE_STATUS_PAGE = True
+			UPDATE_OVERVIEW = True
 
 		elif	"INFO - STARTING MAIN LOOP"								in line:
 			dict_content["sequencing_start_time"] = line[:23]
 			self.logger.info("SEQUENCING STARTS")
-			UPDATE_STATUS_PAGE = True
+			UPDATE_OVERVIEW = True
 
 			#try to identify the path in which the experiment data is saved, relative to data_basedir
 			self.channel_status.find_relative_path(self.data_basedir)
-			if self.channel_status.run_data['relative_path']:
-				#start watchnchop (porechop & filter & rsync)
-				if self.watchnchop:
-					self.start_watchnchop()
 
-				#start creation of plots at regular time intervals
-				if self.spScheduler:
-					if self.spScheduler.is_alive():
-						self.spScheduler.join(1.1)
-				
-				relative_path = self.channel_status.run_data['relative_path']
-				statsfp = os.path.join(self.data_basedir,
-									   relative_path,
-									   'filtered',
-									   'stats.txt')
-				self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for stats file '.format(self.update_interval/1000) + statsfp)
-				self.spScheduler = StatsparserScheduler(self.update_interval, 
-														statsfp, 
-														self.statsparser_args, 
-														self.channel_status.run_data['user_filename_input'], 
-														"GA{}0000".format(self.channel+1), 
-														self.channel_status.flowcell['flowcell_id'], 
-														self.channel_status.run_data['protocol_start'],
-														self.resources_dir,
-														self.statsparser_path,
-														self.python3_path,
-														self.channel)
-				self.spScheduler.start()
-			else:
-				self.logger.warning("not started watchnchop and statsparser because relative path unknown")
+			#start watchnchop (porechop & filter & rsync)
+			if self.watchnchop:
+				self.start_watchnchop()
+
+			#start creation of plots at regular time intervals
+			if self.spScheduler:
+				if self.spScheduler.is_alive():
+					self.spScheduler.join(1.1)
+			sample_dir = os.path.join(self.output_dir,
+									  'runs',
+									  self.channel_status.run_data['user_filename_input'],
+									  self.channel_status.run_data['user_filename_input'])#, #TODO: change to sample
+									  #self.channel_status.run_data['run_id'] + '_stats.csv')
+			self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for sample dir {}'.format(self.update_interval/1000, sample_dir))
+			self.spScheduler = StatsparserScheduler(self.update_interval, 
+													sample_dir, 
+													self.statsparser_args, 
+													self.channel)
+			self.spScheduler.start()
 
 		if dict_content:
 			self.channel_status.update(dict_content, overwrite)
 
-	def save_report(self):
+	def save_logdata(self):
 		for key in ['experiment_type', 'run_id']:
 			if not self.channel_status.run_data[key]:
 				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
@@ -898,38 +957,53 @@ class Watcher():
 				return
 
 		fn = []
-		if "qc" in self.channel_status.run_data['experiment_type']:
+		if "qc" in self.channel_status.run_data['experiment_type'].lower():
 			if self.channel_status.run_data['user_filename_input']:
 				self.logger.warning("NOT SAVING REPORT for {} because it is not absolutely clear if it a qc or sequencing run".format(self.channel_status.run_data['run_id']))
 				return
 			fn.append("QC")
+			fn.append(self.channel_status.flowcell['flowcell_id'])
+			fn.append(self.channel_status.run_data['run_id'])
+			target_dir = os.path.join(self.output_dir, 
+									  'qc')
 		else:
 			if not self.channel_status.run_data['user_filename_input']:
 				self.logger.warning("NOT SAVING REPORT because sequencing run is missing crucial attribute 'user_filename_input'")
 				return
-			fn.append(self.channel_status.run_data['user_filename_input'])
-		fn.append(self.channel_status.flowcell['flowcell_id'])
-		fn.append(self.channel_status.run_data['run_id'])
-		fn = "_".join(fn) + ".txt"
+			#fn.append("SEQ")
+			#fn.append(self.channel_status.run_data['user_filename_input'])
+			#fn.append(self.channel_status.flowcell['flowcell_id'])
+			fn.append(self.channel_status.run_data['run_id'])
+			fn.append('logdata')
+			target_dir = os.path.join(self.output_dir,
+									  'runs', 
+									  self.channel_status.run_data['user_filename_input'], 
+									  self.channel_status.run_data['user_filename_input']) # TODO: change to sample
+		fn = "_".join(fn) + ".json"
 
+		self.logger.info("saving log data to file {}".format(os.path.join(target_dir, fn)))
 		data = (self.channel_status.flowcell, self.channel_status.run_data, self.channel_status.mux_scans)
-		with open( os.path.join(self.database_dir, fn), 'w') as f:
+		if not os.path.exists(target_dir):
+			os.makedirs(target_dir)
+		with open( os.path.join(target_dir, fn), 'w') as f:
 			print(json.dumps(data, indent=4), file=f)
 
+		ALL_RUNS_LOCK.acquire()
 		run_id = self.channel_status.run_data['run_id']
 		asic_id_eeprom = self.channel_status.flowcell['asic_id_eeprom']
 		if asic_id_eeprom in ALL_RUNS:
 			ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': data[0],
-											 'run_data': data[1],
-											 'mux_scans': data[2]}
+												'run_data': data[1],
+												'mux_scans': data[2]}
 		else:
 			ALL_RUNS[asic_id_eeprom] = {}
 			ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell': data[0],
-											 'run_data': data[1],
-											 'mux_scans': data[2]}
+												'run_data': data[1],
+												'mux_scans': data[2]}
+		ALL_RUNS_LOCK.release()
 
 	def start_watchnchop(self):
-		for key in ['user_filename_input', 'relative_path']:
+		for key in ['user_filename_input', 'relative_path', 'run_id']:
 			if not self.channel_status.run_data[key]:
 				self.logger.warning("NOT executing watchnchop for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
 				return
@@ -939,12 +1013,18 @@ class Watcher():
 				self.logger.error("watchnchop was not started successfully for previous run!")
 				self.wcScheduler.join(1.2)
 
-		self.wcScheduler = WatchnchopScheduler(self.perl_path,
-											   self.watchnchop_path,
+		stats_fp = os.path.join(self.output_dir,
+								'runs',
+								self.channel_status.run_data['user_filename_input'],
+								self.channel_status.run_data['user_filename_input'], #TODO: change to sample name
+								"{}_stats.csv".format(self.channel_status.run_data['run_id'])
+								)
+		self.wcScheduler = WatchnchopScheduler(self.watchnchop_path,
 											   self.data_basedir,
 											   self.channel_status.run_data['relative_path'],
 											   self.channel_status.run_data['user_filename_input'],
 											   self.bc_kws,
+											   stats_fp,
 											   self.channel)
 		self.wcScheduler.start()
 		return
@@ -1089,6 +1169,66 @@ class LogFilesEventHandler(FileSystemEventHandler):
 			self.q.put( (dateutil.parser.parse(line[:23]), 'bream', line) )
 		except ValueError:
 			self.logger.debug("the timestamp of the following line in the bream log file could not be parsed:\n{}".format(line))
+
+
+class RunsDirsEventHandler(FileSystemEventHandler):
+
+	def __init__(self, observed_dir):
+		super(RunsDirsEventHandler, self).__init__()
+		self.observed_dir = os.path.abspath(observed_dir)
+		self.logger = logging.getLogger(name='gw.reh')
+
+	def on_moved(self, event):
+		if event.is_directory or (self.depth(event.src_path) == 3 and event.src_path.endswith('.json')):
+			self.logger.info("moved {}, depth {}, \ndest {}".format(event.src_path, self.depth(event.src_path), event.dest_path))
+			if self.observed_dir in event.dest_path and self.depth(event.dest_path) == self.depth(event.src_path):
+				#self.logger.info("affected runs: {}".format(self.affected_runs(event.src_path)))
+				self.reload_runs()
+			else:
+				self.on_deleted(event)
+
+	def on_created(self, event):
+		if event.is_directory:
+			self.logger.info("created directory {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+			if 1 <= self.depth(event.src_path) <= 2:
+				self.reload_runs()
+		elif self.depth(event.src_path) == 3 and event.src_path.endswith('.json'):
+			self.logger.info("created file {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+			self.reload_runs()
+
+	def on_modified(self, event):
+		if event.is_directory:
+			self.logger.info("modified directory {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+
+	def on_deleted(self, event):
+		if event.is_directory:
+			self.logger.info("deleted directory {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+			if 1 <= self.depth(event.src_path) <= 2:
+				self.reload_runs()
+		elif self.depth(event.src_path) == 3 and event.src_path.endswith('.json'):
+			self.logger.info("deleted file {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+			self.reload_runs()
+
+	def depth(self, src_path):
+		src_path = os.path.abspath(src_path)
+		return len(src_path.replace(self.observed_dir, '').strip('/').split('/'))
+
+	def reload_runs(self):
+		ALL_RUNS_LOCK.acquire()
+		self.logger.info('deleting and re-importing all runs due to changes in the run directory')
+		# delete sequencing runs
+		to_delete = []
+		for asic_id_eeprom in ALL_RUNS:
+			for run_id in ALL_RUNS[asic_id_eeprom]:
+				if 'equenc' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type']:
+					to_delete.append( (asic_id_eeprom, run_id) )
+		for asic_id_eeprom, run_id in to_delete:
+			del ALL_RUNS[asic_id_eeprom][run_id]
+		#reload runs
+		import_runs(self.observed_dir)
+		UPDATE_OVERVIEW = True
+		ALL_RUNS_LOCK.release()
+		return
 
 if __name__ == "__main__":
 	main_and_args()
