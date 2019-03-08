@@ -15,14 +15,13 @@ import logging
 import os
 import shutil
 import argparse
-
-# define logging configuration once for all submudules
-logging.basicConfig(level=logging.INFO,
-						format='[%(asctime)s] %(message)s',
-						datefmt='%Y-%m-%d %H:%M:%S')
-logger = logging.getLogger(__name__)
+from setuptools import Distribution
+from setuptools.command.install import install
+import socket
 
 package_dir = os.path.dirname(os.path.abspath(__file__))
+resources_dir = os.path.join(package_dir,'resources')
+hostname = socket.gethostname()
 
 class ArgHelpFormatter(argparse.HelpFormatter):
 	'''
@@ -90,3 +89,34 @@ def tprint(*args, **kwargs):
 	if not QUIET:
 		print("["+strftime("%H:%M:%S", gmtime())+"] "+" ".join(map(str,args)), **kwargs)
 	sys.stdout.flush()
+
+
+# Taken from https://stackoverflow.com/questions/25066084
+class OnlyGetScriptPath(install):
+    def run(self):
+        # does not call install.run() by design
+        self.distribution.install_scripts = self.install_scripts
+
+def get_script_dir():
+    dist = Distribution({'cmdclass': {'install': OnlyGetScriptPath}})
+    dist.dry_run = True  # not sure if necessary, but to be safe
+    dist.parse_config_files()
+    command = dist.get_command_obj('install')
+    command.ensure_finalized()
+    command.run()
+    return dist.install_scripts
+
+def initLogger(logfile=None, level=logging.INFO):
+	logger = logging.getLogger()
+	formatter = logging.Formatter(fmt='%(asctime)s %(name)-10s - %(levelname)s - %(message)s',
+								  datefmt='%Y-%m-%d %H:%M:%S')
+	if logfile:
+		fh = logging.FileHandler(logfile)
+		fh.setFormatter(formatter)
+	ch = logging.StreamHandler()
+	ch.setFormatter(formatter)
+	if logfile:
+		logger.addHandler(fh)
+	logger.addHandler(ch)
+	logger.setLevel(level)
+

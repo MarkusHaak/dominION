@@ -33,7 +33,8 @@ import re
 from shutil import copyfile
 import warnings
 from .version import __version__
-from .helper import logger, package_dir, ArgHelpFormatter, r_file, r_dir, w_dir
+from .helper import package_dir, ArgHelpFormatter, r_file, r_dir, w_dir, resources_dir
+import json
 
 warnings.filterwarnings("ignore")
 QUIET = False
@@ -65,28 +66,25 @@ def get_argument_parser():
 
 	main_options = argument_parser.add_argument_group('Main options')
 	if __name__ == '__main__':
-		main_options.add_argument('statsfile',
-								  action=r_file,
-								  help='''Path to the stats file containing all necessary information
-								  	   about the sequencing run. Requires a CSV file with "\t" as 
-								  	   seperator, no header and the following columns in given order:
-								  	   read_id, length, qscore, mean_gc, Passed/tooShort, 
-								  	   read_number, pore_index, timestamp, barcode''')
+		main_options.add_argument('input',
+								  help='''Path to a stats file containing read information, or to a directory containing several such files. 
+								  	   Requires CSV files with "\t" as seperator, no header and the following columns in given order:
+								  	   read_id, length, qscore, mean_gc, Passed/tooShort, read_number, pore_index, timestamp, barcode''')
 	main_options.add_argument('-o', '--outdir',
 							  action=w_dir,
 							  default=None,
 							  help='''Path to a directory in which the report files and folders will be saved
-								   (default: directory of statsfile)''')
-	main_options.add_argument('--result_page_refresh_rate',
+								   (default: directory of input)''')
+	main_options.add_argument('--html_refresh_rate',
 							  type=int,
 							  default=120,
-							  help='refresh rate in seconds. (default: 120)')
-	if __name__ == '__main__':
-		main_options.add_argument('--resources_dir',
-								 action=r_dir,
-								 default=os.path.join(package_dir,'resources'),
-								 help='''directory containing template files for creating the results html page.
-								 	  (default: PACKAGE_DIR/resources)''')
+							  help='refresh rate of the html page in seconds')
+	#if __name__ == '__main__':
+	#	main_options.add_argument('--resources_dir',
+	#							 action=r_dir,
+	#							 default=os.path.join(package_dir,'resources'),
+	#							 help='''directory containing template files for creating the results html page.
+	#							 	  (default: PACKAGE_DIR/resources)''')
 
 	plot_options = argument_parser.add_argument_group('Plotting options',
 													  'Arguments changing the appearance of plots')
@@ -113,10 +111,17 @@ def get_argument_parser():
 	# the following should only be set if statsparser is called directly:
 	if __name__ == '__main__':
 		exp_options = argument_parser.add_argument_group('Experiment options',
-														 'Arguments concerning the experiment')
+														 '''Arguments concerning the experiment. Either specify
+														 	a logdata file or all arguments individually.''')
+		exp_options.add_argument('--logdata_file',
+								 action=r_file,
+								 help='path to the report file of this sequencing run (default: <run_id>_stats.json)')
 		exp_options.add_argument('--user_filename_input',
 								 default='Run#####_MIN###_KIT###',
-								 help=' ')
+								 help='run title')
+		exp_options.add_argument('--sample',
+								 default='Run#####_MIN###_KIT###',
+								 help='sample name')
 		exp_options.add_argument('--minion_id',
 								 default='GA#0000',
 								 help=' ')
@@ -151,8 +156,25 @@ def parse_args(argument_parser, ext_args=None):
 	else:
 		args = argument_parser.parse_args()
 
+	if not os.path.exists(args.input):
+		raise argparse.ArgumentTypeError('ERR: path {} does not exist'.format(args.input))
+	elif os.path.isfile(args.input):
+		args.statsfiles = [ args.input ]
+		args.run_ids = [ split(os.path.basename(args.input), '_')[0] ]
+	elif os.path.isdir(args.input):
+		args.statsfiles = []
+		args.run_ids = []
+		for fn in [fn for fn in os.listdir(args.input) if fn.endswith('.csv')]:
+			if os.path.exists(os.path.join(args.input, fn)):
+				args.statsfiles.append(os.path.join(os.path.join(args.input, fn)))
+				args.run_ids.append(fn.split('_')[0])
+		if not args.statsfiles:
+			tprint('ERR: no statsfiles found in directory {}'.format(args.input))
+			exit()
+	tprint('- statsfiles:          {}'.format(args.statsfiles))
+
 	if not args.outdir:
-		args.outdir = os.path.abspath(os.path.dirname(args.statsfile))
+		args.outdir = os.path.abspath(os.path.dirname(args.statsfiles[0]))
 		if not os.path.isdir(args.outdir):
 			raise argparse.ArgumentTypeError('ERR: {} is not a valid directory'.format(args.outdir))
 		if not os.access(args.outdir, os.W_OK):
@@ -161,16 +183,51 @@ def parse_args(argument_parser, ext_args=None):
 	if not os.path.isdir(os.path.join(args.outdir, 'res', 'plots')):
 		os.makedirs(os.path.join(args.outdir, 'res', 'plots'))
 
-	if not os.path.exists(args.resources_dir) or not os.path.isdir(args.resources_dir):
-		raise argparse.ArgumentTypeError('ERR: directory "html_bricks" does not exist'.format(args.outdir))
-		for brick in ["barcode_brick.html",
-					  "bottom_brick.html",
-					  "overview_brick.html",
-					  "top_brick.html"]:
-			if not os.path.isfile(os.path.join(args.resources_dir, brick)):
-				raise argparse.ArgumentTypeError('ERR: file {} does not exist'.format(os.path.join(args.resources_dir, 
-																								   brick)))
+	for brick in ["barcode_brick.html",
+				  "bottom_brick.html",
+				  "overview_brick.html",
+				  "top_brick.html"]:
+		if not os.path.isfile(os.path.join(resources_dir, brick)):
+			raise argparse.ArgumentTypeError('ERR: file {} does not exist'.format(os.path.join(resources_dir, brick)))
 	args.time_intervals = [i*60 for i in args.time_intervals]
+
+
+	base_dir = os.path.abspath(os.path.dirname(args.statsfiles[0]))
+	args.user_filename_input = base_dir.split("/")[-2]
+	args.sample = base_dir.split("/")[-1]
+	if args.logdata_file:
+		with open(args.logdata_file, "r") as f:
+			flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)		
+		args.minion_id = run_data['minion_id']
+		args.flowcell_id = flowcell['flowcell_id']
+		args.protocol_start = run_data['protocol_start']
+
+	else:
+		# combine information of all logdata files found in directory
+		#fp = os.path.join(base_dir, args.run_id + '_logdata.json')
+		#if os.path.exists(fp):
+		#	args.logdata_file = fp
+		#	tprint("guessed logdata file to {}".format(args.logdata_file))
+		#else:
+		#	tprint("unable to find logdata file '{}'".format(fp))
+		args.minion_id, args.flowcell_id, args.protocol_start = [], [], []
+		for fp in [fp.replace('stats.csv', 'logdata.json') for fp in args.statsfiles]:
+			if os.path.exists(fp):
+				with open(fp, "r") as f:
+					flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
+				args.minion_id.append(run_data['minion_id'])
+				args.flowcell_id.append(flowcell['flowcell_id'])
+				args.protocol_start.append(run_data['protocol_start'])
+		args.minion_id = "/".join(set(args.minion_id))
+		args.flowcell_id = "/".join(set(args.flowcell_id))
+		args.protocol_start = min([dateutil.parser.parse(ts) for ts in args.protocol_start]).strftime("%Y-%m-%d %H:%M:%S")
+	tprint('- user_filename_input: {}'.format(args.user_filename_input))
+	tprint('- sample:              {}'.format(args.sample))
+	tprint('- minion_id:           {}'.format(args.minion_id))
+	tprint('- flowcell_id:         {}'.format(args.flowcell_id))
+	tprint('- protocol_start:      {}'.format(args.protocol_start))
+	tprint('- run_id:              {}'.format(args.run_ids))
+
 
 	try:
 		matplotlib.style.use(args.matplotlib_style)
@@ -195,8 +252,8 @@ def main(args=None):
 						"#######################################\n")
 	sys.stdout.flush()
 
-	tprint("Parsing stats file")
-	df = parse_stats(args.statsfile)
+	tprint("Parsing stats files")
+	df = parse_stats(args.statsfiles)
 
 	tprint("Creating stats table")
 	stats_df = stats_table(df)
@@ -319,14 +376,15 @@ def main(args=None):
 	
 	create_html(args.outdir, 
 				stats_df, 
-				args.user_filename_input, 
+				args.user_filename_input,
+				args.sample,
+				args.run_ids, 
 				args.minion_id, 
 				args.flowcell_id, 
 				args.protocol_start, 
-				args.result_page_refresh_rate, 
+				args.html_refresh_rate, 
 				barcodes, 
-				subsets, 
-				args.resources_dir)
+				subsets)
 
 	tprint("Everything done")
 	exit()
@@ -334,14 +392,15 @@ def main(args=None):
 
 def create_html(outdir, 
 				stats_df, 
-				user_filename_input, 
+				user_filename_input,
+				sample,
+				run_ids, 
 				minion_id, 
 				flowcell_id, 
 				protocol_start, 
-				result_page_refresh_rate, 
+				html_refresh_rate, 
 				barcodes, 
-				subsets, 
-				resources_dir):
+				subsets):
 
 	tprint("Parsing stats table to html")
 	html_stats_df = make_html_table(stats_df).replace('valign="top"', 'valign="center"')
@@ -366,22 +425,26 @@ def create_html(outdir,
 						"GA50000":"five",
 						"GA#0000":"unknown"}
 
+	minion_id = minion_id_to_css[minion_id] if minion_id in minion_id_to_css else "unknown"
 	html_content = top_brick.format(user_filename_input, 
 									minion_id, 
 									flowcell_id, 
 									protocol_start, 
-									result_page_refresh_rate, 
-									minion_id_to_css[minion_id],
+									html_refresh_rate, 
+									minion_id,
 									__version__,
 									"{}".format(datetime.now())[:-7])
 	html_content = html_content + overview_brick.format(html_stats_df)
 
+	#TODO
+	while len(subsets) != 3:
+		subsets.append("NA")
 	for barcode in barcodes:
 		html_content = html_content + barcode_brick.format(barcode, subsets[0], subsets[2], subsets[1])
 
 	html_content = html_content + bottom_brick
 
-	with open(os.path.join(outdir, "results.html"), 'w') as outfile:
+	with open(os.path.join(outdir, "report.html"), 'w') as outfile:
 		print(html_content, file=outfile)
 
 	copyfile(os.path.join(resources_dir, 'style.css'), os.path.join(outdir, 'res', 'style.css'))
@@ -618,23 +681,27 @@ def make_html_table(df):
 	html_table = html_table.replace(m.group(0), '<tr class="trhighlight"' + m.group(0)[3:])
 	return html_table
 
-def parse_stats(fp):
-	df = pd.read_csv(fp, 
-					 sep='\t', 
-					 header=None, 
-					 names="id bases qual gc subset pore_num pore time barcode".split(" "), 
-					 usecols=[1,2,3,4,5,6,7,8],
-					 index_col=[7,3,5], # referes to usecols
-					 converters={'time':(lambda x: pd.Timestamp(x))},
-					 dtype={'qual':float, 'gc':float, 'bases':float})
+def parse_stats(fps):
+	dfs = []
+	for fp in fps:
+		df = pd.read_csv(fp, 
+						 sep='\t', 
+						 header=None, 
+						 names="id bases qual gc subset pore_num pore time barcode".split(" "), 
+						 usecols=[1,2,3,4,5,6,7,8],
+						 index_col=[7,3,5], # referes to usecols
+						 converters={'time':(lambda x: pd.Timestamp(x))},
+						 dtype={'qual':float, 'gc':float, 'bases':float})
+		dfs.append(df)
+	df = pd.concat(dfs)
 
 	start_time = df['time'].min()
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
 
-	index = pd.MultiIndex.from_tuples([('All',subset,pore) for barbode,subset,pore in df.index],
-									names=['barcode', 'subset', 'pore'])
+	index_all = pd.MultiIndex.from_tuples([('All',subset,pore) for barcode,subset,pore in df.index],
+										  names=['barcode', 'subset', 'pore'])
 	df_copy = df.copy()
-	df_copy.index = index
+	df_copy.index = index_all
 	concat_df = pd.concat([df,df_copy])
 
 	return concat_df
