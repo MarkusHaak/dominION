@@ -22,6 +22,7 @@ import socket
 package_dir = os.path.dirname(os.path.abspath(__file__))
 resources_dir = os.path.join(package_dir,'resources')
 hostname = socket.gethostname()
+logger_initialized = False
 
 class ArgHelpFormatter(argparse.HelpFormatter):
 	'''
@@ -107,16 +108,19 @@ def get_script_dir():
     return dist.install_scripts
 
 def initLogger(logfile=None, level=logging.INFO):
-	logger = logging.getLogger()
-	formatter = logging.Formatter(fmt='%(asctime)s %(name)-10s - %(levelname)s - %(message)s',
-								  datefmt='%Y-%m-%d %H:%M:%S')
-	if logfile:
-		fh = logging.FileHandler(logfile)
-		fh.setFormatter(formatter)
-	ch = logging.StreamHandler()
-	ch.setFormatter(formatter)
-	if logfile:
-		logger.addHandler(fh)
-	logger.addHandler(ch)
-	logger.setLevel(level)
+	global logger_initialized
+	if not logger_initialized:
+		logger = logging.getLogger()
+		formatter = logging.Formatter(fmt='%(asctime)s %(name)-10s - %(levelname)s - %(message)s',
+									  datefmt='%Y-%m-%d %H:%M:%S')
+		if logfile:
+			fh = logging.FileHandler(logfile)
+			fh.setFormatter(formatter)
+		ch = logging.StreamHandler()
+		ch.setFormatter(formatter)
+		if logfile:
+			logger.addHandler(fh)
+		logger.addHandler(ch)
+		logger.setLevel(level)
+		logger_initialized = True
 

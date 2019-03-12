@@ -439,6 +439,8 @@ def update_overview(watchers, output_dir):
 					for run in flowcell_runs:
 						user_filename_input = ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input']
 						sample = ALL_RUNS[asic_id_eeprom][run]['run_data']['sample']
+						if not sample:
+							sample = user_filename_input
 						link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
 						runs_string += '<a href="{0}" target="_blank">{1}</a><br>'.format(link, user_filename_input)
 					runs_string += '</p>'
@@ -486,6 +488,8 @@ def update_overview(watchers, output_dir):
 				sequencing_kit = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sequencing_kit']
 				user_filename_input = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input']
 				sample = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sample']
+				if not sample:
+					sample = user_filename_input
 
 				link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
 				all_runs_info.append( (link, user_filename_input, sample, sequencing_kit, protocol_start, time_diff) )
@@ -693,6 +697,7 @@ class WatchnchopScheduler(threading.Thread):
 		self.process = None
 
 	def run(self):
+		self.logger.info("STARTED watchnchop scheduler")
 		while not self.stoprequest.is_set():
 			if os.path.exists(self.observed_dir):
 				if [fn for fn in os.listdir(self.observed_dir) if fn.endswith('.fastq')]:
@@ -742,7 +747,7 @@ class StatsparserScheduler(threading.Thread):
 			last_time = time.time()
 			self.logger.info("STARTING STATSPARSING")
 
-			stats_fns = [fn for fn in os.listdir(os.abspath(self.sample_dir)) if fn.endswith('stats.csv')] if os.path.exists(os.abspath(self.sample_dir)) else []
+			stats_fns = [fn for fn in os.listdir(os.path.abspath(self.sample_dir)) if fn.endswith('stats.csv')] if os.path.exists(os.path.abspath(self.sample_dir)) else []
 			if stats_fns:
 				cmd = [os.path.join(get_script_dir(),'statsparser'),
 					   self.sample_dir,
@@ -936,7 +941,7 @@ class Watcher():
 									  self.channel_status.run_data['user_filename_input'],
 									  self.channel_status.run_data['user_filename_input'])#, #TODO: change to sample
 									  #self.channel_status.run_data['run_id'] + '_stats.csv')
-			self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for sample dir {}'.format(self.update_interval/1000, sample_dir))
+			self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for sample dir {1}'.format(self.update_interval/1000, sample_dir))
 			self.spScheduler = StatsparserScheduler(self.update_interval, 
 													sample_dir, 
 													self.statsparser_args, 

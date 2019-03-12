@@ -33,13 +33,14 @@ import re
 from shutil import copyfile
 import warnings
 from .version import __version__
-from .helper import package_dir, ArgHelpFormatter, r_file, r_dir, w_dir, resources_dir
+from .helper import initLogger, package_dir, ArgHelpFormatter, r_file, r_dir, w_dir, resources_dir
 import json
+import logging
 
 warnings.filterwarnings("ignore")
-QUIET = False
 TICKLBLS = 6
 SECS_TO_HOURS = 3600.
+logger = None
 
 class parse_time_intervals(argparse.Action):
 	def __call__(self, parser, namespace, values, option_string=None):
@@ -141,9 +142,9 @@ def get_argument_parser():
 							action='version', 
 							version=__version__,
 							help="Show program's version number and exit")
-	#help_group.add_argument('-v', '--verbose',
-	#						action='store_true',
-	#						help='Additional status information is printed to stdout')
+	help_group.add_argument('-v', '--verbose',
+							action='store_true',
+							help='Additional status information is printed to stdout')
 	help_group.add_argument('-q', '--quiet',
 							action='store_true',
 							help='No prints to stdout')
@@ -156,29 +157,45 @@ def parse_args(argument_parser, ext_args=None):
 	else:
 		args = argument_parser.parse_args()
 
+	global logger
+	if args.verbose:
+		loglvl = logging.DEBUG
+	elif args.quiet:
+		loglvl = logging.ERROR
+	else:
+		loglvl = logging.INFO
+
+	initLogger(level=loglvl)
+
+	logger = logging.getLogger(name='sp')
+
 	if not os.path.exists(args.input):
-		raise argparse.ArgumentTypeError('ERR: path {} does not exist'.format(args.input))
+		logger.error('path {} does not exist'.format(args.input))
+		#logger.error('path {} does not exist'.format(args.input))
+		exit()
 	elif os.path.isfile(args.input):
 		args.statsfiles = [ args.input ]
-		args.run_ids = [ split(os.path.basename(args.input), '_')[0] ]
+		args.run_ids = [ os.path.basename(args.input).split('_')[0] ]
 	elif os.path.isdir(args.input):
 		args.statsfiles = []
 		args.run_ids = []
 		for fn in [fn for fn in os.listdir(args.input) if fn.endswith('.csv')]:
-			if os.path.exists(os.path.join(args.input, fn)):
+			if os.path.isfile(os.path.join(args.input, fn)) and len(fn.split('_')) == 2:
 				args.statsfiles.append(os.path.join(os.path.join(args.input, fn)))
 				args.run_ids.append(fn.split('_')[0])
 		if not args.statsfiles:
-			tprint('ERR: no statsfiles found in directory {}'.format(args.input))
+			logger.error('no statsfiles found in directory {}'.format(args.input))
 			exit()
-	tprint('- statsfiles:          {}'.format(args.statsfiles))
+	logger.info('- statsfiles:          {}'.format(args.statsfiles))
 
 	if not args.outdir:
 		args.outdir = os.path.abspath(os.path.dirname(args.statsfiles[0]))
 		if not os.path.isdir(args.outdir):
-			raise argparse.ArgumentTypeError('ERR: {} is not a valid directory'.format(args.outdir))
+			logger.error('{} is not a valid directory'.format(args.outdir))
+			exit()
 		if not os.access(args.outdir, os.W_OK):
-			raise argparse.ArgumentTypeError('ERR: {} is not writeable'.format(to_test))
+			logger.error('{} is not writeable'.format(to_test))
+			exit()
 
 	if not os.path.isdir(os.path.join(args.outdir, 'res', 'plots')):
 		os.makedirs(os.path.join(args.outdir, 'res', 'plots'))
@@ -188,7 +205,8 @@ def parse_args(argument_parser, ext_args=None):
 				  "overview_brick.html",
 				  "top_brick.html"]:
 		if not os.path.isfile(os.path.join(resources_dir, brick)):
-			raise argparse.ArgumentTypeError('ERR: file {} does not exist'.format(os.path.join(resources_dir, brick)))
+			logger.error('file {} does not exist'.format(os.path.join(resources_dir, brick)))
+			exit()
 	args.time_intervals = [i*60 for i in args.time_intervals]
 
 
@@ -207,9 +225,9 @@ def parse_args(argument_parser, ext_args=None):
 		#fp = os.path.join(base_dir, args.run_id + '_logdata.json')
 		#if os.path.exists(fp):
 		#	args.logdata_file = fp
-		#	tprint("guessed logdata file to {}".format(args.logdata_file))
+		#	logger.info("guessed logdata file to {}".format(args.logdata_file))
 		#else:
-		#	tprint("unable to find logdata file '{}'".format(fp))
+		#	logger.info("unable to find logdata file '{}'".format(fp))
 		args.minion_id, args.flowcell_id, args.protocol_start = [], [], []
 		for fp in [fp.replace('stats.csv', 'logdata.json') for fp in args.statsfiles]:
 			if os.path.exists(fp):
@@ -218,21 +236,27 @@ def parse_args(argument_parser, ext_args=None):
 				args.minion_id.append(run_data['minion_id'])
 				args.flowcell_id.append(flowcell['flowcell_id'])
 				args.protocol_start.append(run_data['protocol_start'])
-		args.minion_id = "/".join(set(args.minion_id))
-		args.flowcell_id = "/".join(set(args.flowcell_id))
-		args.protocol_start = min([dateutil.parser.parse(ts) for ts in args.protocol_start]).strftime("%Y-%m-%d %H:%M:%S")
-	tprint('- user_filename_input: {}'.format(args.user_filename_input))
-	tprint('- sample:              {}'.format(args.sample))
-	tprint('- minion_id:           {}'.format(args.minion_id))
-	tprint('- flowcell_id:         {}'.format(args.flowcell_id))
-	tprint('- protocol_start:      {}'.format(args.protocol_start))
-	tprint('- run_id:              {}'.format(args.run_ids))
+		if args.minion_id and args.flowcell_id and args.protocol_start:
+			args.minion_id = "/".join(set(args.minion_id))
+			args.flowcell_id = "/".join(set(args.flowcell_id))
+			args.protocol_start = min([dateutil.parser.parse(ts) for ts in args.protocol_start]).strftime("%Y-%m-%d %H:%M:%S")
+		else:
+			args.minion_id = 'GA#0000'
+			args.flowcell_id = 'FAK#####'
+			args.protocol_start = 'YYYY-MM-DD hh:mm:ss.ms'
+	logger.info('- user_filename_input: {}'.format(args.user_filename_input))
+	logger.info('- sample:              {}'.format(args.sample))
+	logger.info('- minion_id:           {}'.format(args.minion_id))
+	logger.info('- flowcell_id:         {}'.format(args.flowcell_id))
+	logger.info('- protocol_start:      {}'.format(args.protocol_start))
+	logger.info('- run_id:              {}'.format(args.run_ids))
 
 
 	try:
 		matplotlib.style.use(args.matplotlib_style)
 	except:
-		raise argparse.ArgumentTypeError('ERR: {} is not a valid matplotlib style'.format(args.matplotlib_style))
+		logger.error('{} is not a valid matplotlib style'.format(args.matplotlib_style))
+		exit()
 
 	return args
 
@@ -244,18 +268,12 @@ def standalone():
 	main(args)
 
 def main(args=None):
-	global QUIET
-	QUIET = args.quiet
+	logger.info("##### starting statsparser {} #####\n".format(__version__))
 
-	if not QUIET: print("#######################################\n" + \
-						"########   statsparser {}  #########\n".format(__version__) + \
-						"#######################################\n")
-	sys.stdout.flush()
-
-	tprint("Parsing stats files")
+	logger.info("Parsing stats files")
 	df = parse_stats(args.statsfiles)
 
-	tprint("Creating stats table")
+	logger.info("Creating stats table")
 	stats_df = stats_table(df)
 
 	subgrouped = df.groupby(['barcode', 'subset'])
@@ -263,7 +281,7 @@ def main(args=None):
 
 	#######
 
-	tprint("Creating boxplots")
+	logger.info("Creating boxplots")
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('time', axis=0, ascending=True)
 		interval, offset, num_bins = get_lowest_possible_interval(args.time_intervals,
@@ -273,7 +291,7 @@ def main(args=None):
 		bin_edges = get_bin_edges(sub_df['time'], interval)
 		for col in sub_df:
 			if col in ['bases','gc','qual']:
-				tprint("...plotting {}, {}: {}".format(bc, subset, col))
+				logger.info("...plotting {}, {}: {}".format(bc, subset, col))
 				bins = get_bins(sub_df[col], bin_edges)
 				intervals = [(offset+i)*interval for i in range(len(bins))]
 				boxplot(bins, 
@@ -284,7 +302,7 @@ def main(args=None):
 
 	#######
 	
-	tprint("Creating kb-bins barplots")
+	logger.info("Creating kb-bins barplots")
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('bases', axis=0, ascending=True)
 		interval, offset, num_bins = get_lowest_possible_interval(list(np.array(args.kb_intervals)*1000),
@@ -292,7 +310,7 @@ def main(args=None):
 																  sub_df['bases'].min(), 
 																  sub_df['bases'].max())
 		bin_edges = get_bin_edges(sub_df['bases'], interval)
-		tprint("...plotting {}, {}".format(bc, subset))
+		logger.info("...plotting {}, {}".format(bc, subset))
 		#bins = get_bins(sub_df['bases']/1000000., bin_edges)
 		bins = get_bins(sub_df['bases'], bin_edges)
 		intervals = [((offset+i)*interval)/1000. for i in range(len(bins))]
@@ -303,7 +321,7 @@ def main(args=None):
 	
 	#######
 	
-	tprint("Creating gc-bins barplots")
+	logger.info("Creating gc-bins barplots")
 	for bc, subset in indexes:
 		sub_df = subgrouped.get_group( (bc, subset) ).sort_values('gc', axis=0, ascending=True)
 		interval, offset, num_bins = get_lowest_possible_interval([args.gc_interval],
@@ -311,7 +329,7 @@ def main(args=None):
 																  sub_df['gc'].min(), 
 																  sub_df['gc'].max())
 		bin_edges = get_bin_edges(sub_df['gc'], interval)
-		tprint("...plotting {}, {}".format(bc, subset))
+		logger.info("...plotting {}, {}".format(bc, subset))
 		#bins = get_bins(sub_df['bases']/1000000., bin_edges)
 		bins = get_bins(sub_df['bases'], bin_edges)
 		intervals = [(offset+i)*interval for i in range(len(bins))]
@@ -320,7 +338,7 @@ def main(args=None):
 					interval,  
 					os.path.join(args.outdir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
 	
-	tprint("Creating multi lineplots with one y-axis")
+	logger.info("Creating multi lineplots with one y-axis")
 	grouped = df.groupby(['barcode'])
 	
 	reads_dfs = []
@@ -348,14 +366,14 @@ def main(args=None):
 		bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
 						  (sorted_df['bases']).expanding(1).sum(),
 						  subset) )
-	tprint("...plotting {}".format('reads'))
+	logger.info("...plotting {}".format('reads'))
 	lineplot_multi(reads_dfs, 
 				   "reads [{}]",
 				   os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('reads')),
 				   reads_scaling_factor,
 				   reads_unit
 				   )
-	tprint("...plotting {}".format('bases'))
+	logger.info("...plotting {}".format('bases'))
 	lineplot_multi(bases_dfs, 
 				   "bases [{}]",
 				   os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('bases')),
@@ -365,14 +383,14 @@ def main(args=None):
 
 	#######
 
-	tprint("Creating html file")
+	logger.info("Creating html file")
 	subset_grouped = df.groupby(['subset'])
 	subsets = list(pd.DataFrame(subset_grouped['bases'].count()).index)
-	tprint(subsets)
+	logger.info(subsets)
 	
 	barcode_grouped = df.groupby(['barcode'])
 	barcodes = list(pd.DataFrame(barcode_grouped['bases'].count()).index)
-	tprint(barcodes)
+	logger.info(barcodes)
 	
 	create_html(args.outdir, 
 				stats_df, 
@@ -386,7 +404,7 @@ def main(args=None):
 				barcodes, 
 				subsets)
 
-	tprint("Everything done")
+	logger.info("Everything done")
 	exit()
 
 
@@ -402,11 +420,11 @@ def create_html(outdir,
 				barcodes, 
 				subsets):
 
-	tprint("Parsing stats table to html")
+	logger.info("Parsing stats table to html")
 	html_stats_df = make_html_table(stats_df).replace('valign="top"', 'valign="center"')
 
 	for bc in barcodes:
-		tprint(bc)
+		logger.info(bc)
 		html_stats_df = html_stats_df.replace(bc, '<a href="#{0}">{0}</a>'.format(bc))
 
 	with open(os.path.join(resources_dir, 'barcode_brick.html'), 'r') as f:
@@ -627,10 +645,10 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 def avgN50longest(series):
 	return series.nlargest(int(series.size/2)).mean()
 
-def tprint(*args, **kwargs):
-	if not QUIET:
-		print("["+strftime("%H:%M:%S", gmtime())+"] "+" ".join(map(str,args)), **kwargs)
-	sys.stdout.flush()
+#def logger.info(*args, **kwargs):
+#	if not QUIET:
+#		print("["+strftime("%H:%M:%S", gmtime())+"] "+" ".join(map(str,args)), **kwargs)
+#	sys.stdout.flush()
 
 def stats_table(df):
 	subgrouped = df.groupby(['barcode', 'subset'])
@@ -694,6 +712,10 @@ def parse_stats(fps):
 						 dtype={'qual':float, 'gc':float, 'bases':float})
 		dfs.append(df)
 	df = pd.concat(dfs)
+
+	if df.empty:
+		logger.error("no data in csv file{} {}".format('s' if len(fps)>1 else '', fps))
+		exit()
 
 	start_time = df['time'].min()
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
