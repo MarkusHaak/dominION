@@ -1,0 +1,214 @@
+#!/usr/bin/perl
+
+# Copyright 2018 Christian Rueckert (cruecker@cebitec.uni-bielefeld.de)
+# https://github.com/MarkusHaak/GridIONwatcher
+# 
+# This file is part of GridIONwatcher. GridIONwatcher is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by the Free Software Foundation,
+# either version 3 of the License, or (at your option) any later version. GridIONwatcher is distributed in
+# the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+# details. You should have received a copy of the GNU General Public License along with GridIONwatcher. If
+# not, see <http://www.gnu.org/licenses/>.
+
+use strict;
+
+use IO::Compress::Gzip qw(gzip $GzipError) ;
+
+use Getopt::Std;
+
+use POSIX 'strftime';
+
+use File::Path qw(make_path remove_tree);
+
+use sigtrap qw/handler signal_handler TERM/;
+my $term_ref;; 
+$$term_ref = 0;
+
+our($opt_b, $opt_p, $opt_l, $opt_q, $opt_o, $opt_v);
+
+getopts('bpl:q:o:v');
+
+# -b(arcoding):    use porechop to demultiplex the fastq data 
+# -p(ass only):    use data from fastq_pass only
+# -l(ength):       minimal length to pass filter (default: 1000)
+# -q(uality):      minimal quality to pass filter (default: 5)
+# -o(utput stats): path to store the stats file
+# -v(erbose):      print some info to STDERR
+
+$opt_l = 1000 unless ($opt_l);
+$opt_q = 5 unless ($opt_q);
+
+my $starttime = time;
+
+my $entry_dir = $ARGV[0];
+
+my %seen;
+my %processed;
+
+#my ($basedir) = ($entry_dir =~ m#(.+)/.+#);
+my ($basedir) = ($entry_dir =~ m#(/data/.+?)/.+#);
+mkdir "$entry_dir/porechop" unless (-e "$entry_dir/porechop");
+mkdir "$entry_dir/porechop/pass" unless (-e "$entry_dir/porechop/pass");
+mkdir "$entry_dir/porechop/fail" unless (-e "$entry_dir/porechop/fail");
+mkdir "$entry_dir/filtered" unless (-e "$entry_dir/filtered");
+
+my $reldir = $entry_dir;
+$reldir =~ s#/data/#/data/./#;
+
+system("rm $entry_dir/filtered/*.*") if (-e "$entry_dir/filtered/stats.txt");
+
+my $statsfile = "$entry_dir/filtered/stats.csv";
+$statsfile = $opt_o if ($opt_o);
+
+open STATS, ">$statsfile"
+    || die "Cannot open stat file $statsfile for writing: $!";
+
+my $systime = systime();
+print STDOUT "Starting watchnchop for $entry_dir on $systime\n" if ($opt_v);
+
+my %indices;
+
+# nice infinite loop, break will happen due to time stamps
+while (1) {
+    my $time = time;
+
+    opendir(DIR, "$entry_dir/fastq_pass");
+    my @fastqs = map { "pass/" . $_ } grep(/.+_.+_(\d+).fastq$/,readdir(DIR));
+    opendir(DIR, "$entry_dir/fastq_fail");
+    push(@fastqs, map { "fail/" . $_ } grep(/.+_.+_(\d+).fastq$/,readdir(DIR)));
+    closedir(DIR);
+
+    foreach my $file (keys(%seen)) {
+	
+	my $mtime = (stat("$entry_dir/fastq_$file"))[9];
+	if ($time > ($mtime + 300)) {
+	    mkdir "$entry_dir/porechop/$file" unless (-e "$entry_dir/porechop/$file");	    
+
+	    my $pcout = "-o $entry_dir/porechop/$file/1D.fastq";
+	    $pcout = "-b $entry_dir/porechop/$file" if ($opt_b);
+	    $pcout .= "  1> /dev/null 2> /dev/null" unless ($opt_v);
+	    my $systime = systime();
+	    print STDOUT "Watchnchop runs porechop and filtering on $systime\n" if ($opt_v);
+	    system("porechop -i $entry_dir/fastq_$file $pcout");
+
+ 	    opendir(DIR, "$entry_dir/porechop/$file");
+	    my @choppedfastqs = grep(/(.+)\.fastq$/,readdir(DIR));
+	    closedir(DIR);
+
+	    foreach my $chopfile (@choppedfastqs) {
+
+		open DATA, "$entry_dir/porechop/$file/$chopfile";
+		    
+		my ($barc) = ($chopfile =~ m#(.+)\.fastq#);
+		my $outfile = "$entry_dir/filtered/$barc.fastq.gz";
+
+		my $outfh = new IO::Compress::Gzip $outfile, Append => 1;  
+
+		while (<DATA>) {
+
+		    s/\r*\n*$//;
+    
+		    my ($header) = (m/@(.+)/);
+
+		    my $seq = (<DATA>);
+		    $seq =~ s/\r*\n*$//;
+		    my $gc = &calc_gc($seq);
+
+		    my $void = (<DATA>);
+		    my $qual = (<DATA>);
+		    $qual =~ s/\r*\n*$//;
+		    
+		    my $length = length($seq);
+		    my $aq = &calc_qual($qual);
+		    
+		    my ($id, $read, $pore, $time) = ($header =~ m/(.+) runid=.+ read=(\d+) ch=(\d+) start_time=(\S+)/);
+
+		    print STATS "$id\t$length\t$aq\t$gc";
+		    
+		    if ($aq >= $opt_q) {
+			if ($length >= $opt_l) {
+			    print STATS "\tPassed";
+			    $outfh->print('@', "$header\n$seq\n+\n$qual\n");
+			} else {
+			    print STATS "\tlength<$opt_l";
+			}
+		    } else {
+			print STATS "\tqual<$opt_q";
+		    }
+		    print STATS "\t$read\t$pore\t$time\t$barc\n";
+		}
+		close DATA;
+		unlink "$entry_dir/porechop/$file/$chopfile";
+		$outfh->close();
+	    }
+	    rmdir "$entry_dir/porechop/$file";
+
+	    $processed{$file} = $mtime;
+	    delete $seen{$file};
+	}
+    }
+    # delay looking for files until the first run-through to avoid "empty" lists
+    foreach my $file (@fastqs) {
+	next if ($processed{$file});
+	$seen{$file} = 1;
+    }
+#    system("rsync -ruve ssh $basedir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs");
+    print STDOUT "Watchnchop transfers processed data to remote client\n" if ($opt_v);
+    system("rsync -Rruve ssh $reldir/filtered cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs");
+
+#    last if (($time > ($processed[-1] + 3600)) && !(keys %seen) && ($time > ($starttime > 3600)) && $$term_ref);
+
+    # terminate if all data has been processed and the process has received a TERM signal
+    last if (!(keys %seen) && $$term_ref);
+    sleep 5;
+}
+
+print STDOUT "Watchnchop transfers raw data to remote client\n" if ($opt_v);
+# transfer the raw data to the remote client
+remove_tree("$entry_dir/porechop/");
+system("rsync -Rruve ssh $reldir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs");
+
+my $systime = systime();
+print STDOUT "Watchnchop died peacefully on $systime\n" if ($opt_v);
+
+
+exit;
+
+sub by_number {
+    $a <=> $b;
+}
+
+sub systime {
+    my $systime = strftime "%d-%m-%Y %H:%M:%S", localtime;
+    return($systime);
+}
+
+sub signal_handler {
+    $$term_ref = 1;
+}
+
+sub calc_gc {
+    my ($seq) = @_;
+    my $total = length $seq;
+   
+    my ($value) = ($seq =~ tr/cCgG//);
+    
+    my $average = sprintf('%2.2f', eval{$value/$total * 100});
+    
+    return ($average);
+}
+
+sub calc_qual {
+    my ($qual) = @_;
+    my $total = length $qual;
+    my $value;
+    
+    foreach (split(//, $qual)) {
+        $value += ((unpack 'c', ($_)) - 33);
+    }
+    
+    my $average = sprintf('%2.2f', eval{$value/$total});
+    
+    return ($average);
+}

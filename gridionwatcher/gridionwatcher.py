@@ -63,16 +63,6 @@ def main_and_args():
 									 formatter_class=ArgHelpFormatter, 
 									 add_help=False)
 
-	#main_arguments = parser.add_argument_group('Main arguments')
-	#main_arguments.add_argument('-d', '--database_dir',
-	#						  action=rw_dir,
-	#						  default='reports',
-	#						  help='Path to the base directory where experiment reports shall be saved')
-	#main_arguments.add_argument('-s', '--status_page_dir',
-	#						  default='GridIONstatus',
-	#						  help='''Path to the directory where all files for the GridION overview page 
-	#							   will be stored''')
-
 	io_group = parser.add_argument_group('I/O arguments', 
 										 'Further input/output arguments. Only for special use cases')
 	io_group.add_argument('-o', '--output_dir',
@@ -88,11 +78,7 @@ def main_and_args():
 						  action=r_dir,
 						  default='/var/log/MinKNOW',
 						  help='''Path to the base directory of GridIONs log files''')
-	#io_group.add_argument('-r', '--resources_dir',
-	#					  action=r_dir,
-	#					  default=os.path.join(package_dir,'resources'),
-	#					  help='''Path to the directory containing template files and resources 
-	#						   for the html pages (default: PACKAGE_DIR/resources)''')
+
 	io_group.add_argument('--logfile',
 						  help='''File in which logs will be safed''')
 
@@ -103,25 +89,6 @@ def main_and_args():
 							default=[],
 							help='''Arguments that are passed to the statsparser.
 								   See a full list of available arguments with --statsparser_args " -h" ''')
-
-	exe_group = parser.add_argument_group('Executables paths', 
-										  'Paths to mandatory executables')
-	exe_group.add_argument('--watchnchop_path',
-						   action=r_file,
-						   default='/home/grid/scripts/watchnchop_update2.pl',
-						   help='''Path to the watchnchop executable''')
-	#exe_group.add_argument('--statsparser_path',
-	#					   action=r_file,
-	#					   default=os.path.join(get_script_dir(),'statsparser'),
-	#					   help='''Path to statsparser.py (default: PACKAGE_SCRIPT_PATH/statsparser)''')
-	#exe_group.add_argument('--python3_path',
-	#					   action=r_file,
-	#					   default=sys.executable,
-	#					   help='''Path to the python3 executable (default: sys.executable)''')
-	#exe_group.add_argument('--perl_path',
-	#					   action=r_file,
-	#					   default='/usr/bin/perl',
-	#					   help='''Path to the perl executable''')
 
 	general_group = parser.add_argument_group('General arguments', 
 											  'Advanced arguments influencing the program execution')
@@ -162,7 +129,7 @@ def main_and_args():
 
 
 	ns = argparse.Namespace()
-	arg_data_basedir(parser, ns, args.data_basedir, '') # call action
+	arg_data_basedir(parser, ns, args.data_basedir, '')
 
 	#### main #####
 
@@ -228,7 +195,6 @@ def main_and_args():
 								args.statsparser_args,
 								args.update_interval,
 								args.no_watchnchop,
-								args.watchnchop_path,
 								args.bc_kws))
 
 	logger.info("initiating GridION overview page")
@@ -675,7 +641,7 @@ class ChannelStatus():
 
 class WatchnchopScheduler(threading.Thread):
 
-	def __init__(self, watchnchop_path, data_basedir, relative_path, user_filename_input, bc_kws, stats_fp, channel):
+	def __init__(self, data_basedir, relative_path, user_filename_input, bc_kws, stats_fp, channel):
 		threading.Thread.__init__(self)
 		if getattr(self, 'daemon', None) is None:
 			self.daemon = True
@@ -687,7 +653,7 @@ class WatchnchopScheduler(threading.Thread):
 		self.observed_dir = os.path.join(data_basedir, relative_path, 'fastq_pass')
 		# define the command that is to be executed
 		self.cmd = [which('perl'),
-					watchnchop_path,
+					which('watchnchop'),#watchnchop_path,
 					'-o {}'.format(stats_fp),
 					'-v']
 		if len([kw for kw in bc_kws if kw in user_filename_input]) > 0:
@@ -760,7 +726,8 @@ class StatsparserScheduler(threading.Thread):
 						basedir = os.path.abspath(self.sample_dir)
 						fp = os.path.join(basedir, 'report.html')
 						self.logger.info("OPENING " + fp)
-						page_opened = webbrowser.open('file://' + os.path.realpath(fp))
+						webbrowser.open('file://' + os.path.realpath(fp))
+						page_opened = True
 				else:
 					self.logger.error("ERROR while running statsparser")
 			else:
@@ -779,7 +746,7 @@ class StatsparserScheduler(threading.Thread):
 class Watcher():
 
 	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, output_dir, data_basedir, 
-				 statsparser_args, update_interval, no_watchnchop, watchnchop_path, bc_kws):
+				 statsparser_args, update_interval, no_watchnchop, bc_kws):
 		self.q = queue.PriorityQueue()
 		self.watchnchop = not no_watchnchop
 		self.channel = channel
@@ -787,7 +754,7 @@ class Watcher():
 		self.data_basedir = data_basedir
 		self.statsparser_args = statsparser_args
 		self.update_interval = update_interval
-		self.watchnchop_path = watchnchop_path
+		#self.watchnchop_path = watchnchop_path
 		self.bc_kws = bc_kws
 
 		self.observed_dir = os.path.join(minknow_log_basedir, "GA{}0000".format(channel+1))
@@ -1024,8 +991,7 @@ class Watcher():
 								self.channel_status.run_data['user_filename_input'], #TODO: change to sample name
 								"{}_stats.csv".format(self.channel_status.run_data['run_id'])
 								)
-		self.wcScheduler = WatchnchopScheduler(self.watchnchop_path,
-											   self.data_basedir,
+		self.wcScheduler = WatchnchopScheduler(self.data_basedir,
 											   self.channel_status.run_data['relative_path'],
 											   self.channel_status.run_data['user_filename_input'],
 											   self.bc_kws,

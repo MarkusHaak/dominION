@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
 
-DESCR = '''GridIONwatcher - for monitoring, protocoling and analysis
-		of sequencing runs performed on the ONT GridION sequencer'''
-
 import sys
 from setuptools import setup
 
@@ -23,6 +20,9 @@ if not __version__:
 	print("ERROR: unable to read version string from file {}".format(VERSIONFILE))
 	exit()
 
+DESCR = '''GridIONwatcher - for monitoring, protocoling and analysis
+		of sequencing runs performed on the ONT GridION sequencer'''
+
 # load long description from Markdown file
 with open('README.md', 'rb') as readme:
 	LONG_DESCR = readme.read().decode()
@@ -36,12 +36,9 @@ setup(name='gridionwatcher',
 	  author_email='markus.haak@posteo.net',
 	  license='GPL',
 	  packages=['gridionwatcher'],
-	  install_requires=['watchdog',
-	  					'numpy',
-	  					'pandas',
-	  					'matplotlib'],
+	  install_requires=['watchdog', 'numpy', 'pandas', 'matplotlib'],
 	  include_package_data=True,
 	  zip_safe=False,
 	  entry_points={"console_scripts": ['gridionwatcher = gridionwatcher.gridionwatcher:main_and_args',
-	  									'statsparser = gridionwatcher.statsparser:standalone']})
-	  #scripts=['bin/watchnchop.pl'])
+	  									'statsparser = gridionwatcher.statsparser:standalone']},
+	  scripts=['bin/watchnchop'])

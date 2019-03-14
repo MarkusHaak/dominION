@@ -97,7 +97,7 @@ class OnlyGetScriptPath(install):
     def run(self):
         # does not call install.run() by design
         self.distribution.install_scripts = self.install_scripts
-
+# Taken from https://stackoverflow.com/questions/25066084
 def get_script_dir():
     dist = Distribution({'cmdclass': {'install': OnlyGetScriptPath}})
     dist.dry_run = True  # not sure if necessary, but to be safe
