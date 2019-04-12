@@ -241,21 +241,23 @@ def main_and_args():
 			if watcher.spScheduler:
 				if watcher.spScheduler.is_alive():
 					watcher.spScheduler.join(timeout=0.05)
-			if watcher.wcScheduler:
-				if watcher.wcScheduler.is_alive():
-					watcher.wcScheduler.join(timeout=0.05)
+			#if watcher.wcScheduler:
+			#	if watcher.wcScheduler.is_alive():
+			#		watcher.wcScheduler.join(timeout=0.05)
+			for wcScheduler in watcher.wcScheduler:
+				if wcScheduler.is_alive():
+					wcScheduler.join(timeout=0.05)
 	for watcher in watchers:
 		logger.info("joining GA{}0000's observer".format(watcher.channel))
 		watcher.observer.join()
 		if watcher.spScheduler:
-			if watcher.spScheduler:
-				if watcher.spScheduler.is_alive():
-					logger.info("joining GA{}0000's statsparser scheduler".format(watcher.channel))
-					watcher.spScheduler.join(timeout=1.2)
-			if watcher.wcScheduler:
-				if watcher.wcScheduler.is_alive():
-					logger.info("joining GA{}0000's watchnchop scheduler".format(watcher.channel))
-					watcher.wcScheduler.join(timeout=1.2)
+			if watcher.spScheduler.is_alive():
+				logger.info("joining GA{}0000's statsparser scheduler".format(watcher.channel))
+				watcher.spScheduler.join(timeout=1.2)
+		for wcScheduler in watcher.wcScheduler:
+			if wcScheduler.is_alive():
+				logger.info("joining GA{}0000's watchnchop scheduler".format(watcher.channel))
+				wcScheduler.join()
 
 def add_database_entry(flowcell, run_data, mux_scans):
 	ALL_RUNS_LOCK.acquire()
@@ -460,49 +462,50 @@ def update_overview(watchers, output_dir):
 				link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
 				all_runs_info.append( (link, user_filename_input, sample, sequencing_kit, protocol_start, time_diff) )
 
-	all_runs_info = sorted(all_runs_info, key=itemgetter(4), reverse=True)
-
 	with open(os.path.join(resources_dir, 'gridIONstatus_bottom_brick.html'), 'r') as f:
-		bottom_brick = f.read()
-	th = '<th rowspan="{}">{}</th>'
-	td_sample = '<th rowspan="{}"><a href="{}" target="_blank">{}</a></th>'
-	blank_line = '<tr>\n{}\n{}\n<td>{}</td>\n<td>{}</td>\n<td>{}</td></tr>'
+			bottom_brick = f.read()
+	if all_runs_info:
+		all_runs_info = sorted(all_runs_info, key=itemgetter(4), reverse=True)
+		th = '<th rowspan="{}">{}</th>'
+		td_sample = '<th rowspan="{}"><a href="{}" target="_blank">{}</a></th>'
+		blank_line = '<tr>\n{}\n{}\n<td>{}</td>\n<td>{}</td>\n<td>{}</td></tr>'
 
-	run = 0
-	sample = 0
-	grouped = [[[all_runs_info[0]]]] if all_runs_info else [[[]]]
-	for run_info in all_runs_info[1:]:
-		if grouped[run][sample][0][1] == run_info[1]:
-			if grouped[run][sample][0][2] == run_info[2]:
-				grouped[run][sample].append(run_info)
+		run = 0
+		sample = 0
+		grouped = [[[all_runs_info[0]]]] if all_runs_info else [[[]]]
+		for run_info in all_runs_info[1:]:
+			if grouped[run][sample][0][1] == run_info[1]:
+				if grouped[run][sample][0][2] == run_info[2]:
+					grouped[run][sample].append(run_info)
+				else:
+					grouped[run].append( [run_info] )
+					sample += 1
 			else:
-				grouped[run].append( [run_info] )
-				sample += 1
-		else:
-			grouped.append( [[run_info]] )
-			run += 1
-			sample = 0
-	ths = []
-	td_samples = []
-	for run in grouped:
-		ths.append(th.format(sum([len(sample) for sample in run]),		# row_span
-							 run[0][0][1]))	# user_filename_input
-		for sample in run:
-			td_samples.append(td_sample.format(len(sample),		# row_span
-											   sample[0][0],	# link
-											   sample[0][2]))	# sample
-			for i in range(len(sample)):
-				td_samples.append('')
-				ths.append('')
-			td_samples.pop()
-		ths.pop()
+				grouped.append( [[run_info]] )
+				run += 1
+				sample = 0
+		ths = []
+		td_samples = []
 
-	for i,run_info in enumerate(all_runs_info):
-		bottom_brick = bottom_brick.format(blank_line.format(ths[i], 
-															 td_samples[i], 
-															 run_info[3], 
-															 run_info[4].strftime("%Y-%m-%d %H:%M"),
-															 run_info[5]) + "\n{0}")
+		for run in grouped:
+			ths.append(th.format(sum([len(sample) for sample in run]),		# row_span
+								 run[0][0][1]))	# user_filename_input
+			for sample in run:
+				td_samples.append(td_sample.format(len(sample),		# row_span
+												   sample[0][0],	# link
+												   sample[0][2]))	# sample
+				for i in range(len(sample)):
+					td_samples.append('')
+					ths.append('')
+				td_samples.pop()
+			ths.pop()
+
+		for i,run_info in enumerate(all_runs_info):
+			bottom_brick = bottom_brick.format(blank_line.format(ths[i], 
+																 td_samples[i], 
+																 run_info[3], 
+																 run_info[4].strftime("%Y-%m-%d %H:%M"),
+																 run_info[5]) + "\n{0}")
 	bottom_brick = bottom_brick.format("")
 
 	with open(os.path.join(output_dir, "{}_overview.html".format(hostname)), 'w') as f:
@@ -647,7 +650,8 @@ class WatchnchopScheduler(threading.Thread):
 			self.daemon = True
 		else:
 			self.setDaemon(True)
-		self.stoprequest = threading.Event()
+		self.stoprequest = threading.Event()	# set when joined without timeout (eg if terminated with ctr-c)
+		self.expend = threading.Event()			# set when joined with timeout (eg if experiment ended)
 		self.logger = logging.getLogger(name='gw.w{}.wcs'.format(channel+1))
 
 		self.observed_dir = os.path.join(data_basedir, relative_path, 'fastq_pass')
@@ -664,19 +668,11 @@ class WatchnchopScheduler(threading.Thread):
 
 	def run(self):
 		self.logger.info("STARTED watchnchop scheduler")
-		while not self.stoprequest.is_set():
-			if os.path.exists(self.observed_dir):
-				if [fn for fn in os.listdir(self.observed_dir) if fn.endswith('.fastq')]:
-					try:
-						self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-						pass
-					except:
-						self.logger.error("FAILED to start watchnchop, Popen failed")
-						return
-					self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(self.cmd))
-					break
+		while not (self.stoprequest.is_set() or self.expend.is_set()):
+			if self.start_watchnchop():
+				break
 			time.sleep(1)
-		while not self.stoprequest.is_set():
+		while not (self.stoprequest.is_set() or self.expend.is_set()):
 			time.sleep(1)
 		if self.process:
 			try:
@@ -685,10 +681,38 @@ class WatchnchopScheduler(threading.Thread):
 			except:
 				self.logger.error("TERMINATING watchnchop process failed")
 		else:
-			self.logger.error("watchnchop was NEVER STARTED: this thread was ordered to kill the watchnchop subprocess before it was started")
+			if self.stoprequest.is_set():
+				self.logger.error("watchnchop was NEVER STARTED: this thread was ordered to kill the watchnchop subprocess before it was started")
+				return
+			self.logger.info("starting watchnchop in one minute, then kill it after another 5 minutes")
+			for i in range(60):
+				if self.stoprequest.is_set():
+					self.logger.error("watchnchop was NEVER STARTED: this thread was ordered to kill the watchnchop subprocess before it was started")
+					return
+				time.sleep(1)
+			if not start_watchnchop:
+				self.logger.error("watchnchop NOT STARTED: directory {} is still does not exist or contains no fastq files".format(self.observed_dir))
+				return
+			for i in range(300):
+				if self.stoprequest.is_set():
+					break
+				time.sleep(1)
+			self.process.terminate()
+			self.logger.info("TERMINATED watchnchop process")
+
+	def start_watchnchop(self):
+		if os.path.exists(self.observed_dir):
+			if [fn for fn in os.listdir(self.observed_dir) if fn.endswith('.fastq')]:
+				self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+				self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(self.cmd))
+				return 1
+		return 0
 
 	def join(self, timeout=None):
-		self.stoprequest.set()
+		if timeout:
+			self.stoprequest.set()
+		else:
+			self.expend.set()
 		super(WatchnchopScheduler, self).join(timeout)
 
 
@@ -769,7 +793,7 @@ class Watcher():
 		#								 "GA{}0000_watchnchop_log.txt".format(channel+1)), 'w')
 		self.channel_status = ChannelStatus("GA{}0000".format(channel+1), channel)
 		self.spScheduler = None
-		self.wcScheduler = None
+		self.wcScheduler = []
 		self.logger = logging.getLogger(name='gw.w{}'.format(channel+1))
 
 		self.logger.info("...watcher for {} ready".format(self.observed_dir))
@@ -811,10 +835,9 @@ class Watcher():
 				if self.spScheduler.is_alive():
 					self.spScheduler.join(1.2)
 			self.spScheduler = None
-			if self.wcScheduler:
-				if self.wcScheduler.is_alive():
-					self.wcScheduler.join(1.2)
-			self.wcScheduler = None
+			if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
+				self.wcScheduler[-1].join(1.2)
+			#self.wcScheduler = None
 
 		elif	"[engine/info]: : flowcell_discovered" 					in line:
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
@@ -827,10 +850,9 @@ class Watcher():
 				if self.spScheduler.is_alive():
 					self.spScheduler.join(1.2)
 			self.spScheduler = None
-			if self.wcScheduler:
-				if self.wcScheduler.is_alive():
-					self.wcScheduler.join(1.2)
-			self.wcScheduler = None
+			if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
+				self.wcScheduler[-1].join(1.2)
+			#self.wcScheduler = None
 
 		elif   	"[engine/info]: : data_acquisition_started"				in line:# or \
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
@@ -980,24 +1002,25 @@ class Watcher():
 				self.logger.warning("NOT executing watchnchop for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
 				return
 
-		if self.wcScheduler:
-			if self.wcScheduler.is_alive():
-				self.logger.error("watchnchop was not started successfully for previous run!")
-				self.wcScheduler.join(1.2)
+		#if self.wcScheduler:
+		#	if self.wcScheduler.is_alive():
+		#		#self.logger.error("watchnchop was not started successfully for previous run!")
+		#		self.wcScheduler.join(1.2)
+		if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
+			self.wcScheduler[-1].join(1.2)
 
 		stats_fp = os.path.join(self.output_dir,
 								'runs',
 								self.channel_status.run_data['user_filename_input'],
 								self.channel_status.run_data['user_filename_input'], #TODO: change to sample name
-								"{}_stats.csv".format(self.channel_status.run_data['run_id'])
-								)
-		self.wcScheduler = WatchnchopScheduler(self.data_basedir,
-											   self.channel_status.run_data['relative_path'],
-											   self.channel_status.run_data['user_filename_input'],
-											   self.bc_kws,
-											   stats_fp,
-											   self.channel)
-		self.wcScheduler.start()
+								"{}_stats.csv".format(self.channel_status.run_data['run_id']))
+		self.wcScheduler.append(WatchnchopScheduler(self.data_basedir,
+													self.channel_status.run_data['relative_path'],
+													self.channel_status.run_data['user_filename_input'],
+													self.bc_kws,
+													stats_fp,
+													self.channel))
+		self.wcScheduler[-1].start()
 		return
 
 

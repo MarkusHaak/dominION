@@ -25,16 +25,19 @@ use sigtrap qw/handler signal_handler TERM/;
 my $term_ref;; 
 $$term_ref = 0;
 
-our($opt_b, $opt_p, $opt_l, $opt_q, $opt_o, $opt_v);
+our($opt_a, $opt_b, $opt_p, $opt_l, $opt_q, $opt_o, $opt_n, $opt_v);
 
-getopts('bpl:q:o:v');
+getopts('abpl:q:o:nv');
 
+# -a(all fast5):   also put fast5 files of reads removed by length and quality filtering into barcode bins 
 # -b(arcoding):    use porechop to demultiplex the fastq data 
 # -p(ass only):    use data from fastq_pass only
 # -l(ength):       minimal length to pass filter (default: 1000)
 # -q(uality):      minimal quality to pass filter (default: 5)
 # -o(utput stats): path to store the stats file
 # -v(erbose):      print some info to STDERR
+# -n(o transfer):  no data transfer to remote host
+
 
 $opt_l = 1000 unless ($opt_l);
 $opt_q = 5 unless ($opt_q);
@@ -46,19 +49,20 @@ my $entry_dir = $ARGV[0];
 my %seen;
 my %processed;
 
-#my ($basedir) = ($entry_dir =~ m#(.+)/.+#);
-my ($basedir) = ($entry_dir =~ m#(/data/.+?)/.+#);
-mkdir "$entry_dir/porechop" unless (-e "$entry_dir/porechop");
-mkdir "$entry_dir/porechop/pass" unless (-e "$entry_dir/porechop/pass");
-mkdir "$entry_dir/porechop/fail" unless (-e "$entry_dir/porechop/fail");
-mkdir "$entry_dir/filtered" unless (-e "$entry_dir/filtered");
+mkdir "/data/ARCHIVE/" unless (-e "/data/ARCHIVE/");
+mkdir "/data/outgoing/" unless (-e "/data/outgoing/");
 
-my $reldir = $entry_dir;
-$reldir =~ s#/data/#/data/./#;
+my ($basedir) = ($entry_dir =~ m#/data/(.+?)/#);
+my $outdir = $entry_dir;
+$outdir =~ s#/data/#/data/./outgoing/#;
+make_path "$outdir/" unless (-e "$outdir");
 
-system("rm $entry_dir/filtered/*.*") if (-e "$entry_dir/filtered/stats.txt");
+system("ln -s /data/$basedir /data/ARCHIVE/") unless (-e "/data/ARCHIVE/$basedir");
 
-my $statsfile = "$entry_dir/filtered/stats.csv";
+my $statsfile = "$outdir/stats.csv";
+my $fast5splitfile = "$outdir/fast5split.csv";
+
+print "Writing stats to $opt_o\n" if ($opt_v);
 $statsfile = $opt_o if ($opt_o);
 
 open STATS, ">$statsfile"
@@ -70,6 +74,7 @@ print STDOUT "Starting watchnchop for $entry_dir on $systime\n" if ($opt_v);
 my %indices;
 
 # nice infinite loop, break will happen due to time stamps
+
 while (1) {
     my $time = time;
 
@@ -82,26 +87,29 @@ while (1) {
     foreach my $file (keys(%seen)) {
 	
 	my $mtime = (stat("$entry_dir/fastq_$file"))[9];
-	if ($time > ($mtime + 300)) {
-	    mkdir "$entry_dir/porechop/$file" unless (-e "$entry_dir/porechop/$file");	    
+	open FAST5SPLIT, ">$fast5splitfile"
+	    || die "Cannot open temp stat file $fast5splitfile for writing: $!";
 
-	    my $pcout = "-o $entry_dir/porechop/$file/1D.fastq";
-	    $pcout = "-b $entry_dir/porechop/$file" if ($opt_b);
+	if ($time > ($mtime + 300)) {
+	    make_path "$outdir/porechop/$file" unless (-e "$outdir/porechop/$file");	    
+
+	    my $pcout = "-o $outdir/porechop/$file/1D.fastq";
+	    $pcout = "-b $outdir/porechop/$file" if ($opt_b);
 	    $pcout .= "  1> /dev/null 2> /dev/null" unless ($opt_v);
 	    my $systime = systime();
 	    print STDOUT "Watchnchop runs porechop and filtering on $systime\n" if ($opt_v);
 	    system("porechop -i $entry_dir/fastq_$file $pcout");
 
- 	    opendir(DIR, "$entry_dir/porechop/$file");
+ 	    opendir(DIR, "$outdir/porechop/$file");
 	    my @choppedfastqs = grep(/(.+)\.fastq$/,readdir(DIR));
 	    closedir(DIR);
 
 	    foreach my $chopfile (@choppedfastqs) {
 
-		open DATA, "$entry_dir/porechop/$file/$chopfile";
+		open DATA, "$outdir/porechop/$file/$chopfile";
 		    
 		my ($barc) = ($chopfile =~ m#(.+)\.fastq#);
-		my $outfile = "$entry_dir/filtered/$barc.fastq.gz";
+		my $outfile = "$outdir/$barc.fastq.gz";
 
 		my $outfh = new IO::Compress::Gzip $outfile, Append => 1;  
 
@@ -129,21 +137,28 @@ while (1) {
 		    if ($aq >= $opt_q) {
 			if ($length >= $opt_l) {
 			    print STATS "\tPassed";
+			    print FAST5SPLIT "$id\t$barc\n";
 			    $outfh->print('@', "$header\n$seq\n+\n$qual\n");
 			} else {
+			    print FAST5SPLIT "$id\t$barc\n" if ($opt_a);
 			    print STATS "\tlength<$opt_l";
 			}
 		    } else {
-			print STATS "\tqual<$opt_q";
+			print STATS "\tqual<$opt_q" ;
+			print FAST5SPLIT "$id\t$barc\n" if ($opt_a);
 		    }
 		    print STATS "\t$read\t$pore\t$time\t$barc\n";
 		}
 		close DATA;
-		unlink "$entry_dir/porechop/$file/$chopfile";
+		unlink "$outdir/porechop/$file/$chopfile";
 		$outfh->close();
 	    }
-	    rmdir "$entry_dir/porechop/$file";
+	    rmdir "$outdir/porechop/$file";
 
+	    my $f5f = $file;
+	    $f5f =~ s/.fastq/.fast5/;
+	    system("multi_to_multi_fast5 -i $entry_dir/fast5_$f5f -s $outdir -b $fast5splitfile");
+	    unlink $fast5splitfile;
 	    $processed{$file} = $mtime;
 	    delete $seen{$file};
 	}
@@ -153,21 +168,23 @@ while (1) {
 	next if ($processed{$file});
 	$seen{$file} = 1;
     }
-#    system("rsync -ruve ssh $basedir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs");
+    remove_tree("$outdir/porechop/");
     print STDOUT "Watchnchop transfers processed data to remote client\n" if ($opt_v);
-    system("rsync -Rruve ssh $reldir/filtered cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs");
+    system("rsync  --exclude '*.fast5' -Rruve ssh $outdir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
 
-#    last if (($time > ($processed[-1] + 3600)) && !(keys %seen) && ($time > ($starttime > 3600)) && $$term_ref);
 
     # terminate if all data has been processed and the process has received a TERM signal
     last if (!(keys %seen) && $$term_ref);
-    sleep 5;
+    sleep 60;
 }
+
+
 
 print STDOUT "Watchnchop transfers raw data to remote client\n" if ($opt_v);
 # transfer the raw data to the remote client
-remove_tree("$entry_dir/porechop/");
-system("rsync -Rruve ssh $reldir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs");
+#remove_tree("$outdir/porechop/");
+system("rsync -Rruve ssh $outdir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
+system("rsync -Rkruve ssh /data/./ARCHIVE/$basedir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
 
 my $systime = systime();
 print STDOUT "Watchnchop died peacefully on $systime\n" if ($opt_v);
