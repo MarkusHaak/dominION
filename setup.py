@@ -12,7 +12,7 @@ if (sys.version_info.major + .1 * sys.version_info.minor) < 3.5:
 # https://stackoverflow.com/questions/458550/standard-way-to-embed-version-into-python-package
 # https://stackoverflow.com/questions/436198/what-is-an-alternative-to-execfile-in-python-3/437857#437857
 
-VERSIONFILE="gridionwatcher/version.py"
+VERSIONFILE="dominion/version.py"
 with open(VERSIONFILE) as f:
 	code = compile(f.read(), VERSIONFILE, 'exec')
 	exec(code)
@@ -20,25 +20,25 @@ if not __version__:
 	print("ERROR: unable to read version string from file {}".format(VERSIONFILE))
 	exit()
 
-DESCR = '''GridIONwatcher - for monitoring, protocoling and analysis
+DESCR = '''dominION - for monitoring, protocoling and analysis
 		of sequencing runs performed on the ONT GridION sequencer'''
 
 # load long description from Markdown file
 with open('README.md', 'rb') as readme:
 	LONG_DESCR = readme.read().decode()
 
-setup(name='gridionwatcher',
+setup(name='dominion',
 	  version=__version__,
 	  description=DESCR,
 	  long_description=LONG_DESCR,
-	  url='http://github.com/MarkusHaak/GridIONwatcher',
+	  url='http://github.com/MarkusHaak/dominION',
 	  author='Markus Haak',
 	  author_email='markus.haak@posteo.net',
 	  license='GPL',
-	  packages=['gridionwatcher'],
+	  packages=['dominion'],
 	  install_requires=['watchdog', 'numpy', 'pandas', 'matplotlib'],
 	  include_package_data=True,
 	  zip_safe=False,
-	  entry_points={"console_scripts": ['gridionwatcher = gridionwatcher.gridionwatcher:main_and_args',
-	  									'statsparser = gridionwatcher.statsparser:standalone']},
+	  entry_points={"console_scripts": ['dominion = dominion.dominion:main_and_args',
+	  									'statsparser = dominion.statsparser:standalone']},
 	  scripts=['bin/watchnchop'])

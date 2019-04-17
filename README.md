@@ -1,6 +1,6 @@
-# GridIONwatcher
+# dominION
 
-GridIONwatcher is a tool for monitoring and protocoling sequencing runs performed on the Oxford Nanopore Technologies GridION sequencer and for automated post processing and transmission of generated data. Listening for changes to MinKNOW log files, it collects information on QC and sequencing experiments and displays summaries of mounted flow cells as well as comprehensive reports about currently running and previously performed experiments.
+dominION is a tool for monitoring and protocoling sequencing runs performed on the Oxford Nanopore Technologies GridION sequencer and for automated post processing and transmission of generated data. Listening for changes to MinKNOW log files, it collects information on QC and sequencing experiments and displays summaries of mounted flow cells as well as comprehensive reports about currently running and previously performed experiments.
 
 ## Installation
 
@@ -16,19 +16,19 @@ Don't forget to **activate** your virtual environment:
 source ~/python3_env/bin/activate
 ```
 
-This needs to be done every time you open a new console in which you want to execute GridIONwatcher commands. You can deactivate the virtual environment by simply typing deactivate.
+This needs to be done every time you open a new console in which you want to execute dominION commands. You can deactivate the virtual environment by simply typing deactivate.
 
-Afterwards, clone and install GridIONwatcher:
+Afterwards, clone and install dominION:
 
 ```bash
-git clone https://github.com/MarkusHaak/GridIONwatcher.git
-cd GridIONwatcher
+git clone https://github.com/MarkusHaak/dominION.git
+cd dominION
 python3 setup.py install
 ```
-Alternatively, install GridIONwatcher with pip from GitHub:
+Alternatively, install dominION with pip from GitHub:
 
 ```bash
-pip3 install git+https://github.com/MarkusHaak/GridIONwatcher.git
+pip3 install git+https://github.com/MarkusHaak/dominION.git
 ```
 
 ## Dependencies
@@ -40,14 +40,14 @@ The following external python modules are required (all are automatically instal
 * pandas
 * matplotlib
 
-GridIONwatcher requires at least python3.5 and is not backwards compatible with python2. 
+dominION requires at least python3.5 and is not backwards compatible with python2. 
 
 ## Full usage
 
-### gridionwatcher
+### dominion
 
 ```
-usage: gridionwatcher [-d DATABASE_DIR] [--status_page_dir STATUS_PAGE_DIR]
+usage: dominion [-d DATABASE_DIR] [--status_page_dir STATUS_PAGE_DIR]
                       [--statsparser_args STATSPARSER_ARGS]
                       [-b BASECALLED_BASEDIR] [-l MINKNOW_LOG_BASEDIR]
                       [-r RESOURCES_DIR] [--watchnchop_path WATCHNCHOP_PATH]

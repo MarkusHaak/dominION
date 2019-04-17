@@ -1,13 +1,13 @@
 """
 Copyright 2018 Markus Haak (markus.haak@posteo.net)
-https://github.com/MarkusHaak/GridIONwatcher
+https://github.com/MarkusHaak/dominION
 
-This file is part of GridIONwatcher. GridIONwatcher is free software: you can redistribute it and/or modify
+This file is part of dominION. dominION is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by the Free Software Foundation,
-either version 3 of the License, or (at your option) any later version. GridIONwatcher is distributed in
+either version 3 of the License, or (at your option) any later version. dominION is distributed in
 the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-details. You should have received a copy of the GNU General Public License along with GridIONwatcher. If
+details. You should have received a copy of the GNU General Public License along with dominION. If
 not, see <http://www.gnu.org/licenses/>.
 """
 
@@ -67,7 +67,7 @@ def main_and_args():
 										 'Further input/output arguments. Only for special use cases')
 	io_group.add_argument('-o', '--output_dir',
 						  action=rw_dir,
-						  default=os.path.join(str(Path.home()), "gridionwatcher_output"),
+						  default=os.path.join(str(Path.home()), "dominion_output"),
 						  help='Path to the base directory where experiment reports shall be saved')
 	arg_data_basedir = \
 	io_group.add_argument('-d', '--data_basedir',
@@ -157,10 +157,10 @@ def main_and_args():
 
 	logger = logging.getLogger(name='gw')
 
-	logger.info("##### starting gridIONwatcher {} #####\n".format(__version__))
+	logger.info("##### starting dominION {} #####\n".format(__version__))
 
 	global UPDATE_OVERVIEW
-	logger.info("setting up GridION overview page environment")
+	logger.info("setting up dominION status page environment")
 	if not os.path.exists(os.path.join(args.output_dir, 'res')):
 		os.makedirs(os.path.join(args.output_dir, 'res'))
 	for res_file in ['style.css', 'flowcell.png', 'no_flowcell.png']:
@@ -197,7 +197,7 @@ def main_and_args():
 								args.dryrun,
 								args.bc_kws))
 
-	logger.info("initiating GridION overview page")
+	logger.info("initiating dominION status page")
 	update_overview(watchers, args.output_dir)
 	webbrowser.open('file://' + os.path.realpath(os.path.join(args.output_dir, "{}_overview.html".format(hostname))))
 
@@ -309,10 +309,10 @@ def update_overview(watchers, output_dir):
 	ALL_RUNS_LOCK.acquire()
 	channel_to_css = {0:"GA10000", 1:"GA20000", 2:"GA30000", 3:"GA40000", 4:"GA50000"}
 
-	with open(os.path.join(resources_dir, 'gridIONstatus_brick.html'), 'r') as f:
-		gridIONstatus_brick = f.read()
+	with open(os.path.join(resources_dir, 'status_brick.html'), 'r') as f:
+		status_brick = f.read()
 
-	gridIONstatus_brick = gridIONstatus_brick.format("{0}", "{1}", __version__, "{}".format(datetime.now())[:-7])
+	status_brick = status_brick.format("{0}", "{1}", __version__, "{}".format(datetime.now())[:-7])
 
 	for watcher in watchers:
 		with open(os.path.join(resources_dir, 'flowcell_brick.html'), 'r') as f:
@@ -411,11 +411,11 @@ def update_overview(watchers, output_dir):
 							runs_string
 							)
 
-		gridIONstatus_brick =  gridIONstatus_brick.format(flowcell_brick + "\n{0}",
+		status_brick =  status_brick.format(flowcell_brick + "\n{0}",
 														  flowcell_info_brick + "\n{1}")
 
 
-	gridIONstatus_brick = gridIONstatus_brick.format("", "")
+	status_brick = status_brick.format("", "")
 
 	all_runs_info = []
 	for asic_id_eeprom in ALL_RUNS:
@@ -437,7 +437,7 @@ def update_overview(watchers, output_dir):
 				link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
 				all_runs_info.append( (link, user_filename_input, sample, sequencing_kit, protocol_start, time_diff) )
 
-	with open(os.path.join(resources_dir, 'gridIONstatus_bottom_brick.html'), 'r') as f:
+	with open(os.path.join(resources_dir, 'status_bottom_brick.html'), 'r') as f:
 			bottom_brick = f.read()
 	if all_runs_info:
 		all_runs_info = sorted(all_runs_info, key=itemgetter(4), reverse=True)
@@ -484,7 +484,7 @@ def update_overview(watchers, output_dir):
 	bottom_brick = bottom_brick.format("")
 
 	with open(os.path.join(output_dir, "{}_overview.html".format(hostname)), 'w') as f:
-		print(gridIONstatus_brick + bottom_brick, file=f)
+		print(status_brick + bottom_brick, file=f)
 
 	ALL_RUNS_LOCK.release()
 	return
