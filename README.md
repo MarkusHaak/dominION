@@ -2,9 +2,43 @@
 
 dominION is a tool for monitoring and protocoling sequencing runs performed on the Oxford Nanopore Technologies GridION sequencer and for automated post processing and transmission of generated data. Listening for changes to MinKNOW log files, it collects information on QC and sequencing experiments and displays summaries of mounted flow cells as well as comprehensive reports about currently running and previously performed experiments.
 
-## Installation
+## Quick Setup and Installation
 
-As this software is intended to be run on the GridION sequencer, I highly recommend using [virtualenv](https://pypi.org/project/virtualenv/) to set up a virtual python environment prior to the installation. In order to set up a virtual python3 environment in your home directory:
+If you want to setup and install everything according to the recommendations, simply open a console and execute the following commands in given order:
+
+```bash
+sudo apt-get update
+sudo apt upgrade
+sudo apt-get -y install python3-pip
+virtualenv -p python3 ~/python3_env
+source ~/python3_env/bin/activate
+echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >>~/.bash_aliases
+git clone --single-branch --branch feature/multi_to_multi_fast5 https://github.com/MarkusHaak/ont_fast5_api.git
+cd ont_fast5_api
+python3 setup.py install
+cd ~
+git clone --single-branch --branch hotfix/issue82 https://github.com/MarkusHaak/Porechop.git
+cd Porechop
+python3 setup.py install
+cd ~
+```
+
+## Setup Environment
+
+On a brand new gridION, the software is not up-to-date. In any case, consider running update and upgrade as admin with apt first:
+
+```bash
+sudo apt update
+sudo apt upgrade
+```
+
+On some GridIONs, the Python3 installation is missing the Python package installer pip. You can install it with apt-get.
+
+```bash
+sudo apt-get -y install python3-pip
+```
+
+As this software is intended to be run on the GridION sequencer, I highly recommend using [virtualenv](https://pypi.org/project/virtualenv/) to set up a virtual python environment prior to the installation. You can set up a virtual python3 environment named python3_env in your home directory with the following command:
 
 ```bash
 virtualenv -p python3 ~/python3_env
@@ -16,9 +50,44 @@ Don't forget to **activate** your virtual environment:
 source ~/python3_env/bin/activate
 ```
 
-This needs to be done every time you open a new console in which you want to execute dominION commands. You can deactivate the virtual environment by simply typing deactivate.
+This needs to be done every time you open a new console in which you want to execute dominION commands. I therefore recommend to add the source command to your .bash_aliases file. This way, the virtual environment is sourced automatically when opening a new console. 
 
-Afterwards, clone and install dominION:
+```bash
+echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >>~/.bash_aliases
+```
+
+## Dependencies
+
+dominION requires an adapted version of ont_fast5_api that is available in my forked repository at https://github.com/MarkusHaak/ont_fast5_api on branch feature/multi_to_multi_fast5 . This version is extended with the script multi_to_multi_fast5 that splits Multi-Fast5 files into files containing reads belonging to the same adapter group. For installation, clone and install by running the following commands:
+
+```bash
+git clone --single-branch --branch feature/multi_to_multi_fast5 https://github.com/MarkusHaak/ont_fast5_api.git
+cd ont_fast5_api
+python3 setup.py install
+cd ~
+```
+
+The same applies to Porechop, where I fixed a bug regarding the identification of adapter orientation. The recommended, fixed version is available at https://github.com/MarkusHaak/Porechop on branch hotfix/issue82 .
+
+```bash
+git clone --single-branch --branch hotfix/issue82 https://github.com/MarkusHaak/Porechop.git
+cd Porechop
+python3 setup.py install
+cd ~
+```
+
+In addition, the following external python modules are required but automatically installed by pip:
+
+* watchdog
+* numpy
+* pandas
+* matplotlib
+
+Please be aware that dominION requires python3.5 or greater and is not backwards compatible with python2. 
+
+## Installation
+
+At last, clone and install dominION:
 
 ```bash
 git clone https://github.com/MarkusHaak/dominION.git
@@ -30,17 +99,6 @@ Alternatively, install dominION with pip from GitHub:
 ```bash
 pip3 install git+https://github.com/MarkusHaak/dominION.git
 ```
-
-## Dependencies
-
-The following external python modules are required (all are automatically installed):
-
-* watchdog
-* numpy
-* pandas
-* matplotlib
-
-dominION requires at least python3.5 and is not backwards compatible with python2. 
 
 ## Full usage
 
