@@ -105,9 +105,9 @@ def main_and_args():
 							   action='store_true',
 							   help='''Ignore file modifications and only consider file creations regarding 
 									determination of the latest log files''')
-	general_group.add_argument('--no_watchnchop',
+	general_group.add_argument('--dryrun',
 							   action='store_true',
-							   help='''If specified, watchnchop is not executed''')
+							   help='''If specified, watchnchop and statsparser are not executed''')
 
 	help_group = parser.add_argument_group('Help')
 	help_group.add_argument('-h', '--help', 
@@ -194,32 +194,12 @@ def main_and_args():
 								args.data_basedir, 
 								args.statsparser_args,
 								args.update_interval,
-								args.no_watchnchop,
+								args.dryrun,
 								args.bc_kws))
 
 	logger.info("initiating GridION overview page")
 	update_overview(watchers, args.output_dir)
 	webbrowser.open('file://' + os.path.realpath(os.path.join(args.output_dir, "{}_overview.html".format(hostname))))
-
-	#w_fps = [[],[],[],[],[]]
-	#for i,watcher in enumerate(watchers):
-	#	for fn in os.listdir(watcher.observed_dir):
-	#		fp = os.path.join(watcher.observed_dir, fn)
-	#		if os.path.isfile(fp):
-	#			if "server" in fp or "bream" in fp:
-	#				w_fps[i].append(fp)
-	#
-	#time.sleep(0.01)
-	#logger.error("attempting to restore history")
-	#while len([item for sublist in w_fps for item in sublist]):
-	#	for i,watcher in enumerate(watchers):
-	#		if len(w_fps[i]):
-	#			fp = w_fps[i].pop()
-	#			watcher.logger.error("touching {}".format(fp))
-	#			Path(fp).touch()
-	#	time.sleep(4)
-	#time.sleep(600)
-	#logger.error("restoring history complete")
 
 	logger.info("entering main loop")
 	try:
@@ -238,24 +218,19 @@ def main_and_args():
 	except KeyboardInterrupt:
 		for watcher in watchers:
 			watcher.observer.stop()
-			if watcher.spScheduler:
-				if watcher.spScheduler.is_alive():
-					watcher.spScheduler.join(timeout=0.05)
-			#if watcher.wcScheduler:
-			#	if watcher.wcScheduler.is_alive():
-			#		watcher.wcScheduler.join(timeout=0.05)
+			if watcher.spScheduler.is_alive() if watcher.spScheduler else None:
+				watcher.spScheduler.join(timeout=0.05)
 			for wcScheduler in watcher.wcScheduler:
-				if wcScheduler.is_alive():
+				if wcScheduler.is_alive() if wcScheduler else None:
 					wcScheduler.join(timeout=0.05)
 	for watcher in watchers:
 		logger.info("joining GA{}0000's observer".format(watcher.channel))
 		watcher.observer.join()
-		if watcher.spScheduler:
-			if watcher.spScheduler.is_alive():
-				logger.info("joining GA{}0000's statsparser scheduler".format(watcher.channel))
-				watcher.spScheduler.join(timeout=1.2)
+		if watcher.spScheduler.is_alive() if watcher.spScheduler else None:
+			logger.info("joining GA{}0000's statsparser scheduler".format(watcher.channel))
+			watcher.spScheduler.join()
 		for wcScheduler in watcher.wcScheduler:
-			if wcScheduler.is_alive():
+			if wcScheduler.is_alive() if wcScheduler else None:
 				logger.info("joining GA{}0000's watchnchop scheduler".format(watcher.channel))
 				wcScheduler.join()
 
@@ -332,7 +307,7 @@ def import_runs(base_dir, refactor=False):
 
 def update_overview(watchers, output_dir):
 	ALL_RUNS_LOCK.acquire()
-	channel_to_css = {0:"one", 1:"two", 2:"three", 3:"four", 4:"five"}
+	channel_to_css = {0:"GA10000", 1:"GA20000", 2:"GA30000", 3:"GA40000", 4:"GA50000"}
 
 	with open(os.path.join(resources_dir, 'gridIONstatus_brick.html'), 'r') as f:
 		gridIONstatus_brick = f.read()
@@ -598,7 +573,7 @@ class ChannelStatus():
 		self.run_data['minion_id'] = self.minion_id
 		self.mux_scans = []
 
-	def run_finished(self):
+	def reset_channel(self):
 		self.logger.info("resetting run data")
 		self.run_data = copy.deepcopy(self.empty_run_data)
 		self.run_data['minion_id'] = self.minion_id
@@ -644,21 +619,22 @@ class ChannelStatus():
 
 class WatchnchopScheduler(threading.Thread):
 
-	def __init__(self, data_basedir, relative_path, user_filename_input, bc_kws, stats_fp, channel):
+	def __init__(self, data_basedir, relative_path, user_filename_input, fastq_reads_per_file, bc_kws, stats_fp, channel):
 		threading.Thread.__init__(self)
 		if getattr(self, 'daemon', None) is None:
 			self.daemon = True
 		else:
 			self.setDaemon(True)
 		self.stoprequest = threading.Event()	# set when joined without timeout (eg if terminated with ctr-c)
-		self.expend = threading.Event()			# set when joined with timeout (eg if experiment ended)
+		self.exp_end = threading.Event()			# set when joined with timeout (eg if experiment ended)
 		self.logger = logging.getLogger(name='gw.w{}.wcs'.format(channel+1))
 
 		self.observed_dir = os.path.join(data_basedir, relative_path, 'fastq_pass')
 		# define the command that is to be executed
 		self.cmd = [which('perl'),
-					which('watchnchop'),#watchnchop_path,
-					'-o {}'.format(stats_fp),
+					which('watchnchop'),
+					'-o', stats_fp,
+					'-f', '{}'.format(fastq_reads_per_file),
 					'-v']
 		if len([kw for kw in bc_kws if kw in user_filename_input]) > 0:
 			self.cmd.append('-b')
@@ -668,11 +644,13 @@ class WatchnchopScheduler(threading.Thread):
 
 	def run(self):
 		self.logger.info("STARTED watchnchop scheduler")
-		while not (self.stoprequest.is_set() or self.expend.is_set()):
-			if self.start_watchnchop():
+		while not (self.stoprequest.is_set() or self.exp_end.is_set()):
+			if self.conditions_met():
+				self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+				self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(self.cmd))
 				break
 			time.sleep(1)
-		while not (self.stoprequest.is_set() or self.expend.is_set()):
+		while not (self.stoprequest.is_set() or self.exp_end.is_set()):
 			time.sleep(1)
 		if self.process:
 			try:
@@ -684,14 +662,19 @@ class WatchnchopScheduler(threading.Thread):
 			if self.stoprequest.is_set():
 				self.logger.error("watchnchop was NEVER STARTED: this thread was ordered to kill the watchnchop subprocess before it was started")
 				return
+			
+			# try one last time to start watchnchop (necessary for runs with extremly low output, where all reads are buffered)
 			self.logger.info("starting watchnchop in one minute, then kill it after another 5 minutes")
 			for i in range(60):
 				if self.stoprequest.is_set():
 					self.logger.error("watchnchop was NEVER STARTED: this thread was ordered to kill the watchnchop subprocess before it was started")
 					return
 				time.sleep(1)
-			if not start_watchnchop:
-				self.logger.error("watchnchop NOT STARTED: directory {} is still does not exist or contains no fastq files".format(self.observed_dir))
+			if self.conditions_met():
+				self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+				self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(self.cmd))
+			else:
+				self.logger.error("watchnchop NOT STARTED: directory {} still does not exist or contains no fastq files".format(self.observed_dir))
 				return
 			for i in range(300):
 				if self.stoprequest.is_set():
@@ -700,19 +683,17 @@ class WatchnchopScheduler(threading.Thread):
 			self.process.terminate()
 			self.logger.info("TERMINATED watchnchop process")
 
-	def start_watchnchop(self):
+	def conditions_met(self):
 		if os.path.exists(self.observed_dir):
 			if [fn for fn in os.listdir(self.observed_dir) if fn.endswith('.fastq')]:
-				self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-				self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(self.cmd))
-				return 1
-		return 0
+				return True
+		return False
 
 	def join(self, timeout=None):
 		if timeout:
-			self.stoprequest.set()
+			self.exp_end.set()
 		else:
-			self.expend.set()
+			self.stoprequest.set()
 		super(WatchnchopScheduler, self).join(timeout)
 
 
@@ -724,7 +705,8 @@ class StatsparserScheduler(threading.Thread):
 			self.daemon = True
 		else:
 			self.setDaemon(True)
-		self.stoprequest = threading.Event()
+		self.stoprequest = threading.Event()	# set when joined without timeout (eg if terminated with ctr-c)
+		self.exp_end = threading.Event()		# set when joined with timeout (eg if experiment ended)
 		self.logger = logging.getLogger(name='gw.w{}.sps'.format(channel+1))
 
 		self.update_interval = update_interval
@@ -733,46 +715,84 @@ class StatsparserScheduler(threading.Thread):
 
 	def run(self):
 		page_opened = False
-		while not self.stoprequest.is_set():
+		while not self.stoprequest.is_set() or self.exp_end.is_set():
 			last_time = time.time()
-			self.logger.info("STARTING STATSPARSING")
 
-			stats_fns = [fn for fn in os.listdir(os.path.abspath(self.sample_dir)) if fn.endswith('stats.csv')] if os.path.exists(os.path.abspath(self.sample_dir)) else []
-			if stats_fns:
-				cmd = [os.path.join(get_script_dir(),'statsparser'),
-					   self.sample_dir,
-					   '-q']
-				cmd.extend(self.statsparser_args)
-				cp = subprocess.run(cmd) # waits for process to complete
-				if cp.returncode == 0:
-					self.logger.info("STATSPARSING COMPLETED")
-					if not page_opened:
-						basedir = os.path.abspath(self.sample_dir)
-						fp = os.path.join(basedir, 'report.html')
-						self.logger.info("OPENING " + fp)
-						webbrowser.open('file://' + os.path.realpath(fp))
-						page_opened = True
-				else:
-					self.logger.error("ERROR while running statsparser")
+			#stats_fns = [fn for fn in os.listdir(os.path.abspath(self.sample_dir)) if fn.endswith('stats.csv')] if os.path.exists(os.path.abspath(self.sample_dir)) else []
+			#if stats_fns:
+			#	cmd = [os.path.join(get_script_dir(),'statsparser'),
+			#		   self.sample_dir,
+			#		   '-q']
+			#	cmd.extend(self.statsparser_args)
+			#	cp = subprocess.run(cmd) # waits for process to complete
+			#	if cp.returncode == 0:
+			#		#self.logger.info("STATSPARSING COMPLETED")
+			#		if not page_opened:
+			#			basedir = os.path.abspath(self.sample_dir)
+			#			fp = os.path.join(basedir, 'report.html')
+			#			self.logger.info("OPENING " + fp)
+			#			webbrowser.open('file://' + os.path.realpath(fp))
+			#			page_opened = True
+			#	else:
+			#		self.logger.error("ERROR while running statsparser")
+			#else:
+			#	self.logger.warning("statsfile does not exist (yet?)")
+			if self.conditions_met():
+				self.update_report()
 			else:
-				self.logger.warning("statsfile does not exist (yet?)")
+				self.logger.warning("no stats file in {} (yet), statsparser was not started".format(self.sample_dir))
 
 			this_time = time.time()
-			while (this_time - last_time < self.update_interval) and not self.stoprequest.is_set():
+			while (this_time - last_time < self.update_interval) and not self.stoprequest.is_set() or self.exp_end.is_set():
 				time.sleep(1)
 				this_time = time.time()
+		# start statsparser a last time if the experiment ended
+		if not self.stoprequest.is_set() and self.conditions_met():
+			self.update_report()
+
+	def conditions_met(self):
+		stats_fns = [fn for fn in os.listdir(os.path.abspath(self.sample_dir)) if fn.endswith('stats.csv')] if os.path.exists(os.path.abspath(self.sample_dir)) else []
+		if stats_fns:
+			return True
+		return False
+
+
+	def update_report(self):
+		self.logger.info("updating report...")
+		cmd = [os.path.join(get_script_dir(),'statsparser'),
+			   self.sample_dir,
+			   '-q']
+		cmd.extend(self.statsparser_args)
+		cp = subprocess.run(cmd) # waits for process to complete
+		if cp.returncode == 0:
+			#self.logger.info("STATSPARSING COMPLETED")
+			if not page_opened:
+				basedir = os.path.abspath(self.sample_dir)
+				fp = os.path.join(basedir, 'report.html')
+				self.logger.info("OPENING " + fp)
+				webbrowser.open('file://' + os.path.realpath(fp))
+				page_opened = True
+		else:
+			self.logger.error("ERROR while running statsparser")
+
 
 	def join(self, timeout=None):
-		self.stoprequest.set()
+		#self.stoprequest.set()
+		#super(StatsparserScheduler, self).join(timeout)
+		if timeout:
+			self.exp_end.set()
+		else:
+			self.stoprequest.set()
 		super(StatsparserScheduler, self).join(timeout)
 
 
 class Watcher():
 
 	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, output_dir, data_basedir, 
-				 statsparser_args, update_interval, no_watchnchop, bc_kws):
+				 statsparser_args, update_interval, dryrun, bc_kws):
 		self.q = queue.PriorityQueue()
-		self.watchnchop = not no_watchnchop
+		#self.watchnchop = not no_watchnchop
+		self.dryrun = dryrun
 		self.channel = channel
 		self.output_dir = output_dir
 		self.data_basedir = data_basedir
@@ -830,10 +850,9 @@ class Watcher():
 			self.channel_status.run_data['protocol_end'] = line[:23]
 			if self.channel_status.mux_scans:
 				self.save_logdata()
-			self.channel_status.run_finished()
-			if self.spScheduler:
-				if self.spScheduler.is_alive():
-					self.spScheduler.join(1.2)
+			self.channel_status.reset_channel()
+			if self.spScheduler.is_alive() if self.spScheduler else None:
+				self.spScheduler.join(1.2)
 			self.spScheduler = None
 			if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
 				self.wcScheduler[-1].join(1.2)
@@ -846,9 +865,8 @@ class Watcher():
 			self.logger.info("FLOWCELL DISCOVERED")
 			UPDATE_OVERVIEW = True
 			self.channel_status.flowcell_disconnected()
-			if self.spScheduler:
-				if self.spScheduler.is_alive():
-					self.spScheduler.join(1.2)
+			if self.spScheduler.is_alive() if self.spScheduler else None:
+				self.spScheduler.join(1.2)
 			self.spScheduler = None
 			if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
 				self.wcScheduler[-1].join(1.2)
@@ -917,25 +935,24 @@ class Watcher():
 			#try to identify the path in which the experiment data is saved, relative to data_basedir
 			self.channel_status.find_relative_path(self.data_basedir)
 
-			#start watchnchop (porechop & filter & rsync)
-			if self.watchnchop:
+			if not self.dryrun:
+				#start watchnchop (porechop & filter & rsync)
 				self.start_watchnchop()
 
-			#start creation of plots at regular time intervals
-			if self.spScheduler:
-				if self.spScheduler.is_alive():
+				#start creation of plots at regular time intervals
+				if self.spScheduler.is_alive() if self.spScheduler else None:
 					self.spScheduler.join(1.1)
-			sample_dir = os.path.join(self.output_dir,
-									  'runs',
-									  self.channel_status.run_data['user_filename_input'],
-									  self.channel_status.run_data['user_filename_input'])#, #TODO: change to sample
-									  #self.channel_status.run_data['run_id'] + '_stats.csv')
-			self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for sample dir {1}'.format(self.update_interval/1000, sample_dir))
-			self.spScheduler = StatsparserScheduler(self.update_interval, 
-													sample_dir, 
-													self.statsparser_args, 
-													self.channel)
-			self.spScheduler.start()
+				sample_dir = os.path.join(self.output_dir,
+										  'runs',
+										  self.channel_status.run_data['user_filename_input'],
+										  self.channel_status.run_data['user_filename_input'])#, #TODO: change to sample
+										  #self.channel_status.run_data['run_id'] + '_stats.csv')
+				self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for sample dir {1}'.format(self.update_interval/1000, sample_dir))
+				self.spScheduler = StatsparserScheduler(self.update_interval, 
+														sample_dir, 
+														self.statsparser_args, 
+														self.channel)
+				self.spScheduler.start()
 
 		if dict_content:
 			self.channel_status.update(dict_content, overwrite)
@@ -997,7 +1014,7 @@ class Watcher():
 		ALL_RUNS_LOCK.release()
 
 	def start_watchnchop(self):
-		for key in ['user_filename_input', 'relative_path', 'run_id']:
+		for key in ['user_filename_input', 'relative_path', 'run_id', 'fastq_reads_per_file']:
 			if not self.channel_status.run_data[key]:
 				self.logger.warning("NOT executing watchnchop for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
 				return
@@ -1017,6 +1034,7 @@ class Watcher():
 		self.wcScheduler.append(WatchnchopScheduler(self.data_basedir,
 													self.channel_status.run_data['relative_path'],
 													self.channel_status.run_data['user_filename_input'],
+													self.channel_status.run_data['fastq_reads_per_file'],
 													self.bc_kws,
 													stats_fp,
 													self.channel))
@@ -1174,7 +1192,7 @@ class RunsDirsEventHandler(FileSystemEventHandler):
 
 	def on_moved(self, event):
 		if event.is_directory or (self.depth(event.src_path) == 3 and event.src_path.endswith('.json')):
-			self.logger.info("moved {}, depth {}, \ndest {}".format(event.src_path, self.depth(event.src_path), event.dest_path))
+			self.logger.debug("moved {}, depth {}, \ndest {}".format(event.src_path, self.depth(event.src_path), event.dest_path))
 			if self.observed_dir in event.dest_path and self.depth(event.dest_path) == self.depth(event.src_path):
 				#self.logger.info("affected runs: {}".format(self.affected_runs(event.src_path)))
 				self.reload_runs()
@@ -1183,24 +1201,24 @@ class RunsDirsEventHandler(FileSystemEventHandler):
 
 	def on_created(self, event):
 		if event.is_directory:
-			self.logger.info("created directory {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+			self.logger.debug("created directory {}, depth {}".format(event.src_path, self.depth(event.src_path)))
 			if 1 <= self.depth(event.src_path) <= 2:
 				self.reload_runs()
 		elif self.depth(event.src_path) == 3 and event.src_path.endswith('.json'):
-			self.logger.info("created file {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+			self.logger.debug("created file {}, depth {}".format(event.src_path, self.depth(event.src_path)))
 			self.reload_runs()
 
 	def on_modified(self, event):
 		if event.is_directory:
-			self.logger.info("modified directory {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+			self.logger.debug("modified directory {}, depth {}".format(event.src_path, self.depth(event.src_path)))
 
 	def on_deleted(self, event):
 		if event.is_directory:
-			self.logger.info("deleted directory {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+			self.logger.debug("deleted directory {}, depth {}".format(event.src_path, self.depth(event.src_path)))
 			if 1 <= self.depth(event.src_path) <= 2:
 				self.reload_runs()
 		elif self.depth(event.src_path) == 3 and event.src_path.endswith('.json'):
-			self.logger.info("deleted file {}, depth {}".format(event.src_path, self.depth(event.src_path)))
+			self.logger.debug("deleted file {}, depth {}".format(event.src_path, self.depth(event.src_path)))
 			self.reload_runs()
 
 	def depth(self, src_path):

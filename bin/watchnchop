@@ -25,22 +25,25 @@ use sigtrap qw/handler signal_handler TERM/;
 my $term_ref;; 
 $$term_ref = 0;
 
-our($opt_a, $opt_b, $opt_p, $opt_l, $opt_q, $opt_o, $opt_n, $opt_v);
+our($opt_a, $opt_b, $opt_f, $opt_p, $opt_l, $opt_q, $opt_o, $opt_n, $opt_t, $opt_v);
 
-getopts('abpl:q:o:nv');
+getopts('abf:pl:q:o:t:nv');
 
-# -a(all fast5):   also put fast5 files of reads removed by length and quality filtering into barcode bins 
-# -b(arcoding):    use porechop to demultiplex the fastq data 
-# -p(ass only):    use data from fastq_pass only
-# -l(ength):       minimal length to pass filter (default: 1000)
-# -q(uality):      minimal quality to pass filter (default: 5)
-# -o(utput stats): path to store the stats file
-# -v(erbose):      print some info to STDERR
-# -n(o transfer):  no data transfer to remote host
+# -a(all fast5):     also put fast5 files of reads removed by length and quality filtering into barcode bins 
+# -b(arcoding):      use porechop to demultiplex the fastq data 
+# -f(astq reads):    the number of fastq reads in an input file (default: use time since write (error-prone for low yield runs!))
+# -p(ass only):      use data from fastq_pass only
+# -l(ength):         minimal length to pass filter (default: 1000)
+# -q(uality):        minimal quality to pass filter (default: 5)
+# -o(utput stats):   path to store the stats file
+# -t(ime since mod): time interval (sec)  for a fastq file to be processed, if no number of input reads is given (default: 3600)
+# -v(erbose):        print some info to STDERR
+# -n(o transfer):    no data transfer to remote host
 
 
 $opt_l = 1000 unless ($opt_l);
 $opt_q = 5 unless ($opt_q);
+$opt_t = 3600 unless ($opt_t);
 
 my $starttime = time;
 
@@ -61,6 +64,9 @@ system("ln -s /data/$basedir /data/ARCHIVE/") unless (-e "/data/ARCHIVE/$basedir
 
 my $statsfile = "$outdir/stats.csv";
 my $fast5splitfile = "$outdir/fast5split.csv";
+
+my $nfqr = 4000;
+$nfqr = 4 * $opt_f if ($opt_f =~ m/^\d+$/);
 
 print "Writing stats to $opt_o\n" if ($opt_v);
 $statsfile = $opt_o if ($opt_o);
@@ -90,7 +96,7 @@ while (1) {
 	open FAST5SPLIT, ">$fast5splitfile"
 	    || die "Cannot open temp stat file $fast5splitfile for writing: $!";
 
-	if ($time > ($mtime + 300)) {
+	if (($opt_f && ($nfqr == `wc -l $entry_dir/fastq_$file`)) || (!$opt_f && ($time > ($mtime + $opt_t))) || $$term_ref) {
 	    make_path "$outdir/porechop/$file" unless (-e "$outdir/porechop/$file");	    
 
 	    my $pcout = "-o $outdir/porechop/$file/1D.fastq";
@@ -184,6 +190,7 @@ print STDOUT "Watchnchop transfers raw data to remote client\n" if ($opt_v);
 # transfer the raw data to the remote client
 #remove_tree("$outdir/porechop/");
 system("rsync -Rruve ssh $outdir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
+remove_tree("$outdir");
 system("rsync -Rkruve ssh /data/./ARCHIVE/$basedir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
 
 my $systime = systime();
