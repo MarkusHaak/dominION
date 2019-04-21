@@ -51,6 +51,16 @@ SCRIPTPATH=`dirname $SCRIPT`
 MODULEPATH=`dirname $SCRIPTPATH`
 INIFILE="${MODULEPATH}/dominion/resources/defaults.ini"
 
+####
+echo "- run bootstrap script"
+/bin/bash "${SCRIPTPATH}/bootstrap"
+if [[ $? -gt 0 ]] 
+then
+    echo "error running ${SCRIPTPATH}/bootstrap" 1>&2
+    exit_abnormal
+fi
+
+
 #####
 echo "- setup key authentication" 1>&2
 
@@ -119,3 +129,8 @@ if [ -e "${HOME}/.bash_aliases" ]; then
 else
     echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" > "${HOME}/.bash_aliases"
 fi
+
+#####
+echo "- installing dominION"
+cd "${MODULEPATH}"
+python3 setup.py install

@@ -4,33 +4,21 @@ dominION is a tool for monitoring and protocoling sequencing runs performed on t
 
 ## Quick Setup and Installation
 
-The easiest way to setup dominion and all its dependencies is to clone the repository and run the bash scripts bootstrap and setup. First, open a console and clone the git repository with option *--recurse-submodules*. If you have no access to the github servers from the GridION, you can clone the directory on a different machine, transfer the directory *dominION* to the GridION and proceed with the installation.
+The easiest way to setup dominion and all its dependencies is to clone the repository and run the bash script setup. 
+
+First, open a console and clone the git repository with option *--recurse-submodules*. If you have no access to the github servers from your local machine, you can clone the directory on a different machine, transfer the directory *dominION* and proceed with the installation.
 
 ```bash
 sudo apt-get -y install git
 git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
 ```
 
-Next, run the bootstrap script. It will create a python virtual environment in the home directory and install/update all dependencies.
-
-```bash
-./dominION/script/bootstrap
-```
-
-Afterwards, run the setup script to install dominION, setup key authentication and defaults for transfer of sequence data to a remote server and install a cron job for the dominion agent script. It will also set the overview page of dominION as your Firefox startup page and modify your .bash_aliases to source the python virtual environment in each console.
+Next, run script/setup to install dominION in a new virtual environment, setup key authentication and defaults for transfer of sequence data to a remote server and install a cron job for the dominion agent script. It will also set the overview page of dominION as your Firefox startup page and modify your .bash_aliases to source the python virtual environment in each console.
 
 Please **replace USER, HOST and DEST** with your server specific information. Please be aware that you will be prompted to enter the administrator password of your local machine (the GridION) and the password for the specified user on the remote host to setup key authentication.
 
 ```bash
 ./dominION/script/setup -u USER -H HOST -d DEST
-```
-
-Finally, install dominION in the newly created virtual environment:
-
-```bash
-source ~/python3_env/bin/activate
-cd dominION
-python setup.py install 
 ```
 
 When you **restart your machine**, the gridION agent script should now be running in the background. If you open Firefox, you should see the overview page of dominION as the startup page.
@@ -130,7 +118,7 @@ perl -pi -e "s|dest.*|dest = ${dest}|" "$INIFILE"
 python3 setup.py install 
 ```
 
-### Additional Setup
+### Recommended Configuration
 
 As dominION is intended to run in the background as a software agent, i recommend adding a new cron job to your crontab that runs dominion in a screen shell.
 
