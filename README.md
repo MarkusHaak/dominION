@@ -4,43 +4,82 @@ dominION is a tool for monitoring and protocoling sequencing runs performed on t
 
 ## Quick Setup and Installation
 
-If you want to setup and install everything according to the recommendations, simply open a console and execute the following commands in given order:
+The easiest way to setup dominion and all its dependencies is to clone the repository and run the bash scripts bootstrap and setup. First, open a console and clone the git repository with option *--recurse-submodules*. If you have no access to the github servers from the GridION, you can clone the directory on a different machine, transfer the directory *dominION* to the GridION and proceed with the installation.
 
 ```bash
-sudo apt-get update
-sudo apt upgrade
-sudo apt-get -y install python3-pip
-virtualenv -p python3 ~/python3_env
-source ~/python3_env/bin/activate
-echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >>~/.bash_aliases
-git clone --single-branch --branch feature/multi_to_multi_fast5 https://github.com/MarkusHaak/ont_fast5_api.git
-cd ont_fast5_api
-python3 setup.py install
-cd ~
-git clone --single-branch --branch hotfix/issue82 https://github.com/MarkusHaak/Porechop.git
-cd Porechop
-python3 setup.py install
-cd ~
+sudo apt-get -y install git
+git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
 ```
 
-## Setup Environment
+Next, run the bootstrap script. It will create a python virtual environment in the home directory and install/update all dependencies.
 
-On a brand new gridION, the software is not up-to-date. In any case, consider running update and upgrade as admin with apt first:
+```bash
+./dominION/script/bootstrap
+```
+
+Afterwards, run the setup script to install dominION, setup key authentication and defaults for transfer of sequence data to a remote server and install a cron job for the dominion agent script. It will also set the overview page of dominION as your Firefox startup page and modify your .bash_aliases to source the python virtual environment in each console.
+
+Please **replace USER, HOST and DEST** with your server specific information. Please be aware that you will be prompted to enter the administrator password of your local machine (the GridION) and the password for the specified user on the remote host to setup key authentication.
+
+```bash
+./dominION/script/setup -u USER -H HOST -d DEST
+```
+
+Finally, install dominION in the newly created virtual environment:
+
+```bash
+source ~/python3_env/bin/activate
+cd dominION
+python setup.py install 
+```
+
+When you **restart your machine**, the gridION agent script should now be running in the background. If you open Firefox, you should see the overview page of dominION as the startup page.
+
+## Setup and Installation
+
+The steps in this section are not necessary if the **Quick Setup and Installation** was performed.
+
+### Setup Environment
+
+On a brand new gridION, the software is not up-to-date. In any case, consider running apt update and apt upgrade as admin first:
 
 ```bash
 sudo apt update
 sudo apt upgrade
 ```
 
-On some GridIONs, the Python3 installation is missing the Python package installer pip. You can install it with apt-get.
+For file transfer from the GridION to a remote server, it is required to configure SSH key-based authentication. On the GridION, generate a SSH key pair for dominion.
 
 ```bash
-sudo apt-get -y install python3-pip
+ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa_dominion
 ```
 
-As this software is intended to be run on the GridION sequencer, I highly recommend using [virtualenv](https://pypi.org/project/virtualenv/) to set up a virtual python environment prior to the installation. You can set up a virtual python3 environment named python3_env in your home directory with the following command:
+Adapt the public key in order to restricted key authentication to the rsync command needed for file transfer. Please change USER, HOST and DEST/ON/SERVER/ according to your needs. These parameters specify the destination of file transfers with rsync, as in USER@HOST:/DEST/ON/SERVER/.
 
 ```bash
+user="USER"
+host="HOST"
+dest="/DEST/ON/SERVER/"
+localip=$(ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p')
+echo 'command="rsync --server -Rruve.iLsfx . '"$dest"'",from="'"$localip"'",restrict '"$(cat ~/.ssh/id_rsa_dominion.pub)" > ~/.ssh/id_rsa_dominion.pub
+```
+
+Then transfer the public key to the server using ssh-copy-id. You will be prompted to type in the password for the specified user on the remote host.
+
+```bash
+ssh-copy-id -i ~/.ssh/id_rsa_dominion.pub "${user}@${host}"
+```
+
+On some GridIONs, the Python3 installation is missing the Python package installer pip and git. You can install both with apt-get.
+
+```bash
+sudo apt-get -y install python3-pip git
+```
+
+As this software is intended to be run on the GridION sequencer, I highly recommend using [virtualenv](https://pypi.org/project/virtualenv/) to set up a virtual python environment prior to the installation:
+
+```bash
+sudo apt-get -y install virtualenv
 virtualenv -p python3 ~/python3_env
 ```
 
@@ -53,30 +92,24 @@ source ~/python3_env/bin/activate
 This needs to be done every time you open a new console in which you want to execute dominION commands. I therefore recommend to add the source command to your .bash_aliases file. This way, the virtual environment is sourced automatically when opening a new console. 
 
 ```bash
-echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >>~/.bash_aliases
+touch ~/.bash_aliases
+echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >> ~/.bash_aliases
 ```
 
-## Dependencies
+### Dependencies
 
-dominION requires an adapted version of ont_fast5_api that is available in my forked repository at https://github.com/MarkusHaak/ont_fast5_api on branch feature/multi_to_multi_fast5 . This version is extended with the script multi_to_multi_fast5 that splits Multi-Fast5 files into files containing reads belonging to the same adapter group. For installation, clone and install by running the following commands:
+dominION requires an adapted version of ont_fast5_api, which contains a script multi_to_multi_fast5 that splits Multi-Fast5 files into files containing reads belonging to the same adapter group. The same applies to Porechop, where I fixed a bug regarding the identification of adapter orientation. Both are included as submodules in the dominION repository on github. To install these dependencies, clone the dominION repository with option *--recurse-submodules* and install them separately:
 
 ```bash
-git clone --single-branch --branch feature/multi_to_multi_fast5 https://github.com/MarkusHaak/ont_fast5_api.git
-cd ont_fast5_api
+git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
+cd dominION/ont_fast5_api
+python3 setup.py install 
+cd ../Porechop
 python3 setup.py install
-cd ~
+cd ..
 ```
 
-The same applies to Porechop, where I fixed a bug regarding the identification of adapter orientation. The recommended, fixed version is available at https://github.com/MarkusHaak/Porechop on branch hotfix/issue82 .
-
-```bash
-git clone --single-branch --branch hotfix/issue82 https://github.com/MarkusHaak/Porechop.git
-cd Porechop
-python3 setup.py install
-cd ~
-```
-
-In addition, the following external python modules are required but automatically installed by pip:
+In addition, the following external python modules are required, but they are automatically installed if you follow the instructions given under **Installation**.
 
 * watchdog
 * numpy
@@ -85,22 +118,40 @@ In addition, the following external python modules are required but automaticall
 
 Please be aware that dominION requires python3.5 or greater and is not backwards compatible with python2. 
 
-## Installation
+### Installation
 
-At last, clone and install dominION:
-
-```bash
-git clone https://github.com/MarkusHaak/dominION.git
-cd dominION
-python3 setup.py install
-```
-Alternatively, install dominION with pip from GitHub:
+At last, clone and install dominION. If you followed the steps above in the same console, dominION will be configured to use the user, host and destination as specified for setting up key authentication. Otherwise, you will be prompted to give these information when executing `python3 setup.py install`. In any case, you can change these settings after installation with the associated command line arguments --user, --host and --host_dest.
 
 ```bash
-pip3 install git+https://github.com/MarkusHaak/dominION.git
+INIFILE="dominion/resources/defaults.ini"
+perl -pi -e "s|user.*|user = ${user}|" "$INIFILE"
+perl -pi -e "s|host.*|host = ${host}|" "$INIFILE"
+perl -pi -e "s|dest.*|dest = ${dest}|" "$INIFILE"
+python3 setup.py install 
 ```
 
-## Full usage
+### Additional Setup
+
+As dominION is intended to run in the background as a software agent, i recommend adding a new cron job to your crontab that runs dominion in a screen shell.
+
+```bash
+newjob="@reboot screen -dm bash -c '. ${HOME}/python3_env/bin/activate ; dominion'"
+(crontab -l ; echo "$newjob") | crontab -
+```
+
+To prevent the need to activate the virtual environment each time a subscript of dominION is needed, modify the .bash_aliases file to source it whenever a new console is opened.
+
+```bash
+touch ~/.bash_aliases
+echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >> ~/.bash_aliases
+```
+
+Optionally, you can change the startup page of Firefox to the dominION overview page.
+
+## Basic Usage
+
+
+## Advanced Usage
 
 ### dominion
 

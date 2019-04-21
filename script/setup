@@ -1,0 +1,121 @@
+#!/bin/bash
+uflag=false
+Hflag=false
+dflag=false
+
+usage() {
+    echo "Usage: sudo $0 -u USER -s HOST -d DEST" 1>&2 
+    echo "Required options:" 1>&2
+    echo "  -u USER" 1>&2
+    echo "      user for rsync file transfer as in USER@HOST:DEST" 1>&2
+    echo "  -H HOST" 1>&2
+    echo "      host for rsync file transfer as in USER@HOST:DEST" 1>&2
+    echo "  -d DEST" 1>&2
+    echo "      destination for rsync file transfer as in USER@HOST:DEST" 1>&2
+}
+
+exit_abnormal() {
+  usage
+  exit 1
+}
+
+while getopts "u:H:d:" opt
+do
+   case $opt in
+        u)  echo "Option u : $OPTARG" 1>&2
+            uflag=true
+            user=$OPTARG
+            ;;
+        H)  echo "Option H : $OPTARG" 1>&2
+            Hflag=true 
+            host=$OPTARG
+            ;;
+        d)  echo "Option d : $OPTARG" 1>&2
+            dflag=true 
+            dest=$OPTARG
+            ;;
+        \? ) echo "Unknown option: -$OPTARG" >&2; exit_abnormal;;
+        :)  echo "Missing option argument for -$OPTARG" >&2; exit_abnormal;;
+   esac 
+done
+
+if !($uflag && $Hflag && $dflag)
+then
+    echo "Missing options" 1>&2
+    exit_abnormal
+fi
+
+# identify script path
+SCRIPT=`realpath $0`
+SCRIPTPATH=`dirname $SCRIPT`
+MODULEPATH=`dirname $SCRIPTPATH`
+INIFILE="${MODULEPATH}/dominion/resources/defaults.ini"
+
+#####
+echo "- setup key authentication" 1>&2
+
+if [ -e "${HOME}/.ssh/id_rsa_dominion.pub" ]; then
+    echo "key pair id_rsa_dominion already exists, skipping creation"
+else
+    ssh-keygen -t rsa -N "" -f "${HOME}/.ssh/id_rsa_dominion"
+    localip=$(ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p')
+    echo 'command="rsync --server -Rruve.iLsfx . '"$dest"'",from="'"$localip"'",restrict '"$(cat ${HOME}/.ssh/id_rsa_dominion.pub)" > "${HOME}/.ssh/id_rsa_dominion.pub"
+fi
+ssh-copy-id -i "${HOME}/.ssh/id_rsa_dominion.pub" "${user}@${host}"
+if [[ $? -gt 0 ]] 
+then
+    echo "ssh-copy-id failed for ${user}@${host}" 1>&2
+    exit_abnormal
+fi
+
+#####
+echo "- write values of user, host and dest as defaults to ini file" 1>&2
+
+perl -pi -e "s|user.*|user = ${user}|" "$INIFILE"
+perl -pi -e "s|host.*|host = ${host}|" "$INIFILE"
+perl -pi -e "s|dest.*|dest = ${dest}|" "$INIFILE"
+
+#####
+echo "- add a cron job (if it does not already exist)" 1>&2
+
+newjob="@reboot screen -dm bash -c '. ${HOME}/python3_env/bin/activate ; dominion'"
+if ! (crontab -l | grep -q "$newjob"); then
+        (crontab -l ; echo "$newjob") | crontab -
+fi
+
+#####
+echo "- change firefox startup page" 1>&2
+
+prefdir=( $HOME/.mozilla/firefox/*.default/ )
+overviewfile="/data/dominion/${HOSTNAME}_overview.html"
+echo "- create a backup copy of the prefs.js, if it not already exists" 1>&2
+if [ ! -e "$prefdir/prefs.backup" ]; then
+    echo "Creating a safe copy of prefs.js, because none exists" 1>&2
+    cp "${prefdir}/prefs.js" "${prefdir}/prefs.backup"
+fi
+echo "- edit entry browser.startup.homepage in user.js if it exists, otherwise create it" 1>&2
+if [ -e "${prefdir}/user.js" ]; then
+    echo "user.js exists, editing entry browser.startup.homepage" 1>&2
+    if (cat "${prefdir}/user.js" | grep -q "browser.startup.homepage"); then
+        echo "editing entry browser.startup.homepage" 1>&2
+        perl -pi -e "s|user_pref\(\"browser.startup.homepage.*|user_pref\(\"browser.startup.homepage\", \"file://${overviewfile}\"\);|" "${prefdir}/user.js"
+    else
+        echo "user_pref(\"browser.startup.homepage\", \"file://${overviewfile}\");" >> "${prefdir}/user.js"
+    fi
+else
+    echo "creating user.js with entry browser.startup.homepage" 1>&2
+    echo "user_pref(\"browser.startup.homepage\", \"file://${overviewfile}\");" > "${prefdir}/user.js"
+fi
+
+#####
+echo "- add activation of virtual environment to .bash_aliases" 1>&2
+
+if [ -e "${HOME}/.bash_aliases" ]; then
+    if (cat "${HOME}/.bash_aliases" | grep -q "~/python3_env/bin/activate"); then
+        echo ".bash_aliases already contains activation of python3_env virtual environment"  1>&2
+    else
+        echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >> "${HOME}/.bash_aliases"
+    fi
+else
+    echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" > "${HOME}/.bash_aliases"
+fi

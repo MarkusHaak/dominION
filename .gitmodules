@@ -1,0 +1,8 @@
+[submodule "Porechop"]
+	path = Porechop
+	url = https://github.com/MarkusHaak/Porechop.git
+	branch = hotfix/issue82
+[submodule "ont_fast5_api"]
+	path = ont_fast5_api
+	url = https://github.com/MarkusHaak/ont_fast5_api.git
+	branch = feature/multi_to_multi_fast5

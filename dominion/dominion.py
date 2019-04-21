@@ -63,6 +63,9 @@ def main_and_args():
 									 formatter_class=ArgHelpFormatter, 
 									 add_help=False)
 
+	server_group = parser.add_argument_group('server setting', 
+											 '')
+
 	io_group = parser.add_argument_group('I/O arguments', 
 										 'Further input/output arguments. Only for special use cases')
 	io_group.add_argument('-o', '--output_dir',
@@ -80,7 +83,8 @@ def main_and_args():
 						  help='''Path to the base directory of GridIONs log files''')
 
 	io_group.add_argument('--logfile',
-						  help='''File in which logs will be safed''')
+						  help='''File in which logs will be safed 
+						  (default: OUTPUTDIR/logs/YYYY-MM-DD_hh:mm_HOSTNAME_LOGLVL.log''')
 
 	sp_arguments = parser.add_argument_group('Statsparser arguments',
 										   'Arguments passed to statsparser for formatting html pages')
@@ -91,7 +95,7 @@ def main_and_args():
 								   See a full list of available arguments with --statsparser_args " -h" ''')
 
 	general_group = parser.add_argument_group('General arguments', 
-											  'Advanced arguments influencing the program execution')
+											  'arguments for advanced control of the programs behavior')
 	general_group.add_argument('--bc_kws',
 							   nargs='*',
 							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'arcod'],
@@ -99,8 +103,8 @@ def main_and_args():
 									   then watchnchop is executed with argument -b for barcode''')
 	general_group.add_argument('-u', '--update_interval',
 							   type=int,
-							   default=200,
-							   help='time inverval (in seconds) for updating the overview page content')
+							   default=300,
+							   help='minimum time interval in seconds for updating the content of a report page')
 	general_group.add_argument('-m', '--ignore_file_modifications',
 							   action='store_true',
 							   help='''Ignore file modifications and only consider file creations regarding 
@@ -712,9 +716,9 @@ class StatsparserScheduler(threading.Thread):
 		self.update_interval = update_interval
 		self.sample_dir = sample_dir
 		self.statsparser_args = statsparser_args
+		self.page_opened = False
 
 	def run(self):
-		page_opened = False
 		while not self.stoprequest.is_set() or self.exp_end.is_set():
 			last_time = time.time()
 
@@ -766,12 +770,12 @@ class StatsparserScheduler(threading.Thread):
 		cp = subprocess.run(cmd) # waits for process to complete
 		if cp.returncode == 0:
 			#self.logger.info("STATSPARSING COMPLETED")
-			if not page_opened:
+			if not self.page_opened:
 				basedir = os.path.abspath(self.sample_dir)
 				fp = os.path.join(basedir, 'report.html')
 				self.logger.info("OPENING " + fp)
 				webbrowser.open('file://' + os.path.realpath(fp))
-				page_opened = True
+				self.page_opened = True
 		else:
 			self.logger.error("ERROR while running statsparser")
 

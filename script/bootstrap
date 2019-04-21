@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# identify script path
+SCRIPT=`realpath $0`
+SCRIPTPATH=`dirname $SCRIPT`
+MODULEPATH=`dirname $SCRIPTPATH`
+
+echo "- update, upgrade and install dependencies"  1>&2
+sudo apt update
+sudo apt upgrade
+sudo apt-get -y install python3-pip virtualenv git
+if [[ $? -gt 0 ]] 
+then
+    echo "failed to install at least one of the following using apt-get: python3-pip, virtualenv, git" 1>&2
+    exit 1
+fi
+
+echo "- create and activate python3 virtual environment"  1>&2
+cd $HOME
+virtualenv -p python3 "$HOME/python3_env"
+. $HOME/python3_env/bin/activate
+
+echo "- install submodule ont_fast5_api"  1>&2
+cd "${MODULEPATH}/ont_fast5_api/"
+if [ ! -e "${MODULEPATH}/ont_fast5_api/setup.py" ]; then
+    git submodule init
+    git submodule update
+fi
+if [[ $? -gt 0 ]] 
+then
+    echo "unable to fetch or download missing submodule ont_fast5_api from git" 1>&2
+    echo "please consider cloning the dominION repository on a different machine with option --recurse-submodules and then transfer the repository to this machine for installation." 1>&2
+    exit 1
+fi
+python3 setup.py install
+
+echo "- install submodule Porechop"  1>&2
+cd "${MODULEPATH}/Porechop/"
+if [ ! -e "${MODULEPATH}/Porechop/setup.py" ]; then
+    git submodule init
+    git submodule update
+fi
+if [[ $? -gt 0 ]] 
+then
+    echo "unable to fetch or download missing submodule Porechop from git" 1>&2
+    echo "please consider cloning the dominION repository on a different machine with option --recurse-submodules and then transfer the repository to this machine for installation." 1>&2
+    exit 1
+fi
+python3 setup.py install
+
