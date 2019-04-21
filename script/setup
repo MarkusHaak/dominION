@@ -60,6 +60,9 @@ then
     exit_abnormal
 fi
 
+#####
+echo "- activate virtual env"
+. $HOME/.dominION/bin/activate
 
 #####
 echo "- setup key authentication" 1>&2
@@ -88,7 +91,7 @@ perl -pi -e "s|dest.*|dest = ${dest}|" "$INIFILE"
 #####
 echo "- add a cron job (if it does not already exist)" 1>&2
 
-newjob="@reboot screen -dm bash -c '. ${HOME}/python3_env/bin/activate ; dominion'"
+newjob="@reboot screen -dm bash -c '. ${HOME}/.dominION/bin/activate ; dominion'"
 if ! (crontab -l | grep -q "$newjob"); then
         (crontab -l ; echo "$newjob") | crontab -
 fi
@@ -97,7 +100,7 @@ fi
 echo "- change firefox startup page" 1>&2
 
 prefdir=( $HOME/.mozilla/firefox/*.default/ )
-overviewfile="/data/dominion/${HOSTNAME}_overview.html"
+overviewfile="/data/dominION/${HOSTNAME}_overview.html"
 echo "- create a backup copy of the prefs.js, if it not already exists" 1>&2
 if [ ! -e "$prefdir/prefs.backup" ]; then
     echo "Creating a safe copy of prefs.js, because none exists" 1>&2
@@ -121,13 +124,13 @@ fi
 echo "- add activation of virtual environment to .bash_aliases" 1>&2
 
 if [ -e "${HOME}/.bash_aliases" ]; then
-    if (cat "${HOME}/.bash_aliases" | grep -q "~/python3_env/bin/activate"); then
-        echo ".bash_aliases already contains activation of python3_env virtual environment"  1>&2
+    if (cat "${HOME}/.bash_aliases" | grep -q "~/.dominION/bin/activate"); then
+        echo ".bash_aliases already contains activation of .dominION virtual environment"  1>&2
     else
-        echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >> "${HOME}/.bash_aliases"
+        echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" >> "${HOME}/.bash_aliases"
     fi
 else
-    echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" > "${HOME}/.bash_aliases"
+    echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" > "${HOME}/.bash_aliases"
 fi
 
 #####

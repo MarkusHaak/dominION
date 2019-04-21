@@ -70,7 +70,7 @@ def main_and_args():
 										 'Further input/output arguments. Only for special use cases')
 	io_group.add_argument('-o', '--output_dir',
 						  action=rw_dir,
-						  default=os.path.join(str(Path.home()), "dominion_output"),
+						  default="/data/dominION/",
 						  help='Path to the base directory where experiment reports shall be saved')
 	arg_data_basedir = \
 	io_group.add_argument('-d', '--data_basedir',

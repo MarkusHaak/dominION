@@ -17,8 +17,8 @@ fi
 
 echo "- create and activate python3 virtual environment"  1>&2
 cd $HOME
-virtualenv -p python3 "$HOME/python3_env"
-. $HOME/python3_env/bin/activate
+virtualenv -p python3 "$HOME/.dominION"
+. $HOME/.dominION/bin/activate
 
 echo "- install submodule ont_fast5_api"  1>&2
 cd "${MODULEPATH}/ont_fast5_api/"

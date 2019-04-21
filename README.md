@@ -77,20 +77,20 @@ As this software is intended to be run on the GridION sequencer, I highly recomm
 
 ```bash
 sudo apt-get -y install virtualenv
-virtualenv -p python3 ~/python3_env
+virtualenv -p python3 ~/.dominION
 ```
 
 Don't forget to **activate** your virtual environment: 
 
 ```bash
-source ~/python3_env/bin/activate
+source ~/.dominION/bin/activate
 ```
 
 This needs to be done every time you open a new console in which you want to execute dominION commands. I therefore recommend to add the source command to your .bash_aliases file. This way, the virtual environment is sourced automatically when opening a new console. 
 
 ```bash
 touch ~/.bash_aliases
-echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >> ~/.bash_aliases
+echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" >> ~/.bash_aliases
 ```
 
 ### Dependencies
@@ -132,7 +132,7 @@ python3 setup.py install
 As dominION is intended to run in the background as a software agent, i recommend adding a new cron job to your crontab that runs dominion in a screen shell.
 
 ```bash
-newjob="@reboot screen -dm bash -c '. ${HOME}/python3_env/bin/activate ; dominion'"
+newjob="@reboot screen -dm bash -c '. ${HOME}/.dominION/bin/activate ; dominion'"
 (crontab -l ; echo "$newjob") | crontab -
 ```
 
@@ -140,10 +140,10 @@ To prevent the need to activate the virtual environment each time a subscript of
 
 ```bash
 touch ~/.bash_aliases
-echo "if [ -f ~/python3_env/bin/activate ]; then . ~/python3_env/bin/activate; fi" >> ~/.bash_aliases
+echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" >> ~/.bash_aliases
 ```
 
-Optionally, you can change the startup page of Firefox to the dominION overview page.
+Optionally, you can change the startup page of Firefox to the dominION overview html file /data/dominION/HOSTNAME_overview.html .
 
 ## Basic Usage
 
