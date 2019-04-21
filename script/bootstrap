@@ -48,3 +48,8 @@ then
 fi
 python3 setup.py install
 
+# install dependencies with pip
+pip install matplotlib
+pip install numpy
+pip install pandas
+pip install watchdog
