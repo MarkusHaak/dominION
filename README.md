@@ -1,19 +1,28 @@
 # dominION
 
-dominION is a tool for monitoring and protocoling sequencing runs performed on the Oxford Nanopore Technologies GridION sequencer and for automated post processing and transmission of generated data. Listening for changes to MinKNOW log files, it collects information on QC and sequencing experiments and displays summaries of mounted flow cells as well as comprehensive reports about currently running and previously performed experiments.
+Automated monitoring and logging of sequencing runs performed on the Oxford Nanopore Technologies GridION sequencer.
+
+## About
+
+The dominION agent supervises all channels of a GridION simultaneously, performing demultiplexing for barcoded libraries, data transfer to a remote server, as well as logging of experiment parameters, QC results and read statistics. For each experiment, dominION produces and updates comprehensive reports in printer-friendly html format, comprising tabular information and data plots about G+C content, read length, read quality, and throughput for the complete run as well as every barcode adapter group. In addition, it enables to detect long-term trends of monitored features over the course of all documented sequencing runs and to detect regularities and interrelations of results between different samples and across different GridION sequencers.
 
 ## Quick Setup and Installation
 
 The easiest way to setup dominion and all its dependencies is to clone the repository and run the bash script setup. 
 
-First, open a console and clone the git repository with option *--recurse-submodules*. If you have no access to the github servers from your local machine, you can clone the directory on a different machine, transfer the directory *dominION* and proceed with the installation.
+First, open a console and make sure that git is installed:
 
 ```bash
 sudo apt-get -y install git
+```
+
+Next, clone the git repository of dominION with option *--recurse-submodules*. If you have no access to the github servers from your local machine, you can clone the directory on a different machine, transfer the directory *dominION* and proceed with the installation.
+
+```bash
 git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
 ```
 
-Next, run script/setup to install dominION in a new virtual environment, setup key authentication and defaults for transfer of sequence data to a remote server and install a cron job for the dominion agent script. It will also set the overview page of dominION as your Firefox startup page and modify your .bash_aliases to source the python virtual environment in each console.
+Finally, run script/setup to install dominION in a new virtual environment, setup key authentication and defaults for transfer of sequence data to a remote server and install a cron job for the dominion agent script. It will also set the overview page of dominION as your Firefox startup page and modify your .bash_aliases to source the python virtual environment in each console.
 
 Please **replace USER, HOST and DEST** with your server specific information. Please be aware that you will be prompted to enter the administrator password of your local machine (the GridION) and the password for the specified user on the remote host to setup key authentication.
 
