@@ -27,10 +27,10 @@ Finally, run script/setup to install dominION in a new virtual environment, setu
 Please **replace USER, HOST and DEST** with your server specific information. Please be aware that you will be prompted to enter the administrator password of your local machine (the GridION) and the password for the specified user on the remote host to setup key authentication.
 
 ```bash
-./dominION/script/setup -u USER -H HOST -d DEST
+/bin/bash dominION/script/setup -u USER -H HOST -d DEST
 ```
 
-When you **restart your machine**, the gridION agent script should now be running in the background. If you open Firefox, you should see the overview page of dominION as the startup page.
+When you **restart your machine**, the gridION agent script should be running in the background. If you open Firefox, you should see the overview page of dominION as the startup page.
 
 ## Setup and Installation
 
