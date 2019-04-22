@@ -6,7 +6,7 @@ Automated monitoring and logging of sequencing runs performed on the Oxford Nano
 
 The dominION agent supervises all channels of a GridION simultaneously, performing demultiplexing for barcoded libraries, data transfer to a remote server, as well as logging of experiment parameters, QC results and read statistics. For each experiment, dominION produces and updates comprehensive reports in printer-friendly html format, comprising tabular information and data plots about G+C content, read length, read quality, and throughput for the complete run as well as every barcode adapter group. In addition, it enables to detect long-term trends of monitored features over the course of all documented sequencing runs and to detect regularities and interrelations of results between different samples and across different GridION sequencers.
 
-## Quick Setup and Installation
+## Quick Setup
 
 The easiest way to setup dominion and all its dependencies is to clone the repository and run the bash script setup. 
 
@@ -16,15 +16,15 @@ First, open a console and make sure that git is installed:
 sudo apt-get -y install git
 ```
 
-Next, clone the git repository of dominION with option *--recurse-submodules*. If you have no access to the github servers from your local machine, you can clone the directory on a different machine, transfer the directory *dominION* and proceed with the installation.
+Next, clone the git repository of dominION with option *--recurse-submodules*. If you have no access to the github servers from your local machine, you can clone the directory on a different machine, transfer the cloned directory *dominION* and proceed with the installation.
 
 ```bash
 git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
 ```
 
-Finally, run script/setup to install dominION in a new virtual environment, setup key authentication and defaults for transfer of sequence data to a remote server and install a cron job for the dominion agent script. It will also set the overview page of dominION as your Firefox startup page and modify your .bash_aliases to source the python virtual environment in each console.
+Finally, run script/setup to install dominION in a new virtual environment, setup key authentication and defaults for sequence data transfer to a remote server. Unless the option `-m` for *minimal* is set, a cron job for the dominion agent script is installed, the Firefox startup page is set to the overview page of dominION and .bash_aliases is modified to source the python virtual environment when opening a new console.
 
-Please **replace USER, HOST and DEST** with your server specific information. Please be aware that you will be prompted to enter the administrator password of your local machine (the GridION) and the password for the specified user on the remote host to setup key authentication.
+Please **replace USER, HOST and DEST** with your server specific information. You will be prompted to enter the administrator password of your local machine (the GridION) and the password for the specified user on the remote host to setup key authentication.
 
 ```bash
 /bin/bash dominION/script/setup -u USER -H HOST -d DEST
@@ -32,7 +32,7 @@ Please **replace USER, HOST and DEST** with your server specific information. Pl
 
 When you **restart your machine**, the gridION agent script should be running in the background. If you open Firefox, you should see the overview page of dominION as the startup page.
 
-## Setup and Installation
+## Setup
 
 The steps in this section are not necessary if the **Quick Setup and Installation** was performed.
 
@@ -117,10 +117,10 @@ Please be aware that dominION requires python3.5 or greater and is not backwards
 
 ### Installation
 
-At last, clone and install dominION. If you followed the steps above in the same console, dominION will be configured to use the user, host and destination as specified for setting up key authentication. Otherwise, you will be prompted to give these information when executing `python3 setup.py install`. In any case, you can change these settings after installation with the associated command line arguments --user, --host and --host_dest.
+At last, clone and install dominION. If you followed the steps above in the same console, dominION will be configured to use the user, host and destination as specified for setting up key authentication. Otherwise, you will be prompted to give these information when executing `python3 setup.py install`.
 
 ```bash
-INIFILE="dominion/resources/defaults.ini"
+INIFILE="defaults.ini"
 perl -pi -e "s|user.*|user = ${user}|" "$INIFILE"
 perl -pi -e "s|host.*|host = ${host}|" "$INIFILE"
 perl -pi -e "s|dest.*|dest = ${dest}|" "$INIFILE"

@@ -2,9 +2,10 @@
 uflag=false
 Hflag=false
 dflag=false
+mflag=false
 
 usage() {
-    echo "Usage: sudo $0 -u USER -s HOST -d DEST" 1>&2 
+    echo "Usage: sudo $0 -u USER -s HOST -d DEST [-m]" 1>&2 
     echo "Required options:" 1>&2
     echo "  -u USER" 1>&2
     echo "      user for rsync file transfer as in USER@HOST:DEST" 1>&2
@@ -12,6 +13,9 @@ usage() {
     echo "      host for rsync file transfer as in USER@HOST:DEST" 1>&2
     echo "  -d DEST" 1>&2
     echo "      destination for rsync file transfer as in USER@HOST:DEST" 1>&2
+    echo "  -m(inimal setup)" 1>&2
+    echo "      setting firefox startup page, changes to .bash_aliases" 1>&2
+    echo "      and creation of a cron job will be omitted" 1>&2
 }
 
 exit_abnormal() {
@@ -19,7 +23,7 @@ exit_abnormal() {
   exit 1
 }
 
-while getopts "u:H:d:" opt
+while getopts "u:H:d:m" opt
 do
    case $opt in
         u)  echo "Option u : $OPTARG" 1>&2
@@ -33,6 +37,9 @@ do
         d)  echo "Option d : $OPTARG" 1>&2
             dflag=true 
             dest=$OPTARG
+            ;;
+        m)  echo "Option m set" 1>&2
+            mflag=true 
             ;;
         \? ) echo "Unknown option: -$OPTARG" >&2; exit_abnormal;;
         :)  echo "Missing option argument for -$OPTARG" >&2; exit_abnormal;;
@@ -49,7 +56,7 @@ fi
 SCRIPT=`realpath $0`
 SCRIPTPATH=`dirname $SCRIPT`
 MODULEPATH=`dirname $SCRIPTPATH`
-INIFILE="${MODULEPATH}/dominion/resources/defaults.ini"
+INIFILE="${MODULEPATH}/defaults.ini"
 
 ####
 echo "- run bootstrap script"
@@ -105,50 +112,52 @@ perl -pi -e "s|user.*|user = ${user}|" "$INIFILE"
 perl -pi -e "s|host.*|host = ${host}|" "$INIFILE"
 perl -pi -e "s|dest.*|dest = ${dest}|" "$INIFILE"
 
-#####
-echo "- add a cron job (if it does not already exist)" 1>&2
+if !($mflag); then
+    #####
+    echo "- add a cron job (if it does not already exist)" 1>&2
 
-newjob="@reboot screen -dm bash -c '. ${HOME}/.dominION/bin/activate ; dominion'"
-if ! (crontab -l | grep -q "$newjob"); then
-        (crontab -l ; echo "$newjob") | crontab -
-fi
-
-#####
-echo "- change firefox startup page" 1>&2
-
-prefdir=( $HOME/.mozilla/firefox/*.default/ )
-overviewfile="/data/dominION/${HOSTNAME}_overview.html"
-echo "- create a backup copy of the prefs.js, if it not already exists" 1>&2
-if [ ! -e "$prefdir/prefs.backup" ]; then
-    echo "Creating a safe copy of prefs.js, because none exists" 1>&2
-    cp "${prefdir}/prefs.js" "${prefdir}/prefs.backup"
-fi
-echo "- edit entry browser.startup.homepage in user.js if it exists, otherwise create it" 1>&2
-if [ -e "${prefdir}/user.js" ]; then
-    echo "user.js exists, editing entry browser.startup.homepage" 1>&2
-    if (cat "${prefdir}/user.js" | grep -q "browser.startup.homepage"); then
-        echo "editing entry browser.startup.homepage" 1>&2
-        #prev="$(cat ${prefdir}/user.js | sed 's|.*user=\([^,=]*\),\?.*|\1|')" #TODO: append with |
-        perl -pi -e "s|user_pref\(\"browser.startup.homepage.*|user_pref\(\"browser.startup.homepage\", \"file://${overviewfile}\"\);|" "${prefdir}/user.js"
-    else
-        echo "user_pref(\"browser.startup.homepage\", \"file://${overviewfile}\");" >> "${prefdir}/user.js"
+    newjob="@reboot screen -dm bash -c '. ${HOME}/.dominION/bin/activate ; dominion'"
+    if ! (crontab -l | grep -q "$newjob"); then
+            (crontab -l ; echo "$newjob") | crontab -
     fi
-else
-    echo "creating user.js with entry browser.startup.homepage" 1>&2
-    echo "user_pref(\"browser.startup.homepage\", \"file://${overviewfile}\");" > "${prefdir}/user.js"
-fi
 
-#####
-echo "- add activation of virtual environment to .bash_aliases" 1>&2
+    #####
+    echo "- change firefox startup page" 1>&2
 
-if [ -e "${HOME}/.bash_aliases" ]; then
-    if (cat "${HOME}/.bash_aliases" | grep -q "~/.dominION/bin/activate"); then
-        echo ".bash_aliases already contains activation of .dominION virtual environment"  1>&2
-    else
-        echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" >> "${HOME}/.bash_aliases"
+    prefdir=( $HOME/.mozilla/firefox/*.default/ )
+    overviewfile="/data/dominION/${HOSTNAME}_overview.html"
+    echo "- create a backup copy of the prefs.js, if it not already exists" 1>&2
+    if [ ! -e "$prefdir/prefs.backup" ]; then
+        echo "Creating a safe copy of prefs.js, because none exists" 1>&2
+        cp "${prefdir}/prefs.js" "${prefdir}/prefs.backup"
     fi
-else
-    echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" > "${HOME}/.bash_aliases"
+    echo "- edit entry browser.startup.homepage in user.js if it exists, otherwise create it" 1>&2
+    if [ -e "${prefdir}/user.js" ]; then
+        echo "user.js exists, editing entry browser.startup.homepage" 1>&2
+        if (cat "${prefdir}/user.js" | grep -q "browser.startup.homepage"); then
+            echo "editing entry browser.startup.homepage" 1>&2
+            #prev="$(cat ${prefdir}/user.js | sed 's|.*user=\([^,=]*\),\?.*|\1|')" #TODO: append with |
+            perl -pi -e "s|user_pref\(\"browser.startup.homepage.*|user_pref\(\"browser.startup.homepage\", \"file://${overviewfile}\"\);|" "${prefdir}/user.js"
+        else
+            echo "user_pref(\"browser.startup.homepage\", \"file://${overviewfile}\");" >> "${prefdir}/user.js"
+        fi
+    else
+        echo "creating user.js with entry browser.startup.homepage" 1>&2
+        echo "user_pref(\"browser.startup.homepage\", \"file://${overviewfile}\");" > "${prefdir}/user.js"
+    fi
+
+    #####
+    echo "- add activation of virtual environment to .bash_aliases" 1>&2
+
+    if [ -e "${HOME}/.bash_aliases" ]; then
+        if (cat "${HOME}/.bash_aliases" | grep -q "~/.dominION/bin/activate"); then
+            echo ".bash_aliases already contains activation of .dominION virtual environment"  1>&2
+        else
+            echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" >> "${HOME}/.bash_aliases"
+        fi
+    else
+        echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" > "${HOME}/.bash_aliases"
+    fi
 fi
 
 #####

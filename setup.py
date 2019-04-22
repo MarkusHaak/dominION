@@ -29,13 +29,13 @@ with open('README.md', 'rb') as readme:
 # check if defaults for user, host and dest are set for file transfer
 setup_dir = os.path.dirname(os.path.abspath(__file__))
 config = configparser.ConfigParser(allow_no_value=True)
-inifile = os.path.join(setup_dir, "dominion", "resources", "defaults.ini")
+inifile = os.path.join(setup_dir, "defaults.ini")
 config.read(inifile)
-missing_args = [arg for arg in ['user', 'host', 'dest'] if not config['DEFAULT'][arg]]
+missing_args = [arg for arg in ['user', 'host', 'dest'] if not config['DEFAULT'][arg] if arg in config['DEFAULT'] else False]
 if missing_args:
-	print("Apparently, not all defaults for rsync file transfer where set. Please enter the following information:")
+	print("Apparently, not all defaults for rsync sequence data transfer where set. Please enter the following information:")
 for arg in missing_args:
-	config['DEFAULT'][arg] = input("{} for rsync file transfer (as in USER@HOST:DEST): ".format(arg))
+	config['DEFAULT'][arg] = input("{} for rsync sequence data transfer (as in USER@HOST:DEST): ".format(arg))
 with open(inifile, 'w') as f:
 	config.write(f)
 

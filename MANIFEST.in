@@ -4,3 +4,4 @@ include dominion/resources/*.html
 include dominion/resources/*.png
 include dominion/resources/*.css
 include bin/watchnchop
+include defaults.ini
