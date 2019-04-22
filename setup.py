@@ -31,7 +31,7 @@ setup_dir = os.path.dirname(os.path.abspath(__file__))
 config = configparser.ConfigParser(allow_no_value=True)
 inifile = os.path.join(setup_dir, "defaults.ini")
 config.read(inifile)
-missing_args = [arg for arg in ['user', 'host', 'dest'] if not config['DEFAULT'][arg] if arg in config['DEFAULT'] else False]
+missing_args = [arg for arg in ['user', 'host', 'dest'] if not config['DEFAULT'][arg]]
 if missing_args:
 	print("Apparently, not all defaults for rsync sequence data transfer where set. Please enter the following information:")
 for arg in missing_args:
