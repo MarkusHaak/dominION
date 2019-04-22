@@ -73,11 +73,11 @@ def main_and_args():
 						  default="/data/dominION/",
 						  help='Path to the base directory where experiment reports shall be saved')
 	arg_data_basedir = \
-	io_group.add_argument('-d', '--data_basedir',
+	io_group.add_argument('--data_basedir',
 						  action=rw_dir,
 						  default='/data',
 						  help='Path to the directory where basecalled data is saved')
-	io_group.add_argument('-l', '--minknow_log_basedir',
+	io_group.add_argument('--minknow_log_basedir',
 						  action=r_dir,
 						  default='/var/log/MinKNOW',
 						  help='''Path to the base directory of GridIONs log files''')
@@ -86,21 +86,30 @@ def main_and_args():
 						  help='''File in which logs will be safed 
 						  (default: OUTPUTDIR/logs/YYYY-MM-DD_hh:mm_HOSTNAME_LOGLVL.log''')
 
-	sp_arguments = parser.add_argument_group('Statsparser arguments',
-										   'Arguments passed to statsparser for formatting html pages')
-	sp_arguments.add_argument('--statsparser_args',
-							action=parse_statsparser_args,
-							default=[],
-							help='''Arguments that are passed to the statsparser.
-								   See a full list of available arguments with --statsparser_args " -h" ''')
-
 	general_group = parser.add_argument_group('General arguments', 
-											  'arguments for advanced control of the programs behavior')
+											  "arguments for advanced control of the program's behavior")
 	general_group.add_argument('--bc_kws',
 							   nargs='*',
 							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'arcod'],
 							   help='''if at least one of these key words is a substring of the run name,
-									   then watchnchop is executed with argument -b for barcode''')
+									   porechop is used to demultiplex the fastq data''')
+	general_group.add_argument('-n', '--no_transfer',
+							   action='store_true',
+							   help='''no data transfer to the remote host''')
+	general_group.add_argument('-a', '--all_fast5',
+							   action='store_true',
+							   help='''also put fast5 files of reads removed by length and quality filtering into barcode bins''')
+	general_group.add_argument('-p', '--pass_only',
+							   action='store_true',
+							   help='''use data from fastq_pass only''')
+	general_group.add_argument('-l', '--min_length',
+							   type=int,
+							   default=1000,
+							   help='''minimal length to pass filter''')
+	general_group.add_argument('-q', '--min_quality',
+							   type=int,
+							   default=5,
+							   help='''minimal quality to pass filter''')
 	general_group.add_argument('-u', '--update_interval',
 							   type=int,
 							   default=300,
@@ -109,9 +118,14 @@ def main_and_args():
 							   action='store_true',
 							   help='''Ignore file modifications and only consider file creations regarding 
 									determination of the latest log files''')
-	general_group.add_argument('--dryrun',
-							   action='store_true',
-							   help='''If specified, watchnchop and statsparser are not executed''')
+
+	sp_arguments = parser.add_argument_group('Statsparser arguments',
+										   'Arguments passed to statsparser for formatting html reports')
+	sp_arguments.add_argument('--statsparser_args',
+							action=parse_statsparser_args,
+							default=[],
+							help='''Arguments that are passed to the statsparser script.
+								   See a full list of available arguments with --statsparser_args " -h" ''')
 
 	help_group = parser.add_argument_group('Help')
 	help_group.add_argument('-h', '--help', 
@@ -121,7 +135,7 @@ def main_and_args():
 	help_group.add_argument('--version', 
 							action='version', 
 							version=__version__,
-							help="Show program's version number and exit")
+							help="Show program's version string and exit")
 	help_group.add_argument('-v', '--verbose',
 							action='store_true',
 							help='Additional debug messages are printed to stdout')
@@ -134,6 +148,16 @@ def main_and_args():
 
 	ns = argparse.Namespace()
 	arg_data_basedir(parser, ns, args.data_basedir, '')
+
+	watchnchop_args = []
+	if args['no_transfer']:
+		watchnchop_args.append('-n')
+	if args['all_fast5']:
+		watchnchop_args.append('-a')
+	if args['pass_only']:
+		watchnchop_args.append('-p')
+	watchnchop_args.extend(['-l', str(args['min_length'])])
+	watchnchop_args.extend(['-q', str(args['min_quality'])])
 
 	#### main #####
 
@@ -198,7 +222,7 @@ def main_and_args():
 								args.data_basedir, 
 								args.statsparser_args,
 								args.update_interval,
-								args.dryrun,
+								watchnchop_args,
 								args.bc_kws))
 
 	logger.info("initiating dominION status page")
@@ -623,7 +647,7 @@ class ChannelStatus():
 
 class WatchnchopScheduler(threading.Thread):
 
-	def __init__(self, data_basedir, relative_path, user_filename_input, fastq_reads_per_file, bc_kws, stats_fp, channel):
+	def __init__(self, data_basedir, relative_path, user_filename_input, fastq_reads_per_file, bc_kws, stats_fp, channel, watchnchop_args):
 		threading.Thread.__init__(self)
 		if getattr(self, 'daemon', None) is None:
 			self.daemon = True
@@ -638,8 +662,9 @@ class WatchnchopScheduler(threading.Thread):
 		self.cmd = [which('perl'),
 					which('watchnchop'),
 					'-o', stats_fp,
-					'-f', '{}'.format(fastq_reads_per_file),
-					'-v']
+					'-f', str(fastq_reads_per_file)]
+		if watchnchop_args:
+			self.cmd.extend(watchnchop_args)
 		if len([kw for kw in bc_kws if kw in user_filename_input]) > 0:
 			self.cmd.append('-b')
 		self.cmd.append(os.path.join(data_basedir, relative_path, ''))
@@ -668,7 +693,7 @@ class WatchnchopScheduler(threading.Thread):
 				return
 			
 			# try one last time to start watchnchop (necessary for runs with extremly low output, where all reads are buffered)
-			self.logger.info("starting watchnchop in one minute, then kill it after another 5 minutes")
+			self.logger.info("starting watchnchop in one minutes, then kill it after another 5 minutes")
 			for i in range(60):
 				if self.stoprequest.is_set():
 					self.logger.error("watchnchop was NEVER STARTED: this thread was ordered to kill the watchnchop subprocess before it was started")
@@ -793,10 +818,10 @@ class StatsparserScheduler(threading.Thread):
 class Watcher():
 
 	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, output_dir, data_basedir, 
-				 statsparser_args, update_interval, dryrun, bc_kws):
+				 statsparser_args, update_interval, watchnchop_args, bc_kws):
 		self.q = queue.PriorityQueue()
 		#self.watchnchop = not no_watchnchop
-		self.dryrun = dryrun
+		self.watchnchop_args = watchnchop_args
 		self.channel = channel
 		self.output_dir = output_dir
 		self.data_basedir = data_basedir
@@ -939,24 +964,23 @@ class Watcher():
 			#try to identify the path in which the experiment data is saved, relative to data_basedir
 			self.channel_status.find_relative_path(self.data_basedir)
 
-			if not self.dryrun:
-				#start watchnchop (porechop & filter & rsync)
-				self.start_watchnchop()
+			#start watchnchop (porechop & filter & rsync)
+			self.start_watchnchop()
 
-				#start creation of plots at regular time intervals
-				if self.spScheduler.is_alive() if self.spScheduler else None:
-					self.spScheduler.join(1.1)
-				sample_dir = os.path.join(self.output_dir,
-										  'runs',
-										  self.channel_status.run_data['user_filename_input'],
-										  self.channel_status.run_data['user_filename_input'])#, #TODO: change to sample
-										  #self.channel_status.run_data['run_id'] + '_stats.csv')
-				self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for sample dir {1}'.format(self.update_interval/1000, sample_dir))
-				self.spScheduler = StatsparserScheduler(self.update_interval, 
-														sample_dir, 
-														self.statsparser_args, 
-														self.channel)
-				self.spScheduler.start()
+			#start creation of plots at regular time intervals
+			if self.spScheduler.is_alive() if self.spScheduler else None:
+				self.spScheduler.join(1.1)
+			sample_dir = os.path.join(self.output_dir,
+									  'runs',
+									  self.channel_status.run_data['user_filename_input'],
+									  self.channel_status.run_data['user_filename_input'])#, #TODO: change to sample
+									  #self.channel_status.run_data['run_id'] + '_stats.csv')
+			self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for sample dir {1}'.format(self.update_interval/1000, sample_dir))
+			self.spScheduler = StatsparserScheduler(self.update_interval, 
+													sample_dir, 
+													self.statsparser_args, 
+													self.channel)
+			self.spScheduler.start()
 
 		if dict_content:
 			self.channel_status.update(dict_content, overwrite)
@@ -1041,7 +1065,8 @@ class Watcher():
 													self.channel_status.run_data['fastq_reads_per_file'],
 													self.bc_kws,
 													stats_fp,
-													self.channel))
+													self.channel,
+													self.watchnchop_args))
 		self.wcScheduler[-1].start()
 		return
 
