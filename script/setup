@@ -105,7 +105,7 @@ then
     exit_abnormal
 fi
 touch /tmp/.dummy
-rsync -Rruve "ssh -o 'NumberOfPasswordPromts 0' -i ${HOME}/.ssh/${fn}" /tmp/./.dummy "${user}@${host}:${dest}"
+rsync -Rruve "ssh -o 'NumberOfPasswordPrompts 0' -i ${HOME}/.ssh/${fn}" /tmp/./.dummy "${user}@${host}:${dest}"
 if [[ $? -gt 0 ]] 
 then
     echo "key authentication test failed for ${user}@${host}, deleting key pair ${HOME}/.ssh/${fn}" 1>&2

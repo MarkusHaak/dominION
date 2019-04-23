@@ -146,7 +146,7 @@ def main_and_args():
 	help_group.add_argument('-v', '--verbose',
 							action='store_true',
 							help='Additional debug messages are printed to stdout')
-	help_group.add_argument('-q', '--quiet',
+	help_group.add_argument('--quiet',
 							action='store_true',
 							help='Only errors and warnings are printed to stdout')
 
@@ -157,15 +157,15 @@ def main_and_args():
 	arg_data_basedir(parser, ns, args.data_basedir, '')
 
 	watchnchop_args = []
-	if args['no_transfer']:
+	if args.no_transfer:
 		watchnchop_args.append('-n')
-	if args['all_fast5']:
+	if args.all_fast5.:
 		watchnchop_args.append('-a')
-	if args['pass_only']:
+	if args.pass_only:
 		watchnchop_args.append('-p')
-	watchnchop_args.extend(['-l', str(args['min_length'])])
-	watchnchop_args.extend(['-q', str(args['min_quality'])])
-	watchnchop_args.extend(['-d', args['rsync_dest']])
+	watchnchop_args.extend(['-l', str(args.min_length)])
+	watchnchop_args.extend(['-q', str(args.min_quality)])
+	watchnchop_args.extend(['-d', args.rsync_dest])
 
 	#### main #####
 
@@ -517,6 +517,7 @@ def update_overview(watchers, output_dir):
 																 run_info[3], 
 																 run_info[4].strftime("%Y-%m-%d %H:%M"),
 																 run_info[5]) + "\n{0}")
+			bottom_brick = bottom_brick.replace("{", "{{").replace("}", "}}").replace("{{0}}", "{0}")
 	bottom_brick = bottom_brick.format("")
 
 	with open(os.path.join(output_dir, "{}_overview.html".format(hostname)), 'w') as f:
