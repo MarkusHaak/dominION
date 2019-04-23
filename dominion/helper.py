@@ -119,3 +119,8 @@ def initLogger(logfile=None, level=logging.INFO):
 		logger.setLevel(level)
 		logger_initialized = True
 
+def defaults():
+	config = configparser.ConfigParser(allow_no_value=True)
+	inifile = os.path.join(resources_dir, "defaults.ini")
+	config.read(inifile)
+	return config['DEFAULT']

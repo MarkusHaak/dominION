@@ -38,16 +38,16 @@ getopts('abf:pl:q:o:t:d:i:nv');
 # -o(utput stats):   path to store the stats file
 # -t(ime since mod): time interval (sec)  for a fastq file to be processed, if no number of input reads is given (default: 3600)
 # -d(estination):    destination for rsync data transfer (format USER@HOST[:DEST])
-# -i(dentification): identification key file (private key) for ssh key authentication
+# -i(dentity file):  file from which the identity (private key) for public key authentication is read
 # -n(o transfer):    no data transfer to remote host
 # -v(erbose):        print some info to STDERR
 
 die "Please select either option -n or both options -d and -i\n" unless ($opt_n || ($opt_d && $opt_i));
 
 unless ($opt_n) {
-	system("touch /tmp/.dummy");
-	my exit_state = system("rsync -Rruve 'ssh -o \"NumberOfPasswordPromts 0\" -i $opt_i' /tmp/./.dummy $opt_d");
-	die "Something went wrong during file transfer testing. Please check that username and host in defaults.ini are matching key authentication settings\n" if (exit_state);
+    system("touch /tmp/.dummy");
+    my exit_state = system("rsync -Rruve 'ssh -o \"NumberOfPasswordPromts 0\" -i $opt_i' /tmp/./.dummy $opt_d");
+    die "Something went wrong during the file transfer test. Please check that key authentication is set up correctly for the user and host in defaults.ini\n" if (exit_state);
 }
 
 
@@ -89,104 +89,104 @@ print STDOUT "Starting watchnchop for $entry_dir on $systime\n" if ($opt_v);
 
 my %indices;
 
-# nice infinite loop, break will happen due to time stamps
-
 while (1) {
     my $time = time;
 
     opendir(DIR, "$entry_dir/fastq_pass");
     my @fastqs = map { "pass/" . $_ } grep(/.+_.+_(\d+).fastq$/,readdir(DIR));
-    opendir(DIR, "$entry_dir/fastq_fail");
-    push(@fastqs, map { "fail/" . $_ } grep(/.+_.+_(\d+).fastq$/,readdir(DIR)));
+    unless ($opt_p) {    
+        opendir(DIR, "$entry_dir/fastq_fail");
+        push(@fastqs, map { "fail/" . $_ } grep(/.+_.+_(\d+).fastq$/,readdir(DIR)));
+    }
     closedir(DIR);
 
     foreach my $file (keys(%seen)) {
-	
-	my $mtime = (stat("$entry_dir/fastq_$file"))[9];
-	open FAST5SPLIT, ">$fast5splitfile"
-	    || die "Cannot open temp stat file $fast5splitfile for writing: $!";
+        
+        my $mtime = (stat("$entry_dir/fastq_$file"))[9];
 
-	if (($opt_f && ($nfqr == `wc -l $entry_dir/fastq_$file`)) || (!$opt_f && ($time > ($mtime + $opt_t))) || $$term_ref) {
-	    make_path "$outdir/porechop/$file" unless (-e "$outdir/porechop/$file");	    
+        if (($opt_f && ($nfqr == `wc -l $entry_dir/fastq_$file`)) || (!$opt_f && ($time > ($mtime + $opt_t))) || $$term_ref) {
+            open FAST5SPLIT, ">$fast5splitfile"
+                || die "Cannot open temp stat file $fast5splitfile for writing: $!";
 
-	    my $pcout = "-o $outdir/porechop/$file/1D.fastq";
-	    $pcout = "-b $outdir/porechop/$file" if ($opt_b);
-	    $pcout .= "  1> /dev/null 2> /dev/null" unless ($opt_v);
-	    my $systime = systime();
-	    print STDOUT "Watchnchop runs porechop and filtering on $systime\n" if ($opt_v);
-	    system("porechop -i $entry_dir/fastq_$file $pcout");
+            make_path "$outdir/porechop/$file" unless (-e "$outdir/porechop/$file");        
 
- 	    opendir(DIR, "$outdir/porechop/$file");
-	    my @choppedfastqs = grep(/(.+)\.fastq$/,readdir(DIR));
-	    closedir(DIR);
+            my $pcout = "-o $outdir/porechop/$file/1D.fastq";
+            $pcout = "-b $outdir/porechop/$file" if ($opt_b);
+            $pcout .= "  1> /dev/null 2> /dev/null" unless ($opt_v);
+            my $systime = systime();
+            print STDOUT "Watchnchop runs porechop and filtering on $systime\n" if ($opt_v);
+            system("porechop -i $entry_dir/fastq_$file $pcout");
 
-	    foreach my $chopfile (@choppedfastqs) {
+            opendir(DIR, "$outdir/porechop/$file");
+            my @choppedfastqs = grep(/(.+)\.fastq$/,readdir(DIR));
+            closedir(DIR);
 
-		open DATA, "$outdir/porechop/$file/$chopfile";
-		    
-		my ($barc) = ($chopfile =~ m#(.+)\.fastq#);
-		my $outfile = "$outdir/$barc.fastq.gz";
+            foreach my $chopfile (@choppedfastqs) {
 
-		my $outfh = new IO::Compress::Gzip $outfile, Append => 1;  
+                open DATA, "$outdir/porechop/$file/$chopfile";
+                    
+                my ($barc) = ($chopfile =~ m#(.+)\.fastq#);
+                my $outfile = "$outdir/$barc.fastq.gz";
 
-		while (<DATA>) {
+                my $outfh = new IO::Compress::Gzip $outfile, Append => 1;  
 
-		    s/\r*\n*$//;
-    
-		    my ($header) = (m/@(.+)/);
+                while (<DATA>) {
 
-		    my $seq = (<DATA>);
-		    $seq =~ s/\r*\n*$//;
-		    my $gc = &calc_gc($seq);
+                    s/\r*\n*$//;
+            
+                    my ($header) = (m/@(.+)/);
 
-		    my $void = (<DATA>);
-		    my $qual = (<DATA>);
-		    $qual =~ s/\r*\n*$//;
-		    
-		    my $length = length($seq);
-		    my $aq = &calc_qual($qual);
-		    
-		    my ($id, $read, $pore, $time) = ($header =~ m/(.+) runid=.+ read=(\d+) ch=(\d+) start_time=(\S+)/);
+                    my $seq = (<DATA>);
+                    $seq =~ s/\r*\n*$//;
+                    my $gc = &calc_gc($seq);
 
-		    print STATS "$id\t$length\t$aq\t$gc";
-		    
-		    if ($aq >= $opt_q) {
-			if ($length >= $opt_l) {
-			    print STATS "\tPassed";
-			    print FAST5SPLIT "$id\t$barc\n";
-			    $outfh->print('@', "$header\n$seq\n+\n$qual\n");
-			} else {
-			    print FAST5SPLIT "$id\t$barc\n" if ($opt_a);
-			    print STATS "\tlength<$opt_l";
-			}
-		    } else {
-			print STATS "\tqual<$opt_q" ;
-			print FAST5SPLIT "$id\t$barc\n" if ($opt_a);
-		    }
-		    print STATS "\t$read\t$pore\t$time\t$barc\n";
-		}
-		close DATA;
-		unlink "$outdir/porechop/$file/$chopfile";
-		$outfh->close();
-	    }
-	    rmdir "$outdir/porechop/$file";
+                    my $void = (<DATA>);
+                    my $qual = (<DATA>);
+                    $qual =~ s/\r*\n*$//;
+                    
+                    my $length = length($seq);
+                    my $aq = &calc_qual($qual);
+                    
+                    my ($id, $read, $pore, $time) = ($header =~ m/(.+) runid=.+ read=(\d+) ch=(\d+) start_time=(\S+)/);
 
-	    my $f5f = $file;
-	    $f5f =~ s/.fastq/.fast5/;
-	    system("multi_to_multi_fast5 -i $entry_dir/fast5_$f5f -s $outdir -b $fast5splitfile");
-	    unlink $fast5splitfile;
-	    $processed{$file} = $mtime;
-	    delete $seen{$file};
-	}
+                    print STATS "$id\t$length\t$aq\t$gc";
+                    
+                    if ($aq >= $opt_q) {
+                        if ($length >= $opt_l) {
+                            print STATS "\tPassed";
+                            print FAST5SPLIT "$id\t$barc\n";
+                            $outfh->print('@', "$header\n$seq\n+\n$qual\n");
+                        } else {
+                            print FAST5SPLIT "$id\t$barc\n" if ($opt_a);
+                            print STATS "\tlength<$opt_l";
+                        }
+                    } else {
+                        print STATS "\tqual<$opt_q" ;
+                        print FAST5SPLIT "$id\t$barc\n" if ($opt_a);
+                    }
+                    print STATS "\t$read\t$pore\t$time\t$barc\n";
+                }
+                close DATA;
+                unlink "$outdir/porechop/$file/$chopfile";
+                $outfh->close();
+            }
+            rmdir "$outdir/porechop/$file";
+
+            my $f5f = $file;
+            $f5f =~ s/.fastq/.fast5/;
+            system("multi_to_multi_fast5 -i $entry_dir/fast5_$f5f -s $outdir -b $fast5splitfile");
+            unlink $fast5splitfile;
+            $processed{$file} = $mtime;
+            delete $seen{$file};
+        }
     }
     # delay looking for files until the first run-through to avoid "empty" lists
     foreach my $file (@fastqs) {
-	next if ($processed{$file});
-	$seen{$file} = 1;
+        next if ($processed{$file});
+        $seen{$file} = 1;
     }
     remove_tree("$outdir/porechop/");
     print STDOUT "Watchnchop transfers processed data to remote client\n" if ($opt_v);
-    #system("rsync  --exclude '*.fast5' -Rruve ssh $outdir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
     system("rsync --append-verify --exclude '*.fast5' -Rruve 'ssh -o \"NumberOfPasswordPromts 0\" -i $opt_i' $outdir $opt_d") unless ($opt_n);
 
     # terminate if all data has been processed and the process has received a TERM signal
@@ -199,10 +199,8 @@ while (1) {
 print STDOUT "Watchnchop transfers raw data to remote client\n" if ($opt_v);
 # transfer the raw data to the remote client
 #remove_tree("$outdir/porechop/");
-#system("rsync -Rruve ssh $outdir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
 system("rsync -Rruve 'ssh -o \"NumberOfPasswordPromts 0\" -i $opt_i' $outdir $opt_d") unless ($opt_n);
 remove_tree("$outdir");
-#system("rsync -Rkruve ssh /data/./ARCHIVE/$basedir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
 system("rsync -Rkruve 'ssh -o \"NumberOfPasswordPromts 0\" -i $opt_i' /data/./ARCHIVE/$basedir $opt_d") unless ($opt_n);
 
 my $systime = systime();

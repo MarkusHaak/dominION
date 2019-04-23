@@ -33,7 +33,7 @@ from operator import itemgetter
 from .version import __version__
 from .statsparser import get_argument_parser as sp_get_argument_parser
 from .statsparser import parse_args as sp_parse_args
-from .helper import initLogger, resources_dir, get_script_dir, hostname, ArgHelpFormatter, r_file, r_dir, rw_dir
+from .helper import initLogger, resources_dir, get_script_dir, hostname, ArgHelpFormatter, r_file, r_dir, rw_dir, defaults
 import threading
 import logging
 import queue
@@ -98,7 +98,8 @@ def main_and_args():
 							   help='''no data transfer to the remote host''')
 	general_group.add_argument('-a', '--all_fast5',
 							   action='store_true',
-							   help='''also put fast5 files of reads removed by length and quality filtering into barcode bins''')
+							   help='''also put fast5 files of reads removed by length and quality 
+							           filtering into barcode bins''')
 	general_group.add_argument('-p', '--pass_only',
 							   action='store_true',
 							   help='''use data from fastq_pass only''')
@@ -110,8 +111,12 @@ def main_and_args():
 							   type=int,
 							   default=5,
 							   help='''minimal quality to pass filter''')
-	general_group.add_argument('-d', '--rsync_destination',
-							   default=)
+	general_group.add_argument('-d', '--rsync_dest',
+							   default="{}@{}:{}".format(defaults()["user"], defaults()["host"], defaults()["dest"]),
+							   help='''destination for data transfer with rsync, format USER@HOST[:DEST].
+							           Key authentication for the specified destination must be set up, otherwise
+							           data transfer will fail. Default value is parsed from setting
+							           file {}'''.format(os.path.join(resources_dir, "defaults.ini")))
 	general_group.add_argument('-u', '--update_interval',
 							   type=int,
 							   default=300,
@@ -119,7 +124,7 @@ def main_and_args():
 	general_group.add_argument('-m', '--ignore_file_modifications',
 							   action='store_true',
 							   help='''Ignore file modifications and only consider file creations regarding 
-									determination of the latest log files''')
+							           determination of the latest log files''')
 
 	sp_arguments = parser.add_argument_group('Statsparser arguments',
 										   'Arguments passed to statsparser for formatting html reports')
@@ -160,6 +165,7 @@ def main_and_args():
 		watchnchop_args.append('-p')
 	watchnchop_args.extend(['-l', str(args['min_length'])])
 	watchnchop_args.extend(['-q', str(args['min_quality'])])
+	watchnchop_args.extend(['-d', args['rsync_dest']])
 
 	#### main #####
 
@@ -790,7 +796,7 @@ class StatsparserScheduler(threading.Thread):
 
 	def update_report(self):
 		self.logger.info("updating report...")
-		cmd = [os.path.join(get_script_dir(),'statsparser'),
+		cmd = [os.path.join(get_script_dir(),'statsparser'), #TODO: change to which() ?
 			   self.sample_dir,
 			   '-q']
 		cmd.extend(self.statsparser_args)
