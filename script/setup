@@ -104,6 +104,15 @@ then
     rm "${HOME}/.ssh/${fn}.pub"
     exit_abnormal
 fi
+touch /tmp/.dummy
+rsync -Rruve "ssh -o 'NumberOfPasswordPromts 0' -i ${HOME}/.ssh/${fn}" /tmp/./.dummy "${user}@${host}:${dest}"
+if [[ $? -gt 0 ]] 
+then
+    echo "key authentication test failed for ${user}@${host}, deleting key pair ${HOME}/.ssh/${fn}" 1>&2
+    rm "${HOME}/.ssh/${fn}"
+    rm "${HOME}/.ssh/${fn}.pub"
+    exit_abnormal
+fi
 
 #####
 echo "- write values of user, host and dest as defaults to ini file" 1>&2
