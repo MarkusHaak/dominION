@@ -110,6 +110,8 @@ def main_and_args():
 							   type=int,
 							   default=5,
 							   help='''minimal quality to pass filter''')
+	general_group.add_argument('-d', '--rsync_destination',
+							   default=)
 	general_group.add_argument('-u', '--update_interval',
 							   type=int,
 							   default=300,

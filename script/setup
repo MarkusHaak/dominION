@@ -56,7 +56,7 @@ fi
 SCRIPT=`realpath $0`
 SCRIPTPATH=`dirname $SCRIPT`
 MODULEPATH=`dirname $SCRIPTPATH`
-INIFILE="${MODULEPATH}/defaults.ini"
+INIFILE="${MODULEPATH}/dominion/resources/defaults.ini"
 
 ####
 echo "- run bootstrap script"

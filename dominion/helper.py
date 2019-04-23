@@ -18,6 +18,7 @@ import argparse
 from setuptools import Distribution
 from setuptools.command.install import install
 import socket
+import configparser
 
 package_dir = os.path.dirname(os.path.abspath(__file__))
 resources_dir = os.path.join(package_dir,'resources')
@@ -85,12 +86,6 @@ class rw_dir(argparse.Action):
 		if not os.access(to_test, os.W_OK):
 			raise argparse.ArgumentTypeError('ERR: {} is not writeable'.format(to_test))
 		setattr(namespace,self.dest,to_test)
-
-def tprint(*args, **kwargs):
-	if not QUIET:
-		print("["+strftime("%H:%M:%S", gmtime())+"] "+" ".join(map(str,args)), **kwargs)
-	sys.stdout.flush()
-
 
 # Taken from https://stackoverflow.com/questions/25066084
 class OnlyGetScriptPath(install):

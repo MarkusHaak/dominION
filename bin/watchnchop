@@ -25,9 +25,9 @@ use sigtrap qw/handler signal_handler TERM/;
 my $term_ref;; 
 $$term_ref = 0;
 
-our($opt_a, $opt_b, $opt_f, $opt_p, $opt_l, $opt_q, $opt_o, $opt_n, $opt_t, $opt_v);
+our($opt_a, $opt_b, $opt_f, $opt_p, $opt_l, $opt_q, $opt_o, $opt_n, $opt_t, $opt_d, $opt_v);
 
-getopts('abf:pl:q:o:t:nv');
+getopts('abf:pl:q:o:t:d:nv');
 
 # -a(all fast5):     also put fast5 files of reads removed by length and quality filtering into barcode bins 
 # -b(arcoding):      use porechop to demultiplex the fastq data 
@@ -37,9 +37,11 @@ getopts('abf:pl:q:o:t:nv');
 # -q(uality):        minimal quality to pass filter (default: 5)
 # -o(utput stats):   path to store the stats file
 # -t(ime since mod): time interval (sec)  for a fastq file to be processed, if no number of input reads is given (default: 3600)
-# -v(erbose):        print some info to STDERR
+# -d(estination):    destination for rsync data transfer (format USER@HOST[:DEST])
 # -n(o transfer):    no data transfer to remote host
+# -v(erbose):        print some info to STDERR
 
+die "Please select either option -d or option -n" unless ($opt_n || $opt_d);
 
 $opt_l = 1000 unless ($opt_l);
 $opt_q = 5 unless ($opt_q);
@@ -176,8 +178,8 @@ while (1) {
     }
     remove_tree("$outdir/porechop/");
     print STDOUT "Watchnchop transfers processed data to remote client\n" if ($opt_v);
-    system("rsync  --exclude '*.fast5' -Rruve ssh $outdir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
-
+    #system("rsync  --exclude '*.fast5' -Rruve ssh $outdir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
+    system("rsync  --exclude '*.fast5' -Rruve ssh $outdir $opt_d") unless ($opt_n);
 
     # terminate if all data has been processed and the process has received a TERM signal
     last if (!(keys %seen) && $$term_ref);
@@ -189,9 +191,11 @@ while (1) {
 print STDOUT "Watchnchop transfers raw data to remote client\n" if ($opt_v);
 # transfer the raw data to the remote client
 #remove_tree("$outdir/porechop/");
-system("rsync -Rruve ssh $outdir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
+#system("rsync -Rruve ssh $outdir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
+system("rsync -Rruve ssh $outdir $opt_d") unless ($opt_n);
 remove_tree("$outdir");
-system("rsync -Rkruve ssh /data/./ARCHIVE/$basedir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
+#system("rsync -Rkruve ssh /data/./ARCHIVE/$basedir cruecker\@porta.cebitec.uni-bielefeld.de:/vol/nanopore/GridION_Runs") unless ($opt_n);
+system("rsync -Rkruve ssh /data/./ARCHIVE/$basedir $opt_d") unless ($opt_n);
 
 my $systime = systime();
 print STDOUT "Watchnchop died peacefully on $systime\n" if ($opt_v);

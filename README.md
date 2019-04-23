@@ -30,11 +30,11 @@ Please **replace USER, HOST and DEST** with your server specific information. Yo
 /bin/bash dominION/script/setup -u USER -H HOST -d DEST
 ```
 
-When you **restart your machine**, the gridION agent script should be running in the background. If you open Firefox, you should see the overview page of dominION as the startup page.
+After **restarting the machine**, the gridION agent script should be running in a screen terminal in the background. If you open Firefox, you should see the overview page of dominION as the startup page.
 
 ## Setup
 
-The steps in this section are not necessary if the **Quick Setup and Installation** was performed.
+The steps in this section are not necessary if the **Quick Setup** was performed.
 
 ### Setup Environment
 
@@ -120,7 +120,7 @@ Please be aware that dominION requires python3.5 or greater and is not backwards
 At last, clone and install dominION. If you followed the steps above in the same console, dominION will be configured to use the user, host and destination as specified for setting up key authentication. Otherwise, you will be prompted to give these information when executing `python3 setup.py install`.
 
 ```bash
-INIFILE="defaults.ini"
+INIFILE="dominion/resources/defaults.ini"
 perl -pi -e "s|user.*|user = ${user}|" "$INIFILE"
 perl -pi -e "s|host.*|host = ${host}|" "$INIFILE"
 perl -pi -e "s|dest.*|dest = ${dest}|" "$INIFILE"
