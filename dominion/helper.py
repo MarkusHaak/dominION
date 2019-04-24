@@ -43,7 +43,7 @@ class ArgHelpFormatter(argparse.HelpFormatter):
 		text = action.help
 		if 	action.default is not None and \
 			action.default != argparse.SUPPRESS and \
-			'default' not in text.lower():
+			'default:' not in text.lower():
 			text += ' (default: {})'.format(action.default)
 		return text
 

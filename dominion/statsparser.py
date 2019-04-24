@@ -68,7 +68,7 @@ def get_argument_parser():
 	main_options = argument_parser.add_argument_group('Main options')
 	if __name__ == '__main__':
 		main_options.add_argument('input',
-								  help='''Path to a stats file containing read information, or to a directory containing several such files. 
+								  help='''Stats file containing read information or a directory containing several such files. 
 								  	   Requires CSV files with "\t" as seperator, no header and the following columns in given order:
 								  	   read_id, length, qscore, mean_gc, Passed/tooShort, read_number, pore_index, timestamp, barcode''')
 	main_options.add_argument('-o', '--outdir',

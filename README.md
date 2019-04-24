@@ -153,14 +153,13 @@ Optionally, you can change the startup page of Firefox to the dominION overview 
 ### dominion
 
 ```
-usage: dominion [-d DATABASE_DIR] [--status_page_dir STATUS_PAGE_DIR]
-                      [--statsparser_args STATSPARSER_ARGS]
-                      [-b BASECALLED_BASEDIR] [-l MINKNOW_LOG_BASEDIR]
-                      [-r RESOURCES_DIR] [--watchnchop_path WATCHNCHOP_PATH]
-                      [--statsparser_path STATSPARSER_PATH]
-                      [--python3_path PYTHON3_PATH] [--perl_path PERL_PATH]
-                      [-u UPDATE_INTERVAL] [-m] [--no_watchnchop] [-h]
-                      [--version] [-v] [-q]
+usage: dominion [-o OUTPUT_DIR] [--data_basedir DATA_BASEDIR]
+                [--minknow_log_basedir MINKNOW_LOG_BASEDIR]
+                [--logfile LOGFILE] [--bc_kws [BC_KWS [BC_KWS ...]]] [-n] [-a]
+                [-p] [-l MIN_LENGTH] [-q MIN_QUALITY] [-d RSYNC_DEST]
+                [-u UPDATE_INTERVAL] [-m]
+                [--statsparser_args STATSPARSER_ARGS] [-h] [--version] [-v]
+                [--quiet]
 
 A tool for monitoring and protocoling sequencing runs performed on the Oxford
 Nanopore Technologies GridION sequencer and for automated post processing and
@@ -169,105 +168,100 @@ experiments and displays summaries of mounted flow cells as well as
 comprehensive reports about currently running and previously performed
 experiments.
 
-Main options:
-  -d DATABASE_DIR, --database_dir DATABASE_DIR
-                        Path to the base directory where experiment reports
-                        shall be saved (default: reports)
-  --status_page_dir STATUS_PAGE_DIR
-                        Path to the directory where all files for the GridION
-                        status page will be stored (default: GridIONstatus)
+General arguments:
+  arguments for advanced control of the program's behavior
 
-Statsparser arguments:
-  Arguments passed to statsparser for formatting html pages
-
-  --statsparser_args STATSPARSER_ARGS
-                        Arguments that are passed to the statsparser. See a
-                        full list of possible options with --statsparser_args
-                        " -h" (default: [])
-
-I/O options:
-  Further input/output options. Only for special use cases
-
-  -b BASECALLED_BASEDIR, --basecalled_basedir BASECALLED_BASEDIR
-                        Path to the directory where basecalled data is saved
-                        (default: /data/basecalled)
-  -l MINKNOW_LOG_BASEDIR, --minknow_log_basedir MINKNOW_LOG_BASEDIR
-                        Path to the base directory of GridIONs log files
-                        (default: /var/log/MinKNOW)
-  -r RESOURCES_DIR, --resources_dir RESOURCES_DIR
-                        Path to the directory containing template files and
-                        resources for the html pages (default:
-                        PACKAGE_DIR/resources)
-
-Executables paths:
-  Paths to mandatory executables
-
-  --watchnchop_path WATCHNCHOP_PATH
-                        Path to the watchnchop executable (default:
-                        watchnchop.pl)
-  --statsparser_path STATSPARSER_PATH
-                        Path to statsparser.py (default:
-                        PACKAGE_DIR/statsparser.py)
-  --python3_path PYTHON3_PATH
-                        Path to the python3 executable (default:
-                        /usr/bin/python3)
-  --perl_path PERL_PATH
-                        Path to the perl executable (default: /usr/bin/perl)
-
-General options:
-  Advanced options influencing the program execution
-
+  --bc_kws [BC_KWS [BC_KWS ...]]
+                        if at least one of these key words is a substring of
+                        the run name, porechop is used to demultiplex the
+                        fastq data (default: ['RBK', 'NBD', 'RAB', 'LWB',
+                        'PBK', 'RPB', 'arcod'])
+  -n, --no_transfer     no data transfer to the remote host (default: False)
+  -a, --all_fast5       also put fast5 files of reads removed by length and
+                        quality filtering into barcode bins (default: False)
+  -p, --pass_only       use data from fastq_pass only (default: False)
+  -l MIN_LENGTH, --min_length MIN_LENGTH
+                        minimal length to pass filter (default: 1000)
+  -q MIN_QUALITY, --min_quality MIN_QUALITY
+                        minimal quality to pass filter (default: 5)
+  -d RSYNC_DEST, --rsync_dest RSYNC_DEST
+                        destination for data transfer with rsync, format
+                        USER@HOST[:DEST]. Key authentication for the specified
+                        destination must be set up, otherwise data transfer
+                        will fail. Default value is parsed from setting file
+                        /home/grid/.dominION/lib/python3.5/site-packages/domin
+                        ion-0.3.9-py3.5.egg/dominion/resources/defaults.ini
   -u UPDATE_INTERVAL, --update_interval UPDATE_INTERVAL
-                        Time inverval (in seconds) for updating the stats
-                        webpage contents (default: 600)
+                        minimum time interval in seconds for updating the
+                        content of a report page (default: 300)
   -m, --ignore_file_modifications
                         Ignore file modifications and only consider file
                         creations regarding determination of the latest log
-                        files (default: True)
-  --no_watchnchop       If specified, watchnchop is not executed (default:
-                        False)
+                        files (default: False)
+
+I/O arguments:
+  Further input/output arguments. Only for special use cases
+
+  -o OUTPUT_DIR, --output_dir OUTPUT_DIR
+                        Path to the base directory where experiment reports
+                        shall be saved (default: /data/dominION/)
+  --data_basedir DATA_BASEDIR
+                        Path to the directory where basecalled data is saved
+                        (default: /data)
+  --minknow_log_basedir MINKNOW_LOG_BASEDIR
+                        Path to the base directory of GridIONs log files
+                        (default: /var/log/MinKNOW)
+  --logfile LOGFILE     File in which logs will be safed (default:
+                        OUTPUTDIR/logs/YYYY-MM-DD_hh:mm_HOSTNAME_LOGLVL.log
+
+Statsparser arguments:
+  Arguments passed to statsparser for formatting html reports
+
+  --statsparser_args STATSPARSER_ARGS
+                        Arguments that are passed to the statsparser script.
+                        See a full list of available arguments with
+                        --statsparser_args " -h" (default: [])
 
 Help:
   -h, --help            Show this help message and exit
-  --version             Show program's version number and exit
-  -v, --verbose         Additional status information is printed to stdout
+  --version             Show program's version string and exit
+  -v, --verbose         Additional debug messages are printed to stdout
                         (default: False)
-  -q, --quiet           No prints to stdout (default: False)
+  --quiet               Only errors and warnings are printed to stdout
+                        (default: False)
 ```
 
 ### statsparser (standalone)
 
 ```
-usage: statsparser [-o OUTDIR]
-                   [--result_page_refresh_rate RESULT_PAGE_REFRESH_RATE]
-                   [--resources_dir RESOURCES_DIR] [--max_bins MAX_BINS]
-                   [--time_intervals TIME_INTERVALS]
+usage: statsparser [-o OUTDIR] [--html_refresh_rate HTML_REFRESH_RATE]
+                   [--max_bins MAX_BINS] [--time_intervals TIME_INTERVALS]
                    [--kb_intervals KB_INTERVALS] [--gc_interval GC_INTERVAL]
                    [--matplotlib_style MATPLOTLIB_STYLE]
+                   [--logdata_file LOGDATA_FILE]
                    [--user_filename_input USER_FILENAME_INPUT]
-                   [--minion_id MINION_ID] [--flowcell_id FLOWCELL_ID]
-                   [--protocol_start PROTOCOL_START] [-h] [--version] [-q]
-                   statsfile
+                   [--sample SAMPLE] [--minion_id MINION_ID]
+                   [--flowcell_id FLOWCELL_ID]
+                   [--protocol_start PROTOCOL_START] [-h] [--version] [-v]
+                   [-q]
+                   input
 
 Parses a csv file containing statistics about a nanopore sequencing run and
 creates an in-depth report file including informative plots.
 
 Main options:
-  statsfile             Path to the stats file containing all necessary
-                        information about the sequencing run. Requires a CSV
-                        file with " " as seperator, no header and the
+  input                 Stats file containing read information, or
+                        a directory containing several such files. Requires
+                        CSV files with " " as seperator, no header and the
                         following columns in given order: read_id, length,
                         qscore, mean_gc, Passed/tooShort, read_number,
                         pore_index, timestamp, barcode
   -o OUTDIR, --outdir OUTDIR
                         Path to a directory in which the report files and
-                        folders will be saved (default: directory of
-                        statsfile)
-  --result_page_refresh_rate RESULT_PAGE_REFRESH_RATE
-                        refresh rate in seconds. (default: 120)
-  --resources_dir RESOURCES_DIR
-                        directory containing template files for creating the
-                        results html page. (default: PACKAGE_DIR/resources)
+                        folders will be saved (default: directory of input)
+  --html_refresh_rate HTML_REFRESH_RATE
+                        refresh rate of the html page in seconds (default:
+                        120)
 
 Plotting options:
   Arguments changing the appearance of plots
@@ -287,10 +281,15 @@ Plotting options:
                         plot appearances (default: default)
 
 Experiment options:
-  Arguments concerning the experiment
+  Arguments concerning the experiment. Either specify a logdata file or all
+  arguments individually.
 
+  --logdata_file LOGDATA_FILE
+                        path to the report file of this sequencing run
+                        (default: <run_id>_stats.json)
   --user_filename_input USER_FILENAME_INPUT
-                        (default: Run#####_MIN###_KIT###)
+                        run title (default: Run#####_MIN###_KIT###)
+  --sample SAMPLE       sample name (default: Run#####_MIN###_KIT###)
   --minion_id MINION_ID
                         (default: GA#0000)
   --flowcell_id FLOWCELL_ID
@@ -301,5 +300,7 @@ Experiment options:
 Help:
   -h, --help            Show this help message and exit
   --version             Show program's version number and exit
+  -v, --verbose         Additional status information is printed to stdout
+                        (default: False)
   -q, --quiet           No prints to stdout (default: False)
 ```

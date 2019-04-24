@@ -63,36 +63,9 @@ def main_and_args():
 									 formatter_class=ArgHelpFormatter, 
 									 add_help=False)
 
-	server_group = parser.add_argument_group('server setting', 
-											 '')
-
-	io_group = parser.add_argument_group('I/O arguments', 
-										 'Further input/output arguments. Only for special use cases')
-	io_group.add_argument('-o', '--output_dir',
-						  action=rw_dir,
-						  default="/data/dominION/",
-						  help='Path to the base directory where experiment reports shall be saved')
-	arg_data_basedir = \
-	io_group.add_argument('--data_basedir',
-						  action=rw_dir,
-						  default='/data',
-						  help='Path to the directory where basecalled data is saved')
-	io_group.add_argument('--minknow_log_basedir',
-						  action=r_dir,
-						  default='/var/log/MinKNOW',
-						  help='''Path to the base directory of GridIONs log files''')
-
-	io_group.add_argument('--logfile',
-						  help='''File in which logs will be safed 
-						  (default: OUTPUTDIR/logs/YYYY-MM-DD_hh:mm_HOSTNAME_LOGLVL.log''')
-
 	general_group = parser.add_argument_group('General arguments', 
 											  "arguments for advanced control of the program's behavior")
-	general_group.add_argument('--bc_kws',
-							   nargs='*',
-							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'arcod'],
-							   help='''if at least one of these key words is a substring of the run name,
-									   porechop is used to demultiplex the fastq data''')
+
 	general_group.add_argument('-n', '--no_transfer',
 							   action='store_true',
 							   help='''no data transfer to the remote host''')
@@ -117,6 +90,11 @@ def main_and_args():
 							           Key authentication for the specified destination must be set up, otherwise
 							           data transfer will fail. Default value is parsed from setting
 							           file {}'''.format(os.path.join(resources_dir, "defaults.ini")))
+	general_group.add_argument('--bc_kws',
+							   nargs='*',
+							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'arcod'],
+							   help='''if at least one of these key words is a substring of the run name,
+									   porechop is used to demultiplex the fastq data''')
 	general_group.add_argument('-u', '--update_interval',
 							   type=int,
 							   default=300,
@@ -125,6 +103,26 @@ def main_and_args():
 							   action='store_true',
 							   help='''Ignore file modifications and only consider file creations regarding 
 							           determination of the latest log files''')
+
+	io_group = parser.add_argument_group('I/O arguments', 
+										 'Further input/output arguments. Only for special use cases')
+	io_group.add_argument('-o', '--output_dir',
+						  action=rw_dir,
+						  default="/data/dominION/",
+						  help='Path to the base directory where experiment reports shall be saved')
+	arg_data_basedir = \
+	io_group.add_argument('--data_basedir',
+						  action=rw_dir,
+						  default='/data',
+						  help='Path to the directory where basecalled data is saved')
+	io_group.add_argument('--minknow_log_basedir',
+						  action=r_dir,
+						  default='/var/log/MinKNOW',
+						  help='''Path to the base directory of GridIONs log files''')
+
+	io_group.add_argument('--logfile',
+						  help='''File in which logs will be safed 
+						  (default: OUTPUTDIR/logs/YYYY-MM-DD_hh:mm_HOSTNAME_LOGLVL.log''')
 
 	sp_arguments = parser.add_argument_group('Statsparser arguments',
 										   'Arguments passed to statsparser for formatting html reports')
