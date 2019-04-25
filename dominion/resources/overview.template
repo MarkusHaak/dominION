@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+  <head>
+      <meta charset="UTF-8">
+      <meta http-equiv="refresh" content="2">
+      <title>dominION - overview</title>
+      <link rel="stylesheet" type="text/css" href="res/style.css">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  </head>
+
+  <body>
+    <div class="container">
+
+      <div class="contentbox title">
+        <h1>Mounted Flowcells</h1>
+        <h6>dominION {{ version }}, {{ dateTimeNow }}</h6>
+      </div>
+
+      <div class="contentbox flowcells">
+
+        <div class="contentline">
+          {% for channel in channels %}
+          <div class="fifth">
+            <div class="figure sixty">
+              <img class="figure image" src="res/{%- if not channel.asic_id_eeprom -%}no_{% endif %}flowcell.png">
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="contentbox">
+        <div class="contentline">
+          {% for channel in channels %}
+          <div class="fifth">
+            <div class="contentbox title {{ channel.channel }} hundred"><h5>{{ channel.flowcell_id }}</h5></div>
+            <div class="contentbox flowcellinfo">
+              {% if channel.latest_qc %}
+              <p>
+                <u>Latest QC</u> ({{ channel.latest_qc.timestamp }}):<br>
+                <br>
+                * : {{ channel.latest_qc.group_all }}<br>
+                1 : {{ channel.latest_qc.group_1 }}<br>
+                2 : {{ channel.latest_qc.group_2 }}<br>
+                3 : {{ channel.latest_qc.group_3 }}<br>
+                4 : {{ channel.latest_qc.group_4 }}
+              </p>
+              {% endif %}
+              {% if channel.runs %}
+              <p>
+                <u>Runs</u>:<br>
+                <br>
+                {% for run in channel.runs %}
+                  <a href="{{ run.link }}" target="_blank">{{ run.user_filename_input }}</a><br>
+                {% endfor %}
+              </p>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="contentbox title">
+        <h4>ALL RUNS</h4>
+      </div>
+
+      <div class="contentbox barcode">
+        <br>
+        <table>
+          <tr>
+            <th>run</th>
+            <th>sample</th>
+            <th>sequencing kit</th>
+            <th>protocol start</th>
+            <th>duration</th>
+          </tr>
+
+          {% for exp in all_exp %}
+          <tr>
+            <th rowspan="{{ exp.num_samples }}">{{ exp.user_filename_input }}</th>
+            {% for sample in exp.samples %}
+            <th rowspan="{{ sample.num_runs }}"><a href="{{ sample.link }}" target="_blank">{{ sample.sample_name }}</a></th>
+          {% for run in sample.runs %}
+          {%- if not loop.first -%}<tr>{% endif %}
+              <td>{{ run.sequencing_kit }}</td>
+              <td>{{ run.protocol_start }}</td>
+              <td>{{ run.duration }}</td>
+          </tr>
+          {% endfor %}
+            {% endfor %}
+          {% endfor %}
+          
+        </table>
+        <br>
+      </div>
+
+    </div>
+  </body>
+</html>
