@@ -90,6 +90,9 @@ def main_and_args():
 							           Key authentication for the specified destination must be set up, otherwise
 							           data transfer will fail. Default value is parsed from setting
 							           file {}'''.format(os.path.join(resources_dir, "defaults.ini")))
+	general_group.add_argument('-i', '--identity_file',
+							   default="",
+							   help='''file from which the identity (private key) for public key authentication is read''')
 	general_group.add_argument('--bc_kws',
 							   nargs='*',
 							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'arcod'],
@@ -157,13 +160,14 @@ def main_and_args():
 	watchnchop_args = []
 	if args.no_transfer:
 		watchnchop_args.append('-n')
-	if args.all_fast5.:
+	if args.all_fast5:
 		watchnchop_args.append('-a')
 	if args.pass_only:
 		watchnchop_args.append('-p')
 	watchnchop_args.extend(['-l', str(args.min_length)])
 	watchnchop_args.extend(['-q', str(args.min_quality)])
 	watchnchop_args.extend(['-d', args.rsync_dest])
+	watchnchop_args.extend(['-i', args.identity_file])
 
 	#### main #####
 
