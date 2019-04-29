@@ -19,11 +19,16 @@ from setuptools import Distribution
 from setuptools.command.install import install
 import socket
 import configparser
+from jinja2 import Environment, PackageLoader, select_autoescape
 
 package_dir = os.path.dirname(os.path.abspath(__file__))
 resources_dir = os.path.join(package_dir,'resources')
 hostname = socket.gethostname()
 logger_initialized = False
+jinja_env = Environment(
+	    loader=PackageLoader('dominion', 'resources'),
+	    autoescape=select_autoescape(['html', 'xml'])
+	)
 
 class ArgHelpFormatter(argparse.HelpFormatter):
 	'''

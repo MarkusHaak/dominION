@@ -31,11 +31,14 @@ setup_dir = os.path.dirname(os.path.abspath(__file__))
 config = configparser.ConfigParser(allow_no_value=True)
 inifile = os.path.join(setup_dir, "dominion", "resources", "defaults.ini")
 config.read(inifile)
-missing_args = [arg for arg in ['user', 'host', 'dest'] if not config['DEFAULT'][arg]]
+missing_args = [arg for arg in ['user', 'host', 'dest', 'identity'] if not config['DEFAULT'][arg]]
 if missing_args:
 	print("Apparently, not all defaults for rsync sequence data transfer where set. Please enter the following information:")
 for arg in missing_args:
-	config['DEFAULT'][arg] = input("{} for rsync sequence data transfer (as in USER@HOST:DEST): ".format(arg))
+	if arg == "identity":
+		config['DEFAULT'][arg] = input("full path to the identity file (private key) for key authentication: ")
+	else:
+		config['DEFAULT'][arg] = input("{} for rsync sequence data transfer (as in USER@HOST:DEST): ".format(arg))
 with open(inifile, 'w') as f:
 	config.write(f)
 

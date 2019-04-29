@@ -33,9 +33,10 @@ import re
 from shutil import copyfile
 import warnings
 from .version import __version__
-from .helper import initLogger, package_dir, ArgHelpFormatter, r_file, r_dir, w_dir, resources_dir
+from .helper import initLogger, package_dir, ArgHelpFormatter, r_file, r_dir, w_dir, resources_dir, jinja_env
 import json
 import logging
+from jinja2 import Environment, PackageLoader, select_autoescape
 
 warnings.filterwarnings("ignore")
 TICKLBLS = 6
@@ -68,6 +69,10 @@ def get_argument_parser():
 	main_options = argument_parser.add_argument_group('Main options')
 	if __name__ == '__main__':
 		main_options.add_argument('input',
+								  help='''Stats file containing read information or a directory containing several such files. 
+								  	   Requires CSV files with "\t" as seperator, no header and the following columns in given order:
+								  	   read_id, length, qscore, mean_gc, Passed/tooShort, read_number, pore_index, timestamp, barcode''')
+		main_options.add_argument('-r', '--recursive',
 								  help='''Stats file containing read information or a directory containing several such files. 
 								  	   Requires CSV files with "\t" as seperator, no header and the following columns in given order:
 								  	   read_id, length, qscore, mean_gc, Passed/tooShort, read_number, pore_index, timestamp, barcode''')
@@ -408,17 +413,16 @@ def main(args=None):
 	exit()
 
 
-def create_html(outdir, 
-				stats_df, 
-				user_filename_input,
-				sample,
-				run_ids, 
-				minion_id, 
-				flowcell_id, 
-				protocol_start, 
-				html_refresh_rate, 
-				barcodes, 
-				subsets):
+def create_html(outdir, stats_df, user_filename_input, sample,
+				run_ids, minion_id, flowcell_id, protocol_start, 
+				html_refresh_rate, barcodes, subsets):
+	
+	minion_id_to_css = {"GA10000":"one",
+						"GA20000":"two",
+						"GA30000":"three",
+						"GA40000":"four",
+						"GA50000":"five",
+						"GA#0000":"unknown"}
 
 	logger.info("Parsing stats table to html")
 	html_stats_df = make_html_table(stats_df).replace('valign="top"', 'valign="center"')
@@ -427,44 +431,23 @@ def create_html(outdir,
 		logger.info(bc)
 		html_stats_df = html_stats_df.replace(bc, '<a href="#{0}">{0}</a>'.format(bc))
 
-	with open(os.path.join(resources_dir, 'barcode_brick.html'), 'r') as f:
-		barcode_brick = f.read()
-	with open(os.path.join(resources_dir, 'bottom_brick.html'), 'r') as f:
-		bottom_brick = f.read()
-	with open(os.path.join(resources_dir, 'overview_brick.html'), 'r') as f:
-		overview_brick = f.read()
-	with open(os.path.join(resources_dir, 'top_brick.html'), 'r') as f:
-		top_brick = f.read()
+	channel_css = minion_id_to_css[minion_id] if minion_id in minion_id_to_css else "unknown"
+	render_dict = {'user_filename_input'	:	user_filename_input,
+				   'sample'					:	sample,
+				   'channel'				:	minion_id,
+				   'channel_css'			:	channel_css,
+				   'flowcell_id' 			: 	flowcell_id,
+				   'protocol_start'			:	protocol_start,
+				   'html_refresh_rate'		:	html_refresh_rate,
+				   'version'				:	__version__,
+				   'dateTimeNow'			:	datetime.now().strftime("%Y-%m-%d_%H:%M"),
+				   'html_stats_df'			:	html_stats_df,
+				   'subsets'				:	subsets,
+				   'barcodes'				:	barcodes}
 
-	minion_id_to_css = {"GA10000":"one",
-						"GA20000":"two",
-						"GA30000":"three",
-						"GA40000":"four",
-						"GA50000":"five",
-						"GA#0000":"unknown"}
-
-	minion_id = minion_id_to_css[minion_id] if minion_id in minion_id_to_css else "unknown"
-	html_content = top_brick.format(user_filename_input, 
-									minion_id, 
-									flowcell_id, 
-									protocol_start, 
-									html_refresh_rate, 
-									minion_id,
-									__version__,
-									"{}".format(datetime.now())[:-7])
-	html_content = html_content + overview_brick.format(html_stats_df)
-
-	#TODO
-	while len(subsets) != 3:
-		subsets.append("NA")
-	for barcode in barcodes:
-		html_content = html_content + barcode_brick.format(barcode, subsets[0], subsets[2], subsets[1])
-
-	html_content = html_content + bottom_brick
-
+	template = jinja_env.get_template('report.template')
 	with open(os.path.join(outdir, "report.html"), 'w') as outfile:
-		print(html_content, file=outfile)
-
+		print(template.render(render_dict), file=outfile)
 	copyfile(os.path.join(resources_dir, 'style.css'), os.path.join(outdir, 'res', 'style.css'))
 
 

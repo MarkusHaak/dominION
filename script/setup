@@ -115,11 +115,12 @@ then
 fi
 
 #####
-echo "- write values of user, host and dest as defaults to ini file" 1>&2
+echo "- write values of user, host, dest and identify as defaults to ini file" 1>&2
 
 perl -pi -e "s|user.*|user = ${user}|" "$INIFILE"
 perl -pi -e "s|host.*|host = ${host}|" "$INIFILE"
 perl -pi -e "s|dest.*|dest = ${dest}|" "$INIFILE"
+perl -pi -e "s|identity.*|identity = ${HOME}/.ssh/${fn}|" "$INIFILE"
 
 if !($mflag); then
     #####

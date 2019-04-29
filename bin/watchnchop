@@ -46,8 +46,8 @@ die "Please select either option -n or both options -d and -i\n" unless ($opt_n 
 
 unless ($opt_n) {
     system("touch /tmp/.dummy");
-    my exit_state = system("rsync -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' /tmp/./.dummy $opt_d");
-    die "Something went wrong during the file transfer test. Please check that key authentication is set up correctly for the user and host in defaults.ini\n" if (exit_state);
+    my $exit_state = system("rsync -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' /tmp/./.dummy $opt_d");
+    die "Something went wrong during the file transfer test. Please check that key authentication is set up correctly for the user and host in defaults.ini\n" if ($exit_state);
 }
 
 
@@ -68,7 +68,8 @@ mkdir "/data/outgoing/" unless (-e "/data/outgoing/");
 my ($basedir) = ($entry_dir =~ m#/data/(.+?)/#);
 my $outdir = $entry_dir;
 $outdir =~ s#/data/#/data/./outgoing/#;
-make_path "$outdir/" unless (-e "$outdir");
+remove_tree "$outdir" if (-e "$outdir");
+make_path "$outdir/";
 
 system("ln -s /data/$basedir /data/ARCHIVE/") unless (-e "/data/ARCHIVE/$basedir");
 
@@ -187,7 +188,7 @@ while (1) {
     }
     remove_tree("$outdir/porechop/");
     print STDOUT "Watchnchop transfers processed data to remote client\n" if ($opt_v);
-    system("rsync --append-verify --exclude '*.fast5' -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' $outdir $opt_d") unless ($opt_n);
+    system("rsync --exclude '*.fast5' -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' $outdir $opt_d") unless ($opt_n);
 
     # terminate if all data has been processed and the process has received a TERM signal
     last if (!(keys %seen) && $$term_ref);

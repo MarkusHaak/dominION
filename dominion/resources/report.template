@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+  <head>
+      <meta charset="UTF-8">
+      <meta http-equiv="refresh" content="{{ html_refresh_rate }}">
+      <title>{{ sample }}</title>
+      <link rel="stylesheet" type="text/css" href="res/style.css">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  </head>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <script>
+    function clickFunction(id) {
+      if ($("#" + id).css('display') == 'block') {
+          $("#" + id).css('display', 'none');
+      } else {
+          $("#" + id).css('display', 'block');
+      }
+      sessionStorage.setItem(id, $("#" + id).css('display'));
+    }
+  </script>
+
+  <body>
+    <div class="container">
+
+      <div class="contentbox title {{ channel }}">
+        <h1>{{ user_filename_input }}</h1>
+        <h2>{{ sample }}</h2>
+        <h2>{{ channel }}, {{ flowcell_id }}</h2>
+        <h3>{{ protocol_start }}</h3>
+        <h6>statsParser {{ version }}, {{ dateTimeNow }}</h6>
+      </div>
+      
+
+      <div class="contentbox title">
+        <h4 id="OVERVIEW">OVERVIEW</h4>
+      </div>
+
+      <div class="contentbox overview">
+        <br>
+        <div class="contentline">
+          <div class="half left">
+            <div class="figure large">
+              <img class="figure image" src="res/plots/multi_lineplot_reads.png">
+            </div>  
+          </div>
+          <div class="half right">
+            <div class="figure large">
+              <img class="figure image" src="res/plots/multi_lineplot_bases.png">
+            </div>
+          </div>
+        </div>
+
+        {{ html_stats_df }}
+
+        <br>
+
+      </div>
+
+      {% for barcode in barcodes %}
+      <div class="contentbox title">
+        <h4 id="{{ barcode }}">{{ barcode }}</h4>
+      </div>
+      
+      <div class="contentbox barcode">
+
+        {% for subset in subsets %}
+        <div class="doNotSeperate">
+
+          <div class="seperator" onclick="clickFunction('{{ barcode }}_{{ loop.index }}')">
+            <b>{{ subset }}</b>
+          </div>
+
+          <div class="expandable{%- if loop.first -%} expanded{% endif %}" id="{{ barcode }}_{{ loop.index }}">
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_kb-bins_{{ barcode }}_{{ subset }}.png">
+                </div>
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/barplot_gc-bins_{{ barcode }}_{{ subset }}.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="half left">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_{{ barcode }}_{{ subset }}_bases.png">
+                </div>  
+              </div>
+              <div class="half right">
+                <div class="figure large">
+                  <img class="figure image" src="res/plots/boxplot_{{ barcode }}_{{ subset }}_gc.png">
+                </div>
+              </div>
+            </div>
+
+            <div class="contentline">
+              <div class="figure fifty">
+                <img class="figure image" src="res/plots/boxplot_{{ barcode }}_{{ subset }}_qual.png">
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+        {% endfor %}
+
+      </div>
+      {% endfor %}
+
+
+    </div>
+  </body>
+  <script>
+    for (var key in sessionStorage) {
+      if (sessionStorage.getItem(key) == 'block') {
+        $("#" + key).css('display', 'block');
+      } else {
+        $("#" + key).css('display', 'none');
+      }
+    }
+  </script>
+</html>

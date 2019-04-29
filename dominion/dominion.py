@@ -33,7 +33,7 @@ from operator import itemgetter
 from .version import __version__
 from .statsparser import get_argument_parser as sp_get_argument_parser
 from .statsparser import parse_args as sp_parse_args
-from .helper import initLogger, resources_dir, get_script_dir, hostname, ArgHelpFormatter, r_file, r_dir, rw_dir, defaults
+from .helper import initLogger, resources_dir, get_script_dir, hostname, ArgHelpFormatter, r_file, r_dir, rw_dir, defaults, jinja_env
 import threading
 import logging
 import queue
@@ -88,12 +88,13 @@ def main_and_args():
 	general_group.add_argument('-d', '--rsync_dest',
 							   default="{}@{}:{}".format(defaults()["user"], defaults()["host"], defaults()["dest"]),
 							   help='''destination for data transfer with rsync, format USER@HOST[:DEST].
-							           Key authentication for the specified destination must be set up, otherwise
-							           data transfer will fail. Default value is parsed from setting
+							           Key authentication for the specified destination must be set up (see option -i),
+							           otherwise data transfer will fail. Default value is parsed from setting
 							           file {}'''.format(os.path.join(resources_dir, "defaults.ini")))
 	general_group.add_argument('-i', '--identity_file',
-							   default="",
-							   help='''file from which the identity (private key) for public key authentication is read''')
+							   default="{}".format(defaults()["identity"]),
+							   help='''file from which the identity (private key) for public key authentication is read.
+							           Default value is parsed from setting file {}'''.format(os.path.join(resources_dir, "defaults.ini")))
 	general_group.add_argument('--bc_kws',
 							   nargs='*',
 							   default=['RBK', 'NBD', 'RAB', 'LWB', 'PBK', 'RPB', 'arcod'],
@@ -158,6 +159,9 @@ def main_and_args():
 	ns = argparse.Namespace()
 	arg_data_basedir(parser, ns, args.data_basedir, '')
 
+	if not os.path.exists(args.identity_file):
+		print("Identity file {} does not exists. Please check key authentication settings or specify a different key with option -i.".format(args.identity_file))
+
 	watchnchop_args = []
 	if args.no_transfer:
 		watchnchop_args.append('-n')
@@ -200,10 +204,6 @@ def main_and_args():
 
 	global UPDATE_OVERVIEW
 	logger.info("setting up dominION status page environment")
-	jinja_env = Environment(
-	    loader=PackageLoader('dominion', 'resources'),
-	    autoescape=select_autoescape(['html', 'xml'])
-	)
 	if not os.path.exists(os.path.join(args.output_dir, 'res')):
 		os.makedirs(os.path.join(args.output_dir, 'res'))
 	for res_file in ['style.css', 'flowcell.png', 'no_flowcell.png']:
@@ -241,7 +241,7 @@ def main_and_args():
 								args.bc_kws))
 
 	logger.info("initiating dominION overview page")
-	update_overview(jinja_env, watchers, args.output_dir)
+	update_overview(watchers, args.output_dir)
 	webbrowser.open('file://' + os.path.realpath(os.path.join(args.output_dir, "{}_overview.html".format(hostname))))
 
 	logger.info("entering main loop")
@@ -251,7 +251,7 @@ def main_and_args():
 			for watcher in watchers:
 				watcher.check_q()
 			if UPDATE_OVERVIEW:
-				update_overview(jinja_env, watchers, args.output_dir)
+				update_overview(watchers, args.output_dir)
 				UPDATE_OVERVIEW = False
 			time.sleep(0.2)
 			n += 1
@@ -382,7 +382,7 @@ def get_latest(runs):
 			protocol_start = dateutil.parser.parse(runs[run_id]['run_data']['protocol_start'])
 	return latest_qc
 
-def update_overview(jinja_env, watchers, output_dir):
+def update_overview(watchers, output_dir):
 	channel_to_css = {0:"GA10000", 1:"GA20000", 2:"GA30000", 3:"GA40000", 4:"GA50000"}
 	render_dict = {"version"		:	__version__,
 				   "dateTimeNow"	:	datetime.now().strftime("%Y-%m-%d_%H:%M"),
@@ -495,195 +495,6 @@ def update_overview(jinja_env, watchers, output_dir):
 	template = jinja_env.get_template('overview.template')
 	with open(os.path.join(output_dir, "{}_overview.html".format(hostname)), 'w') as f:
 		print(template.render(render_dict), file=f)
-
-
-
-
-#def update_overview(watchers, output_dir):
-#	ALL_RUNS_LOCK.acquire()
-#	channel_to_css = {0:"GA10000", 1:"GA20000", 2:"GA30000", 3:"GA40000", 4:"GA50000"}
-#
-#	with open(os.path.join(resources_dir, 'status_brick.html'), 'r') as f:
-#		status_brick = f.read()
-#
-#	status_brick = status_brick.format("{0}", "{1}", __version__, "{}".format(datetime.now())[:-7])
-#
-#	for watcher in watchers:
-#		with open(os.path.join(resources_dir, 'flowcell_brick.html'), 'r') as f:
-#			flowcell_brick = f.read()
-#		with open(os.path.join(resources_dir, 'flowcell_info_brick.html'), 'r') as f:
-#			flowcell_info_brick = f.read()
-#
-#		latest_qc = None
-#		flowcell_runs = []
-#		asic_id_eeprom = None
-#		try:
-#			asic_id_eeprom = watcher.channel_status.flowcell['asic_id_eeprom']
-#		except:
-#			#logger.info("NO FLOWCELL")
-#			pass
-#
-#		if asic_id_eeprom:
-#			if asic_id_eeprom in ALL_RUNS:
-#				for run_id in ALL_RUNS[asic_id_eeprom]:
-#					protocol_start = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_start'])
-#					experiment_type = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type']
-#					if 'seq' in experiment_type.lower(): # to increase compatibility in future
-#						flowcell_runs.append(run_id)
-#					else: # only "sequencing" and "platform_qc"
-#						if latest_qc:
-#							_protocol_start = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start'])
-#							if protocol_start > _protocol_start:
-#								latest_qc = run_id
-#						else:
-#							latest_qc = run_id
-#
-#		# FILL flowcell_brick AND flowcell_info_brick
-#		# case no flowcell on minion/channel:
-#		if not asic_id_eeprom:
-#			flowcell_brick = flowcell_brick.format("no_")
-#			flowcell_info_brick = flowcell_info_brick.format(
-#				channel_to_css[watcher.channel],
-#				"-",
-#				"",
-#				"")
-#		else:
-#			flowcell_brick = flowcell_brick.format("")
-#			# case flowcell new / unused
-#			if latest_qc == None and flowcell_runs == []:
-#				flowcell_info_brick = flowcell_info_brick.format(
-#					channel_to_css[watcher.channel],
-#					"NO RECORDS",
-#					"",
-#					"")
-#			else:
-#				# case only qc:
-#				if latest_qc and flowcell_runs == []:
-#					flowcell_info_brick = flowcell_info_brick.format(
-#						channel_to_css[watcher.channel],
-#						ALL_RUNS[asic_id_eeprom][latest_qc]['flowcell']['flowcell_id'],
-#						'<p><u>Latest QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
-#							dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start']).date(),
-#							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group * total'],
-#							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 1 total'],
-#							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 2 total'],
-#							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 3 total'],
-#							ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 4 total']),
-#						""
-#						)
-#				else:
-#					runs_string = '<p><u>Runs</u>:<br><br>'
-#					for run in flowcell_runs:
-#						user_filename_input = ALL_RUNS[asic_id_eeprom][run]['run_data']['user_filename_input']
-#						sample = ALL_RUNS[asic_id_eeprom][run]['run_data']['sample']
-#						if not sample:
-#							sample = user_filename_input
-#						link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
-#						runs_string += '<a href="{0}" target="_blank">{1}</a><br>'.format(link, user_filename_input)
-#					runs_string += '</p>'
-#
-#					# case only flowcell_runs:
-#					if latest_qc == None and flowcell_runs:
-#						flowcell_info_brick = flowcell_info_brick.format(
-#							channel_to_css[watcher.channel],
-#							ALL_RUNS[asic_id_eeprom][flowcell_runs[0]]['flowcell']['flowcell_id'],
-#							"",
-#							runs_string
-#							)
-#					# case both:
-#					else:
-#						flowcell_info_brick = flowcell_info_brick.format(
-#							channel_to_css[watcher.channel],
-#							ALL_RUNS[asic_id_eeprom][latest_qc]['flowcell']['flowcell_id'],
-#							'<p><u>Latest QC</u> ({0}):<br><br>* : {1}<br>1 : {2}<br>2 : {3}<br>3 : {4}<br>4 : {5}</p>'.format(
-#								dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][latest_qc]['run_data']['protocol_start']).date(),
-#								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group * total'],
-#								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 1 total'],
-#								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 2 total'],
-#								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 3 total'],
-#								ALL_RUNS[asic_id_eeprom][latest_qc]['mux_scans'][0]['group 4 total']),
-#							runs_string
-#							)
-#
-#		status_brick =  status_brick.format(flowcell_brick + "\n{0}",
-#														  flowcell_info_brick + "\n{1}")
-#
-#
-#	status_brick = status_brick.format("", "")
-#
-#	all_runs_info = []
-#	for asic_id_eeprom in ALL_RUNS:
-#		for run_id in ALL_RUNS[asic_id_eeprom]:
-#			experiment_type = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type']
-#			if 'seq' in experiment_type.lower(): # to increase compatibility in future
-#				protocol_start = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_start'])
-#				time_diff = "N/A"
-#				if 'protocol_end' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']:
-#					if ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_end']:
-#						protocol_end = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_end'])
-#						time_diff = "{}".format(protocol_end - protocol_start).split('.')[0]
-#				sequencing_kit = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sequencing_kit']
-#				user_filename_input = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input']
-#				sample = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sample']
-#				if not sample:
-#					sample = user_filename_input
-#
-#				link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
-#				all_runs_info.append( (link, user_filename_input, sample, sequencing_kit, protocol_start, time_diff) )
-#
-#	with open(os.path.join(resources_dir, 'status_bottom_brick.html'), 'r') as f:
-#			bottom_brick = f.read()
-#	if all_runs_info:
-#		all_runs_info = sorted(all_runs_info, key=itemgetter(4), reverse=True)
-#		th = '<th rowspan="{}">{}</th>'
-#		td_sample = '<th rowspan="{}"><a href="{}" target="_blank">{}</a></th>'
-#		blank_line = '<tr>\n{}\n{}\n<td>{}</td>\n<td>{}</td>\n<td>{}</td></tr>'
-#
-#		run = 0
-#		sample = 0
-#		grouped = [[[all_runs_info[0]]]] if all_runs_info else [[[]]]
-#		for run_info in all_runs_info[1:]:
-#			if grouped[run][sample][0][1] == run_info[1]:
-#				if grouped[run][sample][0][2] == run_info[2]:
-#					grouped[run][sample].append(run_info)
-#				else:
-#					grouped[run].append( [run_info] )
-#					sample += 1
-#			else:
-#				grouped.append( [[run_info]] )
-#				run += 1
-#				sample = 0
-#		ths = []
-#		td_samples = []
-#
-#		for run in grouped:
-#			ths.append(th.format(sum([len(sample) for sample in run]),		# row_span
-#								 run[0][0][1]))	# user_filename_input
-#			for sample in run:
-#				td_samples.append(td_sample.format(len(sample),		# row_span
-#												   sample[0][0],	# link
-#												   sample[0][2]))	# sample
-#				for i in range(len(sample)):
-#					td_samples.append('')
-#					ths.append('')
-#				td_samples.pop()
-#			ths.pop()
-#
-#		for i,run_info in enumerate(all_runs_info):
-#			bottom_brick = bottom_brick.format(blank_line.format(ths[i], 
-#																 td_samples[i], 
-#																 run_info[3], 
-#																 run_info[4].strftime("%Y-%m-%d %H:%M"),
-#																 run_info[5]) + "\n{0}")
-#			bottom_brick = bottom_brick.replace("{", "{{").replace("}", "}}").replace("{{0}}", "{0}")
-#	bottom_brick = bottom_brick.format("")
-#
-#	with open(os.path.join(output_dir, "{}_overview.html".format(hostname)), 'w') as f:
-#		print(status_brick + bottom_brick, file=f)
-#
-#	ALL_RUNS_LOCK.release()
-#	return
-
 
 class ChannelStatus():
 	empty_run_data = OrderedDict([
