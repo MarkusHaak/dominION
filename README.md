@@ -8,7 +8,7 @@ The dominION agent supervises all channels of a GridION simultaneously, performi
 
 ## Quick Setup
 
-The easiest way to setup dominion and all its dependencies is to clone the repository and run the bash script setup. 
+The easiest way to install dominion and all its dependencies on a GridION sequencer is to clone the repository and run the bash script setup. 
 
 First, open a console and make sure that git is installed:
 
@@ -16,7 +16,7 @@ First, open a console and make sure that git is installed:
 sudo apt-get -y install git
 ```
 
-Next, clone the git repository of dominION with option *--recurse-submodules*. If you have no access to the github servers from your local machine, you can clone the directory on a different machine, transfer the cloned directory *dominION* and proceed with the installation.
+Next, clone the git repository of dominION with option *--recurse-submodules*. If you have no access to the github servers from the GridION itself, you can clone the directory on a different machine, transfer the cloned directory *dominION* and proceed with the installation.
 
 ```bash
 git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
@@ -30,7 +30,7 @@ Please **replace USER, HOST and DEST** with your server specific information. Yo
 /bin/bash dominION/script/setup -u USER -H HOST -d DEST
 ```
 
-After **restarting the machine**, the gridION agent script should be running in a screen terminal in the background. If you open Firefox, you should see the overview page of dominION as the startup page.
+After **restarting the machine**, the dominION agent script should be running in a screen terminal in the background. Unless the option `-m` was set during installation, the overview page of dominION should now be the startup page of Firefox.
 
 ## Setup
 

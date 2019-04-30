@@ -73,9 +73,7 @@ def get_argument_parser():
 								  	   Requires CSV files with "\t" as seperator, no header and the following columns in given order:
 								  	   read_id, length, qscore, mean_gc, Passed/tooShort, read_number, pore_index, timestamp, barcode''')
 		main_options.add_argument('-r', '--recursive',
-								  help='''Stats file containing read information or a directory containing several such files. 
-								  	   Requires CSV files with "\t" as seperator, no header and the following columns in given order:
-								  	   read_id, length, qscore, mean_gc, Passed/tooShort, read_number, pore_index, timestamp, barcode''')
+								  help='''recursively search for directories containing stats files and logdata files''')
 	main_options.add_argument('-o', '--outdir',
 							  action=w_dir,
 							  default=None,
@@ -205,13 +203,10 @@ def parse_args(argument_parser, ext_args=None):
 	if not os.path.isdir(os.path.join(args.outdir, 'res', 'plots')):
 		os.makedirs(os.path.join(args.outdir, 'res', 'plots'))
 
-	for brick in ["barcode_brick.html",
-				  "bottom_brick.html",
-				  "overview_brick.html",
-				  "top_brick.html"]:
-		if not os.path.isfile(os.path.join(resources_dir, brick)):
-			logger.error('file {} does not exist'.format(os.path.join(resources_dir, brick)))
-			exit()
+	template = os.path.join(resources_dir, "report.template")
+	if not os.path.isfile(template):
+		logger.error('file {} does not exist'.format(template))
+		exit()
 	args.time_intervals = [i*60 for i in args.time_intervals]
 
 

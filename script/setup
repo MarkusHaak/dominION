@@ -77,20 +77,8 @@ echo "- setup key authentication" 1>&2
 sha="$(echo ${user}${host}${dest} | shasum | sed 's|\([a-f0-9]*\).*|\1|')"
 fn="id_dominion_${sha}"
 echo "${HOME}/.ssh/${fn}"
-#if [ -e "${HOME}/.ssh/id_rsa_dominion.pub" ]; then
-    #o_user="$(cat ${HOME}/.ssh/id_rsa_dominion.pub | sed 's|.*user=\([^,=]*\),\?.*|\1|')"
-    #o_host="$(cat ${HOME}/.ssh/id_rsa_dominion.pub | sed 's|.*host=\([^,=]*\),\?.*|\1|')"
-    #o_dest="$(cat ${HOME}/.ssh/id_rsa_dominion.pub | sed 's|.*dest=\([^,=]*\),\?.*|\1|')"
-    #if [[ "$user" == "$o_user" && "$host" == "$o_host" && "$dest" == "$o_dest" ]]; then
-    #    echo "key pair for this user-host-dest combination already exists, skipping key pair creation and ssh-copy-id"
-    #else
-    #    rm "${HOME}/.ssh/id_rsa_dominion"
-    #    rm "${HOME}/.ssh/id_rsa_dominion.pub"
-    #fi
 if [ -f "${HOME}/.ssh/${fn}" ]; then
     echo "key pair for this user-host-dest combination already exists, skipping key pair creation and ssh-copy-id"
-#fi
-#if [ ! -e "${HOME}/.ssh/id_rsa_dominion.pub" ]; then
 else
     ssh-keygen -t rsa -N "" -f "${HOME}/.ssh/${fn}"
     localip=$(ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p')
@@ -171,6 +159,13 @@ if !($mflag); then
 fi
 
 #####
-echo "- installing dominION"
+echo "- installing dominION" 1>&2
 cd "${MODULEPATH}"
 python3 setup.py install
+
+
+#####
+if [[ $? -gt 0 ]] 
+then
+    echo "\n#######################\nInstallation successful\n#######################" 1>&2
+fi
