@@ -51,7 +51,7 @@
                 <u>Runs</u>:<br>
                 <br>
                 {% for run in channel.runs %}
-                  <a href="{{ run.link }}" target="_blank">{{ run.user_filename_input }}</a><br>
+                  <a href="{{ run.link }}" target="_blank">{{ run.experiment }}</a><br>
                 {% endfor %}
               </p>
               {% endif %}
@@ -78,9 +78,9 @@
 
           {% for exp in all_exp %}
           <tr>
-            <th rowspan="{{ exp.num_samples }}">{{ exp.user_filename_input }}</th>
+            <th rowspan="{{ exp.num_samples }}">{{ exp.experiment }}</th>
             {% for sample in exp.samples %}
-            <th rowspan="{{ sample.num_runs }}"><a href="{{ sample.link }}" target="_blank">{{ sample.sample_name }}</a></th>
+            <th rowspan="{{ sample.num_runs }}"><a href="{{ sample.link }}" target="_blank">{{ sample.sample }}</a></th>
           {% for run in sample.runs %}
           {%- if not loop.first -%}<tr>{% endif %}
               <td>{{ run.sequencing_kit }}</td>

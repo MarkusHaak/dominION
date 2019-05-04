@@ -285,8 +285,8 @@ def add_database_entry(flowcell, run_data, mux_scans):
 	if asic_id_eeprom in ALL_RUNS:
 		if run_id in ALL_RUNS[asic_id_eeprom]:
 			logger.warning("{} exists multiple times in database!".format(run_id))
-			logger.warning("conflicting runs: {}, {}".format(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input'],
-															 run_data['user_filename_input']))
+			logger.warning("conflicting runs: {}, {}".format(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['relative_path'],
+															 run_data['relative_path']))
 			logger.warning("conflict generating report file: {}".format(fn))
 			ALL_RUNS_LOCK.release()
 			return False
@@ -296,10 +296,10 @@ def add_database_entry(flowcell, run_data, mux_scans):
 	ALL_RUNS[asic_id_eeprom][run_id] = {'flowcell'	: flowcell,
 										'run_data'	: run_data,
 										'mux_scans'	: mux_scans}
-	logger.info('{} - added experiment "{}" performed on flowcell "{}" on "{}"'.format(asic_id_eeprom, 
-																					   run_data['experiment_type'], 
-																					   flowcell['flowcell_id'], 
-																					   run_data['protocol_start']))
+	logger.debug('{} - added experiment of type "{}" performed on flowcell "{}" on "{}"'.format(asic_id_eeprom, 
+																								run_data['experiment_type'], 
+																								flowcell['flowcell_id'], 
+																								run_data['protocol_start']))
 	ALL_RUNS_LOCK.release()
 	return True
 
@@ -319,10 +319,10 @@ def import_qcs(qc_dir):
 
 def import_runs(base_dir, refactor=False):
 	logger.info("importing sequencing run entries from files in directory {}".format(base_dir))
-	for user_filename_input in [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]:
-		run_dir = os.path.join(base_dir, user_filename_input)
-		for sample in [d for d in os.listdir(run_dir) if os.path.isdir(os.path.join(run_dir, d))]:
-			sample_dir = os.path.join(run_dir, sample)
+	for experiment in [d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))]:
+		experiment_dir = os.path.join(base_dir, experiment)
+		for sample in [d for d in os.listdir(experiment_dir) if os.path.isdir(os.path.join(experiment_dir, d))]:
+			sample_dir = os.path.join(experiment_dir, sample)
 			for fp in [os.path.join(sample_dir, fn) for fn in os.listdir(sample_dir) if fn.endswith('.json')]:
 				if os.path.isfile(fp):
 					with open(fp, "r") as f:
@@ -331,15 +331,15 @@ def import_runs(base_dir, refactor=False):
 						except:
 							logger.warning("failed to parse {}, json format or data structure corrupt".format(fn))
 							continue
-					# temporarily change attributes user_filename_input and sample according to directory names
-					prev = (run_data['user_filename_input'] if 'user_filename_input' in run_data else None, 
+					# temporarily change attributes experiment and sample according to directory names
+					prev = (run_data['experiment'] if 'experiment' in run_data else None, 
 							run_data['sample'] if 'sample' in run_data else None)
-					changed = prev == (user_filename_input, sample)
-					run_data['user_filename_input'] = user_filename_input
+					changed = prev == (experiment, sample)
+					run_data['experiment'] = experiment
 					run_data['sample'] = sample
 					if refactor and changed:
 						# make changes permanent
-						logging.info("writing changes to attributes 'user_filename_input' and 'sample' to file")
+						logging.info("writing changes to attributes 'experiment' and 'sample' to file")
 						data = (flowcell, run_data, mux_scans)
 						with open( fp, 'w') as f:
 							print(json.dumps(data, indent=4), file=f)
@@ -413,12 +413,14 @@ def update_overview(watchers, output_dir):
 
 		render_dict["channels"][channel]['runs'] = []
 		for run_id in runs:
-			user_filename_input = runs[run_id]['run_data']['user_filename_input']
+			experiment = runs[run_id]['run_data']['experiment']
+			if not experiment:
+				experiment = runs[run_id]['run_data']['user_filename_input']
 			sample = runs[run_id]['run_data']['sample']
 			if not sample:
-				sample = user_filename_input
-			link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
-			render_dict["channels"][channel]['runs'].append({'user_filename_input':user_filename_input,
+				sample = experiment
+			link = os.path.abspath(os.path.join(output_dir,'runs',experiment,sample,'report.html'))
+			render_dict["channels"][channel]['runs'].append({'experiment':experiment,
 															 'link':link})
 
 		render_dict["channels"][channel]['channel'] = channel_to_css[watcher.channel]
@@ -446,13 +448,13 @@ def update_overview(watchers, output_dir):
 						protocol_end = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_end'])
 						duration = "{}".format(protocol_end - protocol_start).split('.')[0]
 				sequencing_kit = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sequencing_kit']
-				user_filename_input = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['user_filename_input']
+				experiment = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment']
 				sample = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['sample']
 				if not sample:
-					sample = user_filename_input
-				link = os.path.abspath(os.path.join(output_dir,'runs',user_filename_input,sample,'report.html'))
+					sample = experiment
+				link = os.path.abspath(os.path.join(output_dir,'runs',experiment,sample,'report.html'))
 				all_runs_info.append({'link':link,
-									  'user_filename_input':user_filename_input,
+									  'experiment':experiment,
 									  'sample': sample,
 									  'sequencing_kit': sequencing_kit,
 									  'protocol_start': protocol_start,
@@ -466,7 +468,7 @@ def update_overview(watchers, output_dir):
 		sample = 0
 		grouped = [[[all_runs_info[0]]]] if all_runs_info else [[[]]]
 		for run_info in all_runs_info[1:]:
-			if grouped[run][sample][0]['user_filename_input'] == run_info['user_filename_input']:
+			if grouped[run][sample][0]['experiment'] == run_info['experiment']:
 				if grouped[run][sample][0]['sample'] == run_info['sample']:
 					grouped[run][sample].append(run_info)
 				else:
@@ -481,13 +483,13 @@ def update_overview(watchers, output_dir):
 		for exp in grouped:
 			render_dict['all_exp'].append(
 				{'num_samples':str(sum([len(sample) for sample in exp])),
-				 'user_filename_input':exp[0][0]['user_filename_input'],
+				 'experiment':exp[0][0]['experiment'],
 				 'samples':[]})
 			for sample in exp:
 				render_dict['all_exp'][-1]['samples'].append(
 					{'num_runs':str(len(sample)),
 					 'link':sample[0]['link'],
-					 'sample_name':sample[0]['sample'],
+					 'sample':sample[0]['sample'],
 					 'runs':[]})
 				for run in sample:
 					render_dict['all_exp'][-1]['samples'][-1]['runs'].append(run)
@@ -499,13 +501,14 @@ def update_overview(watchers, output_dir):
 class ChannelStatus():
 	empty_run_data = OrderedDict([
 		('run_id', None),
-		('user_filename_input', None), # user Run title
+		('user_filename_input', None),
 		('minion_id', None),
 		('sequencing_kit', None),
 		('protocol_start', None),
 		('protocol_end', None),
 		('relative_path', None),
-		('sample', None)
+		('sample', None),
+		('experiment', None)
 		])
 
 	empty_flowcell = OrderedDict([
@@ -585,47 +588,47 @@ class ChannelStatus():
 		self.run_data['minion_id'] = self.minion_id
 		self.mux_scans = []
 
-	def find_relative_path(self, data_basedir):
-		if not self.run_data['user_filename_input']:
-			self.logger.error("Could not determine relative data path, 'user_filename_input' is not set")
-			return
-		rel_path = os.path.join(self.run_data['user_filename_input'],
-								self.run_data['user_filename_input'])	# TODO: change to sample_name
-		basedir = os.path.join(data_basedir, rel_path)	
-		if not os.path.isdir(basedir):
-			self.logger.error("Could not determine relative data path, base directory {} does not exist!".format(basedir))
-			return
-
-		if self.run_data['run_id']:
-			exp_id_substring = self.run_data['run_id'].split('-')[0]
-		else:
-			self.logger.warning("'run_id' is not set, therefore relative_path has to be guessed!")
-			exp_id_substring = None
-		
-		sub_dirs = [item for item in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, item))]
-		if not sub_dirs:
-			self.logger.error("Could not determine relative data path, no sub directories in {}".format(basedir))
-			return
-		if exp_id_substring:
-			for sub_dir in sub_dirs:
-				if sub_dir.rstrip('/').endswith(exp_id_substring):
-					self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
-					return
-		# if no relative path was found by now, then it is probably the case that the run_id was not parsed correctly
-		# --> attempt to choose a subdirectory which belongs to the correct flowcell
-		if self.flowcell['flowcell_id']:
-			for sub_dir in sub_dirs:
-				if self.flowcell['flowcell_id'] in sub_dir:
-					self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
-					self.logger.warning("chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
-					return
-		self.logger.error("Could not determine any relative data path!")
-		return
+	#def find_relative_path(self, data_basedir):
+	#	if not self.run_data['user_filename_input']:
+	#		self.logger.error("Could not determine relative data path, 'user_filename_input' is not set")
+	#		return
+	#	rel_path = os.path.join(self.run_data['user_filename_input'],
+	#							self.run_data['user_filename_input'])	# TODO: change to sample_name
+	#	basedir = os.path.join(data_basedir, rel_path)	
+	#	if not os.path.isdir(basedir):
+	#		self.logger.error("Could not determine relative data path, base directory {} does not exist!".format(basedir))
+	#		return
+	#
+	#	if self.run_data['run_id']:
+	#		exp_id_substring = self.run_data['run_id'].split('-')[0]
+	#	else:
+	#		self.logger.warning("'run_id' is not set, therefore relative_path has to be guessed!")
+	#		exp_id_substring = None
+	#	
+	#	sub_dirs = [item for item in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, item))]
+	#	if not sub_dirs:
+	#		self.logger.error("Could not determine relative data path, no sub directories in {}".format(basedir))
+	#		return
+	#	if exp_id_substring:
+	#		for sub_dir in sub_dirs:
+	#			if sub_dir.rstrip('/').endswith(exp_id_substring):
+	#				self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
+	#				return
+	#	# if no relative path was found by now, then it is probably the case that the run_id was not parsed correctly
+	#	# --> attempt to choose a subdirectory which belongs to the correct flowcell
+	#	if self.flowcell['flowcell_id']:
+	#		for sub_dir in sub_dirs:
+	#			if self.flowcell['flowcell_id'] in sub_dir:
+	#				self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
+	#				self.logger.warning("chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
+	#				return
+	#	self.logger.error("Could not determine any relative data path!")
+	#	return
 
 
 class WatchnchopScheduler(threading.Thread):
 
-	def __init__(self, data_basedir, relative_path, user_filename_input, fastq_reads_per_file, bc_kws, stats_fp, channel, watchnchop_args):
+	def __init__(self, data_basedir, relative_path, experiment, fastq_reads_per_file, bc_kws, stats_fp, channel, watchnchop_args):
 		threading.Thread.__init__(self)
 		if getattr(self, 'daemon', None) is None:
 			self.daemon = True
@@ -643,7 +646,7 @@ class WatchnchopScheduler(threading.Thread):
 					'-f', str(fastq_reads_per_file)]
 		if watchnchop_args:
 			self.cmd.extend(watchnchop_args)
-		if len([kw for kw in bc_kws if kw in user_filename_input]) > 0:
+		if len([kw for kw in bc_kws if kw in experiment]) > 0:
 			self.cmd.append('-b')
 		self.cmd.append(os.path.join(data_basedir, relative_path, ''))
 		#self.cmd = " ".join(self.cmd)
@@ -837,6 +840,8 @@ class Watcher():
 				self.parse_server_log_line(line)
 			elif origin == 'bream':
 				self.parse_bream_log_line(line)
+			elif origin == 'analyser':
+				self.parse_analyser_log_line(line)
 
 	def parse_server_log_line(self, line):
 		global UPDATE_OVERVIEW
@@ -939,26 +944,22 @@ class Watcher():
 			self.logger.info("SEQUENCING STARTS")
 			UPDATE_OVERVIEW = True
 
-			#try to identify the path in which the experiment data is saved, relative to data_basedir
-			self.channel_status.find_relative_path(self.data_basedir)
-
-			#start watchnchop (porechop & filter & rsync)
 			self.start_watchnchop()
+			self.start_statsparser()
 
-			#start creation of plots at regular time intervals
-			if self.spScheduler.is_alive() if self.spScheduler else None:
-				self.spScheduler.join(1.1)
-			sample_dir = os.path.join(self.output_dir,
-									  'runs',
-									  self.channel_status.run_data['user_filename_input'],
-									  self.channel_status.run_data['user_filename_input'])#, #TODO: change to sample
-									  #self.channel_status.run_data['run_id'] + '_stats.csv')
-			self.logger.info('SCHEDULING update of stats-webpage every {0:.1f} minutes for sample dir {1}'.format(self.update_interval/1000, sample_dir))
-			self.spScheduler = StatsparserScheduler(self.update_interval, 
-													sample_dir, 
-													self.statsparser_args, 
-													self.channel)
-			self.spScheduler.start()
+		if dict_content:
+			self.channel_status.update(dict_content, overwrite)
+
+	def parse_analyser_log_line(self, line):
+		global UPDATE_OVERVIEW
+		dict_content = {}
+		overwrite = True
+
+		if 		"preparing_to_write_analysis_summary_file"								in line:
+			for m in re.finditer("filename = (.+) ]", line): 
+				dict_content['relative_path'] = m.group(1).split("/./")[1].split("/sequencing_summary/")[0]
+				dict_content['experiment'] = dict_content['relative_path'].split('/')[0]
+				dict_content['sample'] = dict_content['relative_path'].split('/')[1]
 
 		if dict_content:
 			self.channel_status.update(dict_content, overwrite)
@@ -984,18 +985,16 @@ class Watcher():
 			target_dir = os.path.join(self.output_dir, 
 									  'qc')
 		else:
-			if not self.channel_status.run_data['user_filename_input']:
-				self.logger.warning("NOT SAVING REPORT because sequencing run is missing crucial attribute 'user_filename_input'")
-				return
-			#fn.append("SEQ")
-			#fn.append(self.channel_status.run_data['user_filename_input'])
-			#fn.append(self.channel_status.flowcell['flowcell_id'])
+			for key in ['experiment', 'sample']:
+				if not self.channel_status.run_data[key]:
+					self.logger.warning("NOT SAVING LOG DATA because run_data is missing crucial attribute '{}'".format(key))
+					return
 			fn.append(self.channel_status.run_data['run_id'])
 			fn.append('logdata')
 			target_dir = os.path.join(self.output_dir,
 									  'runs', 
-									  self.channel_status.run_data['user_filename_input'], 
-									  self.channel_status.run_data['user_filename_input']) # TODO: change to sample
+									  self.channel_status.run_data['experiment'], 
+									  self.channel_status.run_data['sample'])
 		fn = "_".join(fn) + ".json"
 
 		self.logger.info("saving log data to file {}".format(os.path.join(target_dir, fn)))
@@ -1020,26 +1019,22 @@ class Watcher():
 		ALL_RUNS_LOCK.release()
 
 	def start_watchnchop(self):
-		for key in ['user_filename_input', 'relative_path', 'run_id', 'fastq_reads_per_file']:
+		for key in ['experiment', 'sample', 'relative_path', 'run_id', 'fastq_reads_per_file']:
 			if not self.channel_status.run_data[key]:
-				self.logger.warning("NOT executing watchnchop for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
+				self.logger.warning("NOT executing watchnchop because run_data is missing crucial attribute '{}'".format(key))
 				return
 
-		#if self.wcScheduler:
-		#	if self.wcScheduler.is_alive():
-		#		#self.logger.error("watchnchop was not started successfully for previous run!")
-		#		self.wcScheduler.join(1.2)
 		if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
 			self.wcScheduler[-1].join(1.2)
 
 		stats_fp = os.path.join(self.output_dir,
 								'runs',
-								self.channel_status.run_data['user_filename_input'],
-								self.channel_status.run_data['user_filename_input'], #TODO: change to sample name
+								self.channel_status.run_data['experiment'],
+								self.channel_status.run_data['sample'],
 								"{}_stats.csv".format(self.channel_status.run_data['run_id']))
 		self.wcScheduler.append(WatchnchopScheduler(self.data_basedir,
 													self.channel_status.run_data['relative_path'],
-													self.channel_status.run_data['user_filename_input'],
+													self.channel_status.run_data['experiment'],
 													self.channel_status.run_data['fastq_reads_per_file'],
 													self.bc_kws,
 													stats_fp,
@@ -1048,6 +1043,24 @@ class Watcher():
 		self.wcScheduler[-1].start()
 		return
 
+	def start_statsparser(self):
+		for key in ['experiment', 'sample']:
+			if not self.channel_status.run_data[key]:
+				self.logger.warning("NOT starting statsparser scheduler because run_data is missing crucial attribute '{}'".format(key))
+				return
+		#start creation of plots at regular time intervals
+		if self.spScheduler.is_alive() if self.spScheduler else None:
+			self.spScheduler.join(1.1)
+		sample_dir = os.path.join(self.output_dir,
+								  'runs',
+								  self.channel_status.run_data['experiment'],
+								  self.channel_status.run_data['sample'])
+		self.logger.info('SCHEDULING update of report for sample {1} every {0:.1f} minutes'.format(self.update_interval/1000, sample_dir))
+		self.spScheduler = StatsparserScheduler(self.update_interval, 
+												sample_dir, 
+												self.statsparser_args, 
+												self.channel)
+		self.spScheduler.start()
 
 class OpenedFilesHandler():
 	'''manages a set of opened files, reads their contents and 
@@ -1089,8 +1102,7 @@ class OpenedFilesHandler():
 
 
 class LogFilesEventHandler(FileSystemEventHandler):
-	control_server_log = None
-	bream_log = None
+	control_server_log, bream_log, analyser_log = None, None, None
 
 	def __init__(self, q, ignore_file_modifications, channel):
 		super(LogFilesEventHandler, self).__init__()
@@ -1125,11 +1137,17 @@ class LogFilesEventHandler(FileSystemEventHandler):
 				if self.bream_log:
 					self.file_handler.close_file(event.src_path)
 					self.logger.info("Replacing current bream_log file {} with {}".format(self.bream_log, event.src_path))
-					#TODO: Find out if more than one bream log file can belong to a running experiment (probably not)
 				self.bream_log = event.src_path
 				self.logger.info("New bream_log file {}".format(self.bream_log))
 				process_function = self.enqueue_bream_log_line
 				self.logger.info("NEW EXPERIMENT")
+			elif basename.startswith("analyser_log"):
+				if self.analyser_log:
+					self.file_handler.close_file(event.src_path)
+					self.logger.info("Replacing current analyser_log file {} with {}".format(self.analyser_log, event.src_path))
+				self.analyser_log = event.src_path
+				self.logger.info("New analyser_log file {}".format(self.analyser_log))
+				process_function = self.enqueue_analyser_log_line
 			else:
 				self.logger.debug("File {} is not of concern for this tool".format(event.src_path))
 				return
@@ -1138,12 +1156,6 @@ class LogFilesEventHandler(FileSystemEventHandler):
 			self.logger.info("approx. queue size: {}".format(self.q.qsize()))
 			if activate_q:
 				self.activate_q()
-
-	def activate_q(self):
-		self.logger.info("activating communication queue")
-		self.q = self.comm_q
-		while not self.buff_q.empty():
-			self.q.put(self.buff_q.get())
 
 	def on_deleted(self, event):
 		if not event.is_directory:
@@ -1155,6 +1167,9 @@ class LogFilesEventHandler(FileSystemEventHandler):
 			elif self.bream_log == event.src_path:
 				self.bream_log = None
 				self.logger.info("EARNING: Current bream_log file {} was deleted".format(event.src_path))
+			elif self.analyser_log == event.src_path:
+				self.analyser_log = None
+				self.logger.info("EARNING: Current analyser_log file {} was deleted".format(event.src_path))
 			else:
 				self.logger.debug("File {} is not opened and is therefore not closed.".format(event.src_path))
 				#return 
@@ -1168,6 +1183,8 @@ class LogFilesEventHandler(FileSystemEventHandler):
 					self.file_handler.process_lines_until_EOF(self.enqueue_server_log_line, event.src_path)
 				elif self.bream_log == event.src_path:
 					self.file_handler.process_lines_until_EOF(self.enqueue_bream_log_line, event.src_path)
+				elif self.analyser == event.src_path:
+					self.file_handler.process_lines_until_EOF(self.enqueue_analyser_line, event.src_path)
 				else:
 					self.logger.warning("case not handled")
 					return
@@ -1176,6 +1193,12 @@ class LogFilesEventHandler(FileSystemEventHandler):
 					self.on_created(event)
 				else:
 					self.logger.debug("File {} existed before this script was started".format(event.src_path))
+
+	def activate_q(self):
+		self.logger.info("activating communication queue")
+		self.q = self.comm_q
+		while not self.buff_q.empty():
+			self.q.put(self.buff_q.get())
 
 	def enqueue_server_log_line(self, line):
 		try:
@@ -1188,6 +1211,12 @@ class LogFilesEventHandler(FileSystemEventHandler):
 			self.q.put( (dateutil.parser.parse(line[:23]), 'bream', line) )
 		except ValueError:
 			self.logger.debug("the timestamp of the following line in the bream log file could not be parsed:\n{}".format(line))
+
+	def enqueue_analyser_log_line(self, line):
+		try:
+			self.q.put( (dateutil.parser.parse(line[:23]), 'analyser', line) )
+		except ValueError:
+			self.logger.debug("the timestamp of the following line in the analyser log file could not be parsed:\n{}".format(line))
 
 
 class RunsDirsEventHandler(FileSystemEventHandler):
