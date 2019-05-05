@@ -42,6 +42,8 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 ALL_RUNS = {}
 ALL_RUNS_LOCK = threading.RLock()
+SP_DIRS = {}
+SP_DIRS_LOCK = threading.RLock()
 UPDATE_OVERVIEW = False
 logger = None
 
@@ -718,6 +720,7 @@ class StatsparserScheduler(threading.Thread):
 		self.stoprequest = threading.Event()	# set when joined without timeout (eg if terminated with ctr-c)
 		self.exp_end = threading.Event()		# set when joined with timeout (eg if experiment ended)
 		self.logger = logging.getLogger(name='gw.w{}.sps'.format(channel+1))
+		self.channel = channel
 
 		self.update_interval = update_interval
 		self.sample_dir = sample_dir
@@ -749,8 +752,8 @@ class StatsparserScheduler(threading.Thread):
 			#	self.logger.warning("statsfile does not exist (yet?)")
 			if self.conditions_met():
 				self.update_report()
-			else:
-				self.logger.warning("no stats file in {} (yet), statsparser was not started".format(self.sample_dir))
+			#else:
+			#	self.logger.warning("no stats file in {} (yet), statsparser was not started".format(self.sample_dir))
 
 			this_time = time.time()
 			while (this_time - last_time < self.update_interval) and not self.stoprequest.is_set() or self.exp_end.is_set():
@@ -759,13 +762,24 @@ class StatsparserScheduler(threading.Thread):
 		# start statsparser a last time if the experiment ended
 		if not self.stoprequest.is_set() and self.conditions_met():
 			self.update_report()
+			
+		SP_DIRS_LOCK.acquire()
+		if self.sample_dir in SP_DIRS:
+			if SP_DIRS[self.sample_dir] == self.channel:
+				del SP_DIRS[self.sample_dir]
+		SP_DIRS_LOCK.release()
 
 	def conditions_met(self):
+		conditions_met = False
 		stats_fns = [fn for fn in os.listdir(os.path.abspath(self.sample_dir)) if fn.endswith('stats.csv')] if os.path.exists(os.path.abspath(self.sample_dir)) else []
-		if stats_fns:
-			return True
-		return False
-
+		# assure that only one statsparser instance is running on a directory at a time
+		SP_DIRS_LOCK.acquire()
+		if not self.sample_dir in SP_DIRS:
+			SP_DIRS[self.sample_dir] = self.channel
+		if stats_fns and SP_DIRS[self.sample_dir] == self.channel:
+			conditions_met = True
+		SP_DIRS_LOCK.release()
+		return conditions_met
 
 	def update_report(self):
 		self.logger.info("updating report...")
@@ -783,8 +797,7 @@ class StatsparserScheduler(threading.Thread):
 				webbrowser.open('file://' + os.path.realpath(fp))
 				self.page_opened = True
 		else:
-			self.logger.error("ERROR while running statsparser")
-
+			self.logger.warning("statsparser returned with errorcode {} for directory {}".format(cp.returncode, self.sample_dir))
 
 	def join(self, timeout=None):
 		#self.stoprequest.set()

@@ -73,12 +73,12 @@ def get_argument_parser():
 								  	   Requires CSV files with "\t" as seperator, no header and the following columns in given order:
 								  	   read_id, length, qscore, mean_gc, Passed/tooShort, read_number, pore_index, timestamp, barcode''')
 		main_options.add_argument('-r', '--recursive',
-								  help='''recursively search for directories containing stats files and logdata files''')
-	main_options.add_argument('-o', '--outdir',
-							  action=w_dir,
-							  default=None,
-							  help='''Path to a directory in which the report files and folders will be saved
-								   (default: directory of input)''')
+								  help='''recursively search for directories containing stats files and corresponding logdata files''')
+	#main_options.add_argument('-o', '--outdir',
+	#						  action=w_dir,
+	#						  default=None,
+	#						  help='''Path to a directory in which the report files and folders will be saved
+	#							   (default: directory of input)''')
 	main_options.add_argument('--html_refresh_rate',
 							  type=int,
 							  default=120,
@@ -113,28 +113,28 @@ def get_argument_parser():
 							  help='matplotlib style string that influences all colors and plot appearances')
 
 	# the following should only be set if statsparser is called directly:
-	if __name__ == '__main__':
-		exp_options = argument_parser.add_argument_group('Experiment options',
-														 '''Arguments concerning the experiment. Either specify
-														 	a logdata file or all arguments individually.''')
-		exp_options.add_argument('--logdata_file',
-								 action=r_file,
-								 help='path to the report file of this sequencing run (default: <run_id>_stats.json)')
-		exp_options.add_argument('--user_filename_input',
-								 default='Run#####_MIN###_KIT###',
-								 help='run title')
-		exp_options.add_argument('--sample',
-								 default='Run#####_MIN###_KIT###',
-								 help='sample name')
-		exp_options.add_argument('--minion_id',
-								 default='GA#0000',
-								 help=' ')
-		exp_options.add_argument('--flowcell_id',
-								 default='FAK#####',
-								 help=' ')
-		exp_options.add_argument('--protocol_start',
-								 default='YYYY-MM-DD hh:mm:ss.ms',
-								 help=' ')
+	#if __name__ == '__main__':
+	#	exp_options = argument_parser.add_argument_group('Experiment options',
+	#													 '''Arguments concerning the experiment. Either specify
+	#													 	a logdata file or all arguments individually.''')
+	#	exp_options.add_argument('--logdata_file',
+	#							 action=r_file,
+	#							 help='path to the report file of this sequencing run (default: <run_id>_stats.json)')
+	#	exp_options.add_argument('--user_filename_input',
+	#							 default='Run#####_MIN###_KIT###',
+	#							 help='run title')
+	#	exp_options.add_argument('--sample',
+	#							 default='Run#####_MIN###_KIT###',
+	#							 help='sample name')
+	#	exp_options.add_argument('--minion_id',
+	#							 default='GA#0000',
+	#							 help=' ')
+	#	exp_options.add_argument('--flowcell_id',
+	#							 default='FAK#####',
+	#							 help=' ')
+	#	exp_options.add_argument('--protocol_start',
+	#							 default='YYYY-MM-DD hh:mm:ss.ms',
+	#							 help=' ')
 
 	help_group = argument_parser.add_argument_group('Help')
 	help_group.add_argument('-h', '--help', 
@@ -154,6 +154,32 @@ def get_argument_parser():
 
 	return argument_parser
 
+def contains_stats_and_logdata(directory):
+	files = [i for i in os.listdir(directory) if os.path.isfile(i)]
+	run_ids = [f.split("_")[0] for f in files if f.endswith("_stats.csv")]
+	for run_id in run_ids:
+		if "{}_logdata.json".format(run_id) in files:
+			return True
+	return False
+
+def get_dir_list(input_path, recursive):
+	input_dirs = []
+	if not os.path.exists(input_path):
+		logger.error('path {} does not exist'.format(input_path))
+		exit()
+	elif os.path.isfile(input_path):
+		if contains_stats_and_logdata(os.path.dirname(input_path)):
+			input_dirs.append(os.path.dirname(input_path))
+	elif os.path.isdir(input_path):
+		if ontains_stats_and_logdata(input_path):
+			input_dirs.append(input_path)
+		if recursive:
+			for root, dirs, _ in os.walk(input_path):
+				for subdir in dirs:
+					dir_path = os.path.join(root, subdir)
+					if contains_stats_and_logdata(dirpath):
+						input_dirs.append(dirpath)
+
 def parse_args(argument_parser, ext_args=None):
 	if ext_args:
 		args = argument_parser.parse_args(ext_args)
@@ -169,109 +195,186 @@ def parse_args(argument_parser, ext_args=None):
 		loglvl = logging.INFO
 
 	initLogger(level=loglvl)
-
 	logger = logging.getLogger(name='sp')
 
-	if not os.path.exists(args.input):
-		logger.error('path {} does not exist'.format(args.input))
-		#logger.error('path {} does not exist'.format(args.input))
-		exit()
-	elif os.path.isfile(args.input):
-		args.statsfiles = [ args.input ]
-		args.run_ids = [ os.path.basename(args.input).split('_')[0] ]
-	elif os.path.isdir(args.input):
-		args.statsfiles = []
-		args.run_ids = []
-		for fn in [fn for fn in os.listdir(args.input) if fn.endswith('.csv')]:
-			if os.path.isfile(os.path.join(args.input, fn)) and len(fn.split('_')) == 2:
-				args.statsfiles.append(os.path.join(os.path.join(args.input, fn)))
-				args.run_ids.append(fn.split('_')[0])
-		if not args.statsfiles:
-			logger.error('no statsfiles found in directory {}'.format(args.input))
-			exit()
-	logger.info('- statsfiles:          {}'.format(args.statsfiles))
-
-	if not args.outdir:
-		args.outdir = os.path.abspath(os.path.dirname(args.statsfiles[0]))
-		if not os.path.isdir(args.outdir):
-			logger.error('{} is not a valid directory'.format(args.outdir))
-			exit()
-		if not os.access(args.outdir, os.W_OK):
-			logger.error('{} is not writeable'.format(to_test))
-			exit()
-
-	if not os.path.isdir(os.path.join(args.outdir, 'res', 'plots')):
-		os.makedirs(os.path.join(args.outdir, 'res', 'plots'))
-
-	template = os.path.join(resources_dir, "report.template")
-	if not os.path.isfile(template):
-		logger.error('file {} does not exist'.format(template))
-		exit()
 	args.time_intervals = [i*60 for i in args.time_intervals]
 
-
-	base_dir = os.path.abspath(os.path.dirname(args.statsfiles[0]))
-	args.user_filename_input = base_dir.split("/")[-2]
-	args.sample = base_dir.split("/")[-1]
-	if args.logdata_file:
-		with open(args.logdata_file, "r") as f:
-			flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)		
-		args.minion_id = run_data['minion_id']
-		args.flowcell_id = flowcell['flowcell_id']
-		args.protocol_start = run_data['protocol_start']
-
-	else:
-		# combine information of all logdata files found in directory
-		#fp = os.path.join(base_dir, args.run_id + '_logdata.json')
-		#if os.path.exists(fp):
-		#	args.logdata_file = fp
-		#	logger.info("guessed logdata file to {}".format(args.logdata_file))
-		#else:
-		#	logger.info("unable to find logdata file '{}'".format(fp))
-		args.minion_id, args.flowcell_id, args.protocol_start = [], [], []
-		for fp in [fp.replace('stats.csv', 'logdata.json') for fp in args.statsfiles]:
-			if os.path.exists(fp):
-				with open(fp, "r") as f:
-					flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
-				args.minion_id.append(run_data['minion_id'])
-				args.flowcell_id.append(flowcell['flowcell_id'])
-				args.protocol_start.append(run_data['protocol_start'])
-		if args.minion_id and args.flowcell_id and args.protocol_start:
-			args.minion_id = "/".join(set(args.minion_id))
-			args.flowcell_id = "/".join(set(args.flowcell_id))
-			args.protocol_start = min([dateutil.parser.parse(ts) for ts in args.protocol_start]).strftime("%Y-%m-%d %H:%M:%S")
-		else:
-			args.minion_id = 'GA#0000'
-			args.flowcell_id = 'FAK#####'
-			args.protocol_start = 'YYYY-MM-DD hh:mm:ss.ms'
-	logger.info('- user_filename_input: {}'.format(args.user_filename_input))
-	logger.info('- sample:              {}'.format(args.sample))
-	logger.info('- minion_id:           {}'.format(args.minion_id))
-	logger.info('- flowcell_id:         {}'.format(args.flowcell_id))
-	logger.info('- protocol_start:      {}'.format(args.protocol_start))
-	logger.info('- run_id:              {}'.format(args.run_ids))
-
-
-	try:
-		matplotlib.style.use(args.matplotlib_style)
-	except:
-		logger.error('{} is not a valid matplotlib style'.format(args.matplotlib_style))
-		exit()
+	input_dirs = get_dir_list(args.input, args.recursive)
+	for input_dir in list(input_dirs):
+		if not os.W_OK(input_dir):
+			logger.warning("excluding directory {} due to missing write permissions".format(input_dir))
+			input_dirs.remove(input_dir)
+	args.input = input_dirs
 
 	return args
+	
 
-def standalone():
-	global __name__
-	__name__ = '__main__'
-	argument_parser = get_argument_parser()
-	args = parse_args(argument_parser)
-	main(args)
+#def parse_args(argument_parser, ext_args=None):
+#	if ext_args:
+#		args = argument_parser.parse_args(ext_args)
+#	else:
+#		args = argument_parser.parse_args()
+#
+#	global logger
+#	if args.verbose:
+#		loglvl = logging.DEBUG
+#	elif args.quiet:
+#		loglvl = logging.ERROR
+#	else:
+#		loglvl = logging.INFO
+#
+#	initLogger(level=loglvl)
+#	logger = logging.getLogger(name='sp')
+#
+#	if not os.path.exists(args.input):
+#		logger.error('path {} does not exist'.format(args.input))
+#		exit()
+#	elif os.path.isfile(args.input):
+#		args.statsfiles = [ args.input ]
+#		args.run_ids = [ os.path.basename(args.input).split('_')[0] ]
+#	elif os.path.isdir(args.input):
+#		args.statsfiles = []
+#		args.run_ids = []
+#		for fn in [fn for fn in os.listdir(args.input) if fn.endswith('.csv')]:
+#			if os.path.isfile(os.path.join(args.input, fn)) and len(fn.split('_')) == 2:
+#				args.statsfiles.append(os.path.join(os.path.join(args.input, fn)))
+#				args.run_ids.append(fn.split('_')[0])
+#		if not args.statsfiles:
+#			logger.error('no statsfiles found in directory {}'.format(args.input))
+#			exit()
+#	logger.info('- statsfiles:          {}'.format(args.statsfiles))
+#
+#	if not input_dir:
+#		input_dir = os.path.abspath(os.path.dirname(args.statsfiles[0]))
+#		if not os.path.isdir(input_dir):
+#			logger.error('{} is not a valid directory'.format(input_dir))
+#			exit()
+#		if not os.access(input_dir, os.W_OK):
+#			logger.error('{} is not writeable'.format(to_test))
+#			exit()
+#
+#	if not os.path.isdir(os.path.join(input_dir, 'res', 'plots')):
+#		os.makedirs(os.path.join(input_dir, 'res', 'plots'))
+#
+#	template = os.path.join(resources_dir, "report.template")
+#	if not os.path.isfile(template):
+#		logger.error('file {} does not exist'.format(template))
+#		exit()
+#	args.time_intervals = [i*60 for i in args.time_intervals]
+#
+#
+#	base_dir = os.path.abspath(os.path.dirname(args.statsfiles[0]))
+#	args.user_filename_input = base_dir.split("/")[-2]
+#	args.sample = base_dir.split("/")[-1]
+#	if args.logdata_file:
+#		with open(args.logdata_file, "r") as f:
+#			flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)		
+#		args.minion_id = run_data['minion_id']
+#		args.flowcell_id = flowcell['flowcell_id']
+#		args.protocol_start = run_data['protocol_start']
+#
+#	else:
+#		# combine information of all logdata files found in directory
+#		#fp = os.path.join(base_dir, args.run_id + '_logdata.json')
+#		#if os.path.exists(fp):
+#		#	args.logdata_file = fp
+#		#	logger.info("guessed logdata file to {}".format(args.logdata_file))
+#		#else:
+#		#	logger.info("unable to find logdata file '{}'".format(fp))
+#		args.minion_id, args.flowcell_id, args.protocol_start = [], [], []
+#		for fp in [fp.replace('stats.csv', 'logdata.json') for fp in args.statsfiles]:
+#			if os.path.exists(fp):
+#				with open(fp, "r") as f:
+#					flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
+#				args.minion_id.append(run_data['minion_id'])
+#				args.flowcell_id.append(flowcell['flowcell_id'])
+#				args.protocol_start.append(run_data['protocol_start'])
+#		if args.minion_id and args.flowcell_id and args.protocol_start:
+#			args.minion_id = "/".join(set(args.minion_id))
+#			args.flowcell_id = "/".join(set(args.flowcell_id))
+#			args.protocol_start = min([dateutil.parser.parse(ts) for ts in args.protocol_start]).strftime("%Y-%m-%d %H:%M:%S")
+#		else:
+#			args.minion_id = 'GA#0000'
+#			args.flowcell_id = 'FAK#####'
+#			args.protocol_start = 'YYYY-MM-DD hh:mm:ss.ms'
+#	logger.info('- user_filename_input: {}'.format(args.user_filename_input))
+#	logger.info('- sample:              {}'.format(args.sample))
+#	logger.info('- minion_id:           {}'.format(args.minion_id))
+#	logger.info('- flowcell_id:         {}'.format(args.flowcell_id))
+#	logger.info('- protocol_start:      {}'.format(args.protocol_start))
+#	logger.info('- run_id:              {}'.format(args.run_ids))
+#
+#
+#	try:
+#		matplotlib.style.use(args.matplotlib_style)
+#	except:
+#		logger.error('{} is not a valid matplotlib style'.format(args.matplotlib_style))
+#		exit()
+#
+#	return args
 
-def main(args=None):
+#def standalone():
+#	global __name__
+#	__name__ = '__main__'
+#	argument_parser = get_argument_parser()
+#	args = parse_args(argument_parser)
+#	main(args)
+
+def get_input_files(input_dir):
+	files = [i for i in os.listdir(input_dir) if os.path.isfile(i)]
+	stats_ids = set([f.split("_")[0] for f in files if f.endswith("_stats.csv")])
+	logdata_ids = set([f.split("_")[0] for f in files if f.endswith("_logdata.json")])
+	for run_id in stats_ids.difference(logdata_ids):
+		logger.warning("skipping run with run_id {}, missing logdata file for stats file {}".format(run_id, os.path.join(input_dir, run_id + "_stats.csv")))
+	for run_id in stats_ids.difference(logdata_ids):
+		logger.warning("skipping run with run_id {}, missing stats file for logdata file {}".format(run_id, os.path.join(input_dir, run_id + "_logdata.json")))
+	stats_files, logdata_files = [], []
+
+	for run_id in stats_ids.intersection(logdata_ids):
+		stats_files.append(os.path.join(input_dir, run_id + "_stats.csv"))
+		logdata_files.append(os.path.join(input_dir, run_id + "_logdata.json"))
+	return stats_files, logdata_files
+
+def parse_logdata_files(logdata_files):
+	logdata = {'experiment':[], 'sample':[], 'minion_id':[], 'flowcell_id':[], 'protocol_start':[], 'run_id':[]}
+	for fp in logdata_files:
+		with open(fp, "r") as f:
+			flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
+		logdata['minion_id'].append(run_data['minion_id'])
+		logdata['flowcell_id'].append(flowcell['flowcell_id'])
+		logdata['protocol_start'].append(run_data['protocol_start'])
+		logdata['run_id'].append(run_data['run_id'])
+		if run_data['experiment']:
+			logdata['experiment'].append(run_data['experiment'])
+		else:
+			logdata['experiment'].append('unknown')
+		if run_data['sample']:
+			logdata['sample'].append(run_data['sample'])
+		else:
+			logdata['sample'].append('unknown')
+
+	logdata['protocol_start'] = min([dateutil.parser.parse(ts) for ts in logdata['protocol_start']]).strftime("%Y-%m-%d %H:%M:%S")
+	for key in ['minion_id', 'flowcell_id', 'experiment', 'sample', 'run_id']:
+		logdata[key] = " / ".join(set(logdata[key]))
+
+	logger.info('- experiment: 		{}'.format(logdata['user_filename_input']))
+	logger.info('- sample:          {}'.format(logdata['sample']))
+	logger.info('- minion_id:       {}'.format(logdata['minion_id']))
+	logger.info('- flowcell_id:     {}'.format(logdata['flowcell_id']))
+	logger.info('- protocol_start:  {}'.format(logdata['protocol_start']))
+	logger.info('- run_id:          {}'.format(logdata['run_ids']))
+
+	return logdata
+
+def main(args, input_dir):
 	logger.info("##### starting statsparser {} #####\n".format(__version__))
 
+	if not os.path.isdir(os.path.join(input_dir, 'res', 'plots')):
+		os.makedirs(os.path.join(input_dir, 'res', 'plots'))
+
 	logger.info("Parsing stats files")
-	df = parse_stats(args.statsfiles)
+	stats_files, logdata_files = get_input_files(input_dir)
+	df = parse_stats(statsfiles)
 
 	logger.info("Creating stats table")
 	stats_df = stats_table(df)
@@ -298,7 +401,7 @@ def main(args=None):
 						intervals, 
 						interval, 
 						col, 
-						os.path.join(args.outdir, 'res', "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
+						os.path.join(input_dir, 'res', "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
 
 	#######
 	
@@ -317,7 +420,7 @@ def main(args=None):
 		barplot(bins, 
 				intervals, 
 				interval/1000.,
-				os.path.join(args.outdir, 'res', "plots", "barplot_kb-bins_{}_{}".format(bc, subset)))
+				os.path.join(input_dir, 'res', "plots", "barplot_kb-bins_{}_{}".format(bc, subset)))
 	
 	#######
 	
@@ -336,7 +439,7 @@ def main(args=None):
 		gc_lineplot(bins, 
 					intervals, 
 					interval,  
-					os.path.join(args.outdir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
+					os.path.join(input_dir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
 	
 	logger.info("Creating multi lineplots with one y-axis")
 	grouped = df.groupby(['barcode'])
@@ -369,19 +472,22 @@ def main(args=None):
 	logger.info("...plotting {}".format('reads'))
 	lineplot_multi(reads_dfs, 
 				   "reads [{}]",
-				   os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('reads')),
+				   os.path.join(input_dir, 'res', "plots", "multi_lineplot_{}".format('reads')),
 				   reads_scaling_factor,
 				   reads_unit
 				   )
 	logger.info("...plotting {}".format('bases'))
 	lineplot_multi(bases_dfs, 
 				   "bases [{}]",
-				   os.path.join(args.outdir, 'res', "plots", "multi_lineplot_{}".format('bases')),
+				   os.path.join(input_dir, 'res', "plots", "multi_lineplot_{}".format('bases')),
 				   bases_scaling_factor,
 				   bases_unit
 				   )
 
 	#######
+
+	logger.info("Parsing logdata files")
+	logdata = parse_logdata_files(logdata_files)
 
 	logger.info("Creating html file")
 	subset_grouped = df.groupby(['subset'])
@@ -392,25 +498,13 @@ def main(args=None):
 	barcodes = list(pd.DataFrame(barcode_grouped['bases'].count()).index)
 	logger.info(barcodes)
 	
-	create_html(args.outdir, 
-				stats_df, 
-				args.user_filename_input,
-				args.sample,
-				args.run_ids, 
-				args.minion_id, 
-				args.flowcell_id, 
-				args.protocol_start, 
-				args.html_refresh_rate, 
-				barcodes, 
-				subsets)
+	create_html(input_dir, stats_df, logdata, args.html_refresh_rate, barcodes, subsets)
 
 	logger.info("Everything done")
 	exit()
 
 
-def create_html(outdir, stats_df, user_filename_input, sample,
-				run_ids, minion_id, flowcell_id, protocol_start, 
-				html_refresh_rate, barcodes, subsets):
+def create_html(outdir, stats_df, logdata, html_refresh_rate, barcodes, subsets):
 	
 	minion_id_to_css = {"GA10000":"one",
 						"GA20000":"two",
@@ -419,26 +513,22 @@ def create_html(outdir, stats_df, user_filename_input, sample,
 						"GA50000":"five",
 						"GA#0000":"unknown"}
 
-	logger.info("Parsing stats table to html")
+	logger.info("creating html stats table")
 	html_stats_df = make_html_table(stats_df).replace('valign="top"', 'valign="center"')
 
 	for bc in barcodes:
-		logger.info(bc)
+		#logger.info(bc)
 		html_stats_df = html_stats_df.replace(bc, '<a href="#{0}">{0}</a>'.format(bc))
 
-	channel_css = minion_id_to_css[minion_id] if minion_id in minion_id_to_css else "unknown"
-	render_dict = {'user_filename_input'	:	user_filename_input,
-				   'sample'					:	sample,
-				   'channel'				:	minion_id,
-				   'channel_css'			:	channel_css,
-				   'flowcell_id' 			: 	flowcell_id,
-				   'protocol_start'			:	protocol_start,
+	channel_css = minion_id_to_css[logdata['minion_id']] if logdata['minion_id'] in minion_id_to_css else "unknown"
+	render_dict = {'channel_css'			:	channel_css,
 				   'html_refresh_rate'		:	html_refresh_rate,
 				   'version'				:	__version__,
 				   'dateTimeNow'			:	datetime.now().strftime("%Y-%m-%d_%H:%M"),
 				   'html_stats_df'			:	html_stats_df,
 				   'subsets'				:	subsets,
 				   'barcodes'				:	barcodes}
+	render_dict.update(logdata)
 
 	template = jinja_env.get_template('report.template')
 	with open(os.path.join(outdir, "report.html"), 'w') as outfile:
@@ -747,4 +837,5 @@ def get_bins(df, bin_edges):
 if __name__ == '__main__':
 	argument_parser = get_argument_parser()
 	args = parse_args(argument_parser)
-	main(args)
+	for input_dir in args.input:
+		main(args, input_dir)

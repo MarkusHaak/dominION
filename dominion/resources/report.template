@@ -23,10 +23,11 @@
   <body>
     <div class="container">
 
-      <div class="contentbox title {{ channel }}">
+      <div class="contentbox title {{ channel_css }}">
         <h1>{{ experiment }}</h1>
         <h2>{{ sample }}</h2>
         <h2>{{ channel }}, {{ flowcell_id }}</h2>
+        <h3>{{ run_id }}</h3>
         <h3>{{ protocol_start }}</h3>
         <h6>statsParser {{ version }}, {{ dateTimeNow }}</h6>
       </div>
