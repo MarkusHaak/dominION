@@ -8,33 +8,39 @@ The dominION agent supervises all channels of a GridION simultaneously, performi
 
 ## Quick Setup
 
-The easiest way to install dominion and all its dependencies on a GridION sequencer is to clone the repository and run the bash script setup. 
+> ***Info*** : If you have **no access to Github from the GridION** itself, perform steps 1 and 2 on a different Linux mashine, and transfer the cloned directory *dominION* to the home directory of your GridION (/homes/grid/). Then continue with step 3 on the GridION itself. Please **do not download the repository from your browser** as this will lead to missing submodules files.
 
-First, open a console and make sure that git is installed:
+1. Open a console and make sure that git is installed:
 
 ```bash
 sudo apt-get -y install git
 ```
 
-Next, clone the git repository of dominION with option *--recurse-submodules*. If you have no access to the github servers from the GridION itself, you can clone the directory on a different machine, transfer the cloned directory *dominION* and proceed with the installation.
+2. Clone the dominION git repository of dominION with option `--recurse-submodules`:
 
 ```bash
 git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
 ```
 
-Finally, run script/setup to install dominION in a new virtual environment, setup key authentication and defaults for sequence data transfer to a remote server. Unless the option `-m` for *minimal* is set, a cron job for the dominion agent script is installed, the Firefox startup page is set to the overview page of dominION and .bash_aliases is modified to source the python virtual environment when opening a new console.
+3. Run the setup script in the directory dominION/script/setup
 
-Please **replace USER, HOST and DEST** with your server specific information. You will be prompted to enter the administrator password of your local machine (the GridION) and the password for the specified user on the remote host to setup key authentication.
+> ***Info*** : Please **replace USER, HOST and DEST** with the information specific to the server to which the sequencing data shall be transmitted. *HOST* is either the remote server's ip address or, more commonly, its domain hostname. *USER* needs to be replaced with a username on that remote server, and *DEST* is the full path of a directory on the remote server where the transmitted files and folders shall be saved.
 
 ```bash
-/bin/bash dominION/script/setup -u USER -H HOST -d DEST
+/bin/bash dominION/script/setup -u USER -H HOST -d DEST/FOR/FILE/TRANSFER
 ```
 
-After **restarting the machine**, the dominION agent script should be running in a screen terminal in the background. Unless the option `-m` was set during installation, the overview page of dominION should now be the startup page of Firefox.
+This will install dominION in a new virtual environment, setup key authentication and defaults for sequence data transfer to a remote server. Unless the option `-m` for *minimal* is set, a cron job for the dominion agent script is installed, the Firefox startup page is set to the overview page of dominION and .bash_aliases is modified to source the python virtual environment when opening a new console.
+
+> ***Info*** : Please confirm updates and authenticity requests by entering `y` or `yes` respectively. You will be prompted to enter the administrator password of your local machine (the GridION) and the password for the specified user on the remote server to setup key authentication. Note that you will not be able to see any characters while entering the passwords.
+
+4. Shutdown and subsequent restart
+
+Shutdown the GridION sequencer. After approximately 10 seconds, restart it by pressing the power button. The dominION agent script should now be running in the background. Unless the option `-m` was set during installation, the overview page of dominION should now be the startup page of Firefox.
 
 ## Setup
 
-The steps in this section are not necessary if the **Quick Setup** was performed.
+>***Info*** : The steps in this section are not necessary if the **Quick Setup** was performed. Please continue with section **Basic Usage**.
 
 ### Setup Environment
 
@@ -80,13 +86,13 @@ sudo apt-get -y install virtualenv
 virtualenv -p python3 ~/.dominION
 ```
 
-Don't forget to **activate** your virtual environment: 
+Don't forget to **activate** your virtual environment:
 
 ```bash
 source ~/.dominION/bin/activate
 ```
 
-This needs to be done every time you open a new console in which you want to execute dominION commands. I therefore recommend to add the source command to your .bash_aliases file. This way, the virtual environment is sourced automatically when opening a new console. 
+This needs to be done every time you open a new console in which you want to execute dominION commands. I therefore recommend to add the source command to your .bash_aliases file. This way, the virtual environment is sourced automatically when opening a new console.
 
 ```bash
 touch ~/.bash_aliases
@@ -100,7 +106,7 @@ dominION requires an adapted version of ont_fast5_api, which contains a script m
 ```bash
 git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
 cd dominION/ont_fast5_api
-python3 setup.py install 
+python3 setup.py install
 cd ../Porechop
 python3 setup.py install
 cd ..
@@ -113,7 +119,7 @@ In addition, the following external python modules are required, but they are au
 * pandas
 * matplotlib
 
-Please be aware that dominION requires python3.5 or greater and is not backwards compatible with python2. 
+Please be aware that dominION requires python3.5 or greater and is not backwards compatible with python2.
 
 ### Installation
 
@@ -124,7 +130,7 @@ INIFILE="dominion/resources/defaults.ini"
 perl -pi -e "s|user.*|user = ${user}|" "$INIFILE"
 perl -pi -e "s|host.*|host = ${host}|" "$INIFILE"
 perl -pi -e "s|dest.*|dest = ${dest}|" "$INIFILE"
-python3 setup.py install 
+python3 setup.py install
 ```
 
 ### Recommended Configuration
@@ -147,6 +153,7 @@ Optionally, you can change the startup page of Firefox to the dominION overview 
 
 ## Basic Usage
 
+If dominION was installed
 
 ## Advanced Usage
 
