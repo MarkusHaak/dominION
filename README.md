@@ -1,6 +1,6 @@
 # dominION
 
-Automated monitoring and logging of sequencing runs performed on the Oxford Nanopore Technologies GridION sequencer.
+Automated monitoring and logging of sequencing runs performed on the GridION sequencer.
 
 ## About
 
@@ -8,7 +8,7 @@ The dominION agent supervises all channels of a GridION simultaneously, performi
 
 ## Quick Setup
 
-> ***Info*** : If you have **no access to Github from the GridION** itself, perform steps 1 and 2 on a different Linux mashine, and transfer the cloned directory *dominION* to the home directory of your GridION (/homes/grid/). Then continue with step 3 on the GridION itself. Please **do not download the repository from your browser** as this will lead to missing submodules files.
+> ***Info*** : If you have **no access to Github from the GridION** itself, perform steps 1 and 2 on a different Linux machine and transfer the cloned directory *dominION* to the home directory of your GridION (/homes/grid/). Then continue with step 3 on the GridION itself. Please **do not download the repository from your browser** as this will lead to missing files.
 
 1. Open a console and make sure that git is installed:
 
@@ -22,7 +22,7 @@ sudo apt-get -y install git
 git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
 ```
 
-3. Run the setup script in the directory dominION/script/setup
+3. Run the setup script located in the directory dominION/script/setup
 
 > ***Info*** : Please **replace USER, HOST and DEST** with the information specific to the server to which the sequencing data shall be transmitted. *HOST* is either the remote server's ip address or, more commonly, its domain hostname. *USER* needs to be replaced with a username on that remote server, and *DEST* is the full path of a directory on the remote server where the transmitted files and folders shall be saved.
 
@@ -38,9 +38,13 @@ This will install dominION in a new virtual environment, setup key authenticatio
 
 Shutdown the GridION sequencer. After approximately 10 seconds, restart it by pressing the power button. The dominION agent script should now be running in the background. Unless the option `-m` was set during installation, the overview page of dominION should now be the startup page of Firefox.
 
+## Basic Usage
+
+
+
 ## Setup
 
->***Info*** : The steps in this section are not necessary if the **Quick Setup** was performed. Please continue with section **Basic Usage**.
+>***Info*** : The steps in this section are not necessary if the **Quick Setup** was performed.
 
 ### Setup Environment
 
@@ -150,10 +154,6 @@ echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" >
 ```
 
 Optionally, you can change the startup page of Firefox to the dominION overview html file /data/dominION/HOSTNAME_overview.html .
-
-## Basic Usage
-
-If dominION was installed
 
 ## Advanced Usage
 

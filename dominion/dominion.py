@@ -289,7 +289,7 @@ def add_database_entry(flowcell, run_data, mux_scans):
 			logger.warning("{} exists multiple times in database!".format(run_id))
 			logger.warning("conflicting runs: {}, {}".format(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['relative_path'],
 															 run_data['relative_path']))
-			logger.warning("conflict generating report file: {}".format(fn))
+			#logger.warning("conflict generating report file: {}".format(fn))
 			ALL_RUNS_LOCK.release()
 			return False
 	else:
@@ -762,7 +762,7 @@ class StatsparserScheduler(threading.Thread):
 		# start statsparser a last time if the experiment ended
 		if not self.stoprequest.is_set() and self.conditions_met():
 			self.update_report()
-			
+
 		SP_DIRS_LOCK.acquire()
 		if self.sample_dir in SP_DIRS:
 			if SP_DIRS[self.sample_dir] == self.channel:
@@ -1196,8 +1196,8 @@ class LogFilesEventHandler(FileSystemEventHandler):
 					self.file_handler.process_lines_until_EOF(self.enqueue_server_log_line, event.src_path)
 				elif self.bream_log == event.src_path:
 					self.file_handler.process_lines_until_EOF(self.enqueue_bream_log_line, event.src_path)
-				elif self.analyser == event.src_path:
-					self.file_handler.process_lines_until_EOF(self.enqueue_analyser_line, event.src_path)
+				elif self.analyser_log == event.src_path:
+					self.file_handler.process_lines_until_EOF(self.enqueue_analyser_log_line, event.src_path)
 				else:
 					self.logger.warning("case not handled")
 					return

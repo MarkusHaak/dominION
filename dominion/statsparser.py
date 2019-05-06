@@ -73,6 +73,7 @@ def get_argument_parser():
 								  	   Requires CSV files with "\t" as seperator, no header and the following columns in given order:
 								  	   read_id, length, qscore, mean_gc, Passed/tooShort, read_number, pore_index, timestamp, barcode''')
 		main_options.add_argument('-r', '--recursive',
+								  action='store_true',
 								  help='''recursively search for directories containing stats files and corresponding logdata files''')
 	#main_options.add_argument('-o', '--outdir',
 	#						  action=w_dir,
@@ -155,9 +156,11 @@ def get_argument_parser():
 	return argument_parser
 
 def contains_stats_and_logdata(directory):
-	files = [i for i in os.listdir(directory) if os.path.isfile(i)]
+	files = [i for i in os.listdir(directory) if os.path.isfile(os.path.join(directory,i))]
+	print(files)
 	run_ids = [f.split("_")[0] for f in files if f.endswith("_stats.csv")]
 	for run_id in run_ids:
+		print(run_id)
 		if "{}_logdata.json".format(run_id) in files:
 			return True
 	return False
@@ -171,14 +174,16 @@ def get_dir_list(input_path, recursive):
 		if contains_stats_and_logdata(os.path.dirname(input_path)):
 			input_dirs.append(os.path.dirname(input_path))
 	elif os.path.isdir(input_path):
-		if ontains_stats_and_logdata(input_path):
+		print(input_path)
+		if contains_stats_and_logdata(input_path):
 			input_dirs.append(input_path)
 		if recursive:
 			for root, dirs, _ in os.walk(input_path):
 				for subdir in dirs:
 					dir_path = os.path.join(root, subdir)
-					if contains_stats_and_logdata(dirpath):
-						input_dirs.append(dirpath)
+					if contains_stats_and_logdata(dir_path):
+						input_dirs.append(dir_path)
+	return input_dirs
 
 def parse_args(argument_parser, ext_args=None):
 	if ext_args:
@@ -200,8 +205,9 @@ def parse_args(argument_parser, ext_args=None):
 	args.time_intervals = [i*60 for i in args.time_intervals]
 
 	input_dirs = get_dir_list(args.input, args.recursive)
+	print(input_dirs)
 	for input_dir in list(input_dirs):
-		if not os.W_OK(input_dir):
+		if not os.access(input_dir, os.W_OK):
 			logger.warning("excluding directory {} due to missing write permissions".format(input_dir))
 			input_dirs.remove(input_dir)
 	args.input = input_dirs
@@ -313,17 +319,23 @@ def parse_args(argument_parser, ext_args=None):
 #
 #	return args
 
-#def standalone():
-#	global __name__
-#	__name__ = '__main__'
-#	argument_parser = get_argument_parser()
-#	args = parse_args(argument_parser)
-#	main(args)
+def standalone():
+	global __name__
+	__name__ = '__main__'
+	#argument_parser = get_argument_parser()
+	#args = parse_args(argument_parser)
+	#main(args)
+	argument_parser = get_argument_parser()
+	args = parse_args(argument_parser)
+	for input_dir in args.input:
+		main(args, input_dir)
 
 def get_input_files(input_dir):
-	files = [i for i in os.listdir(input_dir) if os.path.isfile(i)]
+	files = [i for i in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, i))]
 	stats_ids = set([f.split("_")[0] for f in files if f.endswith("_stats.csv")])
 	logdata_ids = set([f.split("_")[0] for f in files if f.endswith("_logdata.json")])
+	print(stats_ids)
+	print(logdata_ids)
 	for run_id in stats_ids.difference(logdata_ids):
 		logger.warning("skipping run with run_id {}, missing logdata file for stats file {}".format(run_id, os.path.join(input_dir, run_id + "_stats.csv")))
 	for run_id in stats_ids.difference(logdata_ids):
@@ -374,7 +386,10 @@ def main(args, input_dir):
 
 	logger.info("Parsing stats files")
 	stats_files, logdata_files = get_input_files(input_dir)
-	df = parse_stats(statsfiles)
+
+	print(stats_files)
+	print(logdata_files)
+	df = parse_stats(stats_files)
 
 	logger.info("Creating stats table")
 	stats_df = stats_table(df)
