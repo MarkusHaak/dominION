@@ -37,14 +37,14 @@
             <div class="contentbox flowcellinfo">
               {% if channel.latest_qc %}
               <p>
-                <u>Latest QC</u> ({{ channel.latest_qc.timestamp }}):<br>
+                <u>Latest mux scan</u> ({{ channel.latest_qc.timestamp }}):
+                <ul>
+                <li>active : {{ channel.latest_qc.total }}</li>
+                {% if channel.latest_qc.in_use %}
+                <li>in use : {{ channel.latest_qc.in_use }}</li>
+                {% endif %}
+                </ul>
                 <br>
-                * : {{ channel.latest_qc.group_all }}<br>
-                1 : {{ channel.latest_qc.group_1 }}<br>
-                2 : {{ channel.latest_qc.group_2 }}<br>
-                3 : {{ channel.latest_qc.group_3 }}<br>
-                4 : {{ channel.latest_qc.group_4 }}
-              </p>
               {% endif %}
               {% if channel.runs %}
               <p>

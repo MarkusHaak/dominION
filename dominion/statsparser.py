@@ -157,10 +157,8 @@ def get_argument_parser():
 
 def contains_stats_and_logdata(directory):
 	files = [i for i in os.listdir(directory) if os.path.isfile(os.path.join(directory,i))]
-	print(files)
 	run_ids = [f.split("_")[0] for f in files if f.endswith("_stats.csv")]
 	for run_id in run_ids:
-		print(run_id)
 		if "{}_logdata.json".format(run_id) in files:
 			return True
 	return False
@@ -174,7 +172,6 @@ def get_dir_list(input_path, recursive):
 		if contains_stats_and_logdata(os.path.dirname(input_path)):
 			input_dirs.append(os.path.dirname(input_path))
 	elif os.path.isdir(input_path):
-		print(input_path)
 		if contains_stats_and_logdata(input_path):
 			input_dirs.append(input_path)
 		if recursive:
@@ -205,7 +202,6 @@ def parse_args(argument_parser, ext_args=None):
 	args.time_intervals = [i*60 for i in args.time_intervals]
 
 	input_dirs = get_dir_list(args.input, args.recursive)
-	print(input_dirs)
 	for input_dir in list(input_dirs):
 		if not os.access(input_dir, os.W_OK):
 			logger.warning("excluding directory {} due to missing write permissions".format(input_dir))
@@ -334,8 +330,6 @@ def get_input_files(input_dir):
 	files = [i for i in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, i))]
 	stats_ids = set([f.split("_")[0] for f in files if f.endswith("_stats.csv")])
 	logdata_ids = set([f.split("_")[0] for f in files if f.endswith("_logdata.json")])
-	print(stats_ids)
-	print(logdata_ids)
 	for run_id in stats_ids.difference(logdata_ids):
 		logger.warning("skipping run with run_id {}, missing logdata file for stats file {}".format(run_id, os.path.join(input_dir, run_id + "_stats.csv")))
 	for run_id in stats_ids.difference(logdata_ids):
@@ -366,15 +360,10 @@ def parse_logdata_files(logdata_files):
 			logdata['sample'].append('unknown')
 
 	logdata['protocol_start'] = min([dateutil.parser.parse(ts) for ts in logdata['protocol_start']]).strftime("%Y-%m-%d %H:%M:%S")
+	logger.info("- {}: {}".format('protocol_start', logdata['protocol_start']))
 	for key in ['minion_id', 'flowcell_id', 'experiment', 'sample', 'run_id']:
 		logdata[key] = " / ".join(set(logdata[key]))
-
-	logger.info('- experiment: 		{}'.format(logdata['user_filename_input']))
-	logger.info('- sample:          {}'.format(logdata['sample']))
-	logger.info('- minion_id:       {}'.format(logdata['minion_id']))
-	logger.info('- flowcell_id:     {}'.format(logdata['flowcell_id']))
-	logger.info('- protocol_start:  {}'.format(logdata['protocol_start']))
-	logger.info('- run_id:          {}'.format(logdata['run_ids']))
+		logger.info("- {}: {}".format(key, logdata[key]))
 
 	return logdata
 
@@ -387,8 +376,6 @@ def main(args, input_dir):
 	logger.info("Parsing stats files")
 	stats_files, logdata_files = get_input_files(input_dir)
 
-	print(stats_files)
-	print(logdata_files)
 	df = parse_stats(stats_files)
 
 	logger.info("Creating stats table")

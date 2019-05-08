@@ -44,7 +44,10 @@ ALL_RUNS = {}
 ALL_RUNS_LOCK = threading.RLock()
 SP_DIRS = {}
 SP_DIRS_LOCK = threading.RLock()
+MUX_RESULTS = {}
+MUX_RESULTS_LOCK = threading.RLock()
 UPDATE_OVERVIEW = False
+UPDATE_OVERVIEW_LOCK = threading.RLock()
 logger = None
 
 class parse_statsparser_args(argparse.Action):
@@ -215,8 +218,7 @@ def main_and_args():
 	global ALL_RUNS
 	global ALL_RUNS_LOCK
 	global UPDATE_OVERVIEW
-	#logger.info("loading previous runs from database:")
-	#load_runs_from_database(args.database_dir)
+
 	import_qcs(os.path.join(args.output_dir, "qc"))
 	import_runs(os.path.join(args.output_dir, "runs"))
 
@@ -259,25 +261,33 @@ def main_and_args():
 			n += 1
 			if n == 100:
 				n = 0
-				UPDATE_OVERVIEW = True
+				set_update_overview()
 	except KeyboardInterrupt:
 		for watcher in watchers:
 			watcher.observer.stop()
 			if watcher.spScheduler.is_alive() if watcher.spScheduler else None:
-				watcher.spScheduler.join(timeout=0.05)
+				#watcher.spScheduler.join(timeout=0.05)
+				watcher.stop_statsparser(0.05)
 			for wcScheduler in watcher.wcScheduler:
 				if wcScheduler.is_alive() if wcScheduler else None:
 					wcScheduler.join(timeout=0.05)
 	for watcher in watchers:
 		logger.info("joining GA{}0000's observer".format(watcher.channel))
 		watcher.observer.join()
-		if watcher.spScheduler.is_alive() if watcher.spScheduler else None:
-			logger.info("joining GA{}0000's statsparser scheduler".format(watcher.channel))
-			watcher.spScheduler.join()
 		for wcScheduler in watcher.wcScheduler:
 			if wcScheduler.is_alive() if wcScheduler else None:
 				logger.info("joining GA{}0000's watchnchop scheduler".format(watcher.channel))
 				wcScheduler.join()
+	for watcher in watchers:
+		if watcher.spScheduler.is_alive() if watcher.spScheduler else None:
+			logger.info("joining GA{}0000's statsparser scheduler".format(watcher.channel))
+			watcher.stop_statsparser()
+
+def set_update_overview():
+	global UPDATE_OVERVIEW
+	UPDATE_OVERVIEW_LOCK.acquire()
+	UPDATE_OVERVIEW = True
+	UPDATE_OVERVIEW_LOCK.release()
 
 def add_database_entry(flowcell, run_data, mux_scans):
 	ALL_RUNS_LOCK.acquire()
@@ -289,7 +299,6 @@ def add_database_entry(flowcell, run_data, mux_scans):
 			logger.warning("{} exists multiple times in database!".format(run_id))
 			logger.warning("conflicting runs: {}, {}".format(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['relative_path'],
 															 run_data['relative_path']))
-			#logger.warning("conflict generating report file: {}".format(fn))
 			ALL_RUNS_LOCK.release()
 			return False
 	else:
@@ -305,6 +314,30 @@ def add_database_entry(flowcell, run_data, mux_scans):
 	ALL_RUNS_LOCK.release()
 	return True
 
+def add_mux_scan_results(flowcell_data, mux_scans):
+	MUX_RESULTS_LOCK.acquire()
+	asic_id_eeprom = flowcell_data['asic_id_eeprom']
+	flowcell_id = flowcell_data['flowcell_id']
+	if asic_id_eeprom not in MUX_RESULTS:
+		MUX_RESULTS[asic_id_eeprom] = []
+	for mux_scan in mux_scans:
+		mux_scan_copy = copy.deepcopy(mux_scan)
+		if not 'total' in mux_scan:
+			if 'group * total' in mux_scan:
+				mux_scan_copy['total'] = mux_scan['group * total']
+				del mux_scan_copy['group * total']
+			else:
+				continue
+		mux_scan_copy['flowcell_id'] = flowcell_id
+		mux_scan_copy['timestamp'] = dateutil.parser.parse(mux_scan['timestamp'])
+		for i in range(len(MUX_RESULTS[asic_id_eeprom])):
+			if mux_scan_copy['timestamp'] < MUX_RESULTS[asic_id_eeprom][i]['timestamp']:
+				MUX_RESULTS[asic_id_eeprom].insert(i, mux_scan_copy)
+				break
+		else:
+			MUX_RESULTS[asic_id_eeprom].append(mux_scan_copy)
+	MUX_RESULTS_LOCK.release()
+
 def import_qcs(qc_dir):
 	logger.info("importing platform qc entries from files in directory {}".format(qc_dir))
 	for fp in [os.path.join(qc_dir, fn) for fn in os.listdir(qc_dir) if fn.endswith('.json')]:
@@ -315,9 +348,8 @@ def import_qcs(qc_dir):
 				except:
 					logger.warning("failed to parse {}, json format or data structure corrupt".format(fn))
 					continue
-			if not add_database_entry(flowcell, run_data, mux_scans):
-				logger.error("failed to add content from {} to the database".format(fp))
-				continue
+			asic_id_eeprom = flowcell['asic_id_eeprom']
+			add_mux_scan_results(flowcell, mux_scans)
 
 def import_runs(base_dir, refactor=False):
 	logger.info("importing sequencing run entries from files in directory {}".format(base_dir))
@@ -349,6 +381,8 @@ def import_runs(base_dir, refactor=False):
 					if not add_database_entry(flowcell, run_data, mux_scans):
 						logger.error("failed to add content from {} to the database".format(fp))
 						continue
+					# add mux scans
+					add_mux_scan_results(flowcell, mux_scans)
 
 def get_runs_by_flowcell(asic_id_eeprom):
 	ALL_RUNS_LOCK.acquire()
@@ -356,21 +390,18 @@ def get_runs_by_flowcell(asic_id_eeprom):
 	if asic_id_eeprom:
 		if asic_id_eeprom in ALL_RUNS:
 			for run_id in ALL_RUNS[asic_id_eeprom]:
-				if 'seq' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type'].lower():
+				if 'qc' not in ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type'].lower():
 					runs[run_id] = ALL_RUNS[asic_id_eeprom][run_id]
 	ALL_RUNS_LOCK.release()
 	return runs
 
-def get_qcs_by_flowcell(asic_id_eeprom):
-	ALL_RUNS_LOCK.acquire()
-	qcs = {}
-	if asic_id_eeprom:
-		if asic_id_eeprom in ALL_RUNS:
-			for run_id in ALL_RUNS[asic_id_eeprom]:
-				if 'seq' not in ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type'].lower():
-					qcs[run_id] = ALL_RUNS[asic_id_eeprom][run_id]
-	ALL_RUNS_LOCK.release()
-	return qcs
+def get_latest_mux_scan_result(asic_id_eeprom):
+	latest_result = None
+	MUX_RESULTS_LOCK.acquire()
+	if asic_id_eeprom in MUX_RESULTS:
+		latest_result =  MUX_RESULTS[asic_id_eeprom][0]
+	MUX_RESULTS_LOCK.release()
+	return latest_result
 
 def get_latest(runs):
 	latest_qc = None
@@ -401,23 +432,26 @@ def update_overview(watchers, output_dir):
 			pass
 
 		runs = get_runs_by_flowcell(asic_id_eeprom)
-		qcs  = get_qcs_by_flowcell(asic_id_eeprom)
+		#qcs  = get_qcs_by_flowcell(asic_id_eeprom)
 
 		render_dict["channels"][channel]['latest_qc'] = {}
-		latest_qc = get_latest(qcs)
+		latest_qc = get_latest_mux_scan_result(asic_id_eeprom)
 		if latest_qc:
-			render_dict["channels"][channel]['latest_qc']['timestamp'] 	= dateutil.parser.parse(qcs[latest_qc]['run_data']['protocol_start']).date()
-			render_dict["channels"][channel]['latest_qc']['group_all'] 	= qcs[latest_qc]['mux_scans'][0]['group * total']
-			render_dict["channels"][channel]['latest_qc']['group_1'] 	= qcs[latest_qc]['mux_scans'][0]['group 1 total']
-			render_dict["channels"][channel]['latest_qc']['group_2'] 	= qcs[latest_qc]['mux_scans'][0]['group 2 total']
-			render_dict["channels"][channel]['latest_qc']['group_3'] 	= qcs[latest_qc]['mux_scans'][0]['group 3 total']
-			render_dict["channels"][channel]['latest_qc']['group_4'] 	= qcs[latest_qc]['mux_scans'][0]['group 4 total']
+			render_dict["channels"][channel]['latest_qc']['timestamp'] 	= latest_qc['timestamp'].date()
+			render_dict["channels"][channel]['latest_qc']['total'] 		= latest_qc['total']
+			if 'in_use' in latest_qc and watcher.channel_status.sequencing:
+				render_dict["channels"][channel]['latest_qc']['in_use'] = latest_qc['in_use']
+			else:
+				render_dict["channels"][channel]['latest_qc']['in_use'] = 0
 
 		render_dict["channels"][channel]['runs'] = []
 		for run_id in runs:
 			experiment = runs[run_id]['run_data']['experiment']
 			if not experiment:
-				experiment = runs[run_id]['run_data']['user_filename_input']
+				if 'user_filename_input' in runs[run_id]['run_data']:
+					experiment = runs[run_id]['run_data']['user_filename_input']
+				if not experiment:
+					logger.WARNING('not adding run with id {} to overview because no experiment name is set'.format(run_id))
 			sample = runs[run_id]['run_data']['sample']
 			if not sample:
 				sample = experiment
@@ -428,12 +462,10 @@ def update_overview(watchers, output_dir):
 		render_dict["channels"][channel]['channel'] = channel_to_css[watcher.channel]
 		render_dict["channels"][channel]['asic_id_eeprom'] = asic_id_eeprom
 		if asic_id_eeprom:
-			if latest_qc == None and runs == {}:
+			if not latest_qc:
 				render_dict["channels"][channel]['flowcell_id'] = "NO RECORDS"
-			elif latest_qc:
-				render_dict["channels"][channel]['flowcell_id'] = qcs[latest_qc]['flowcell']['flowcell_id']
 			else:
-				render_dict["channels"][channel]['flowcell_id'] = runs[list(runs.keys())[0]]['flowcell']['flowcell_id']
+				render_dict["channels"][channel]['flowcell_id'] = latest_qc['flowcell_id']
 		else:	
 			render_dict["channels"][channel]['flowcell_id'] = '-'
 
@@ -442,7 +474,7 @@ def update_overview(watchers, output_dir):
 	for asic_id_eeprom in ALL_RUNS:
 		for run_id in ALL_RUNS[asic_id_eeprom]:
 			experiment_type = ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type']
-			if 'seq' in experiment_type.lower(): # to increase compatibility in future
+			if not 'qc' in experiment_type.lower():
 				protocol_start = dateutil.parser.parse(ALL_RUNS[asic_id_eeprom][run_id]['run_data']['protocol_start'])
 				duration = "N/A"
 				if 'protocol_end' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']:
@@ -503,7 +535,6 @@ def update_overview(watchers, output_dir):
 class ChannelStatus():
 	empty_run_data = OrderedDict([
 		('run_id', None),
-		('user_filename_input', None),
 		('minion_id', None),
 		('sequencing_kit', None),
 		('protocol_start', None),
@@ -529,6 +560,7 @@ class ChannelStatus():
 		self.mux_scans = []
 		self.run_data['minion_id'] = minion_id
 		self.logger = logging.getLogger(name='gw.w{}.cs'.format(channel+1))
+		self.sequencing = False
 
 	def update(self, content, overwrite=False):
 		for key in content:
@@ -555,27 +587,14 @@ class ChannelStatus():
 			self.run_data[key] = content[key]
 			self.logger.info("new run value for {} : {}".format(key, content[key]))
 
-	def update_mux(self, group, channels, mux, timestamp):
-		if self.mux_scans:
-			if not group in self.mux_scans[-1]:
-				self.mux_scans[-1][group] = []
-			if len(self.mux_scans[-1][group]) < 4:
-				self.mux_scans[-1][group].append(int(channels))
-				self.logger.debug("update mux: group {} has {} active channels in mux {}".format(group, channels, mux))
-
-	def update_mux_group_totals(self, group, channels, timestamp):
-		if not self.mux_scans:
-			self.new_mux(timestamp)
-		self.mux_scans[-1]['group {} total'.format(group)] = channels
-		self.logger.debug("update mux group totals: group {} has a total of {} active channels".format(group, channels))
-
-	def new_mux(self, timestamp):
-		if self.mux_scans:
-			self.mux_scans[-1]['total'] = sum([sum(self.mux_scans[-1][i]) for i in "1234" if i in self.mux_scans[-1]])
-			self.logger.info("calculated mux total to {}".format(self.mux_scans[-1]['total']))
+	def add_mux_scan(self, timestamp, active_pores, in_use=None):
 		self.mux_scans.append(copy.deepcopy(self.empty_mux))
 		self.mux_scans[-1]['timestamp'] = timestamp
-		self.logger.debug("added new mux result")
+		self.mux_scans[-1]['total'] = active_pores
+		if in_use:
+			self.mux_scans[-1]['in_use'] = in_use
+		add_mux_scan_results(self.flowcell, [self.mux_scans[-1]])
+		self.logger.debug("added new mux scan result")
 
 	def flowcell_disconnected(self):
 		self.logger.info("resetting flowcell and run data")
@@ -583,54 +602,19 @@ class ChannelStatus():
 		self.run_data = copy.deepcopy(self.empty_run_data)
 		self.run_data['minion_id'] = self.minion_id
 		self.mux_scans = []
+		self.sequencing = False
 
 	def reset_channel(self):
 		self.logger.info("resetting run data")
 		self.run_data = copy.deepcopy(self.empty_run_data)
 		self.run_data['minion_id'] = self.minion_id
 		self.mux_scans = []
-
-	#def find_relative_path(self, data_basedir):
-	#	if not self.run_data['user_filename_input']:
-	#		self.logger.error("Could not determine relative data path, 'user_filename_input' is not set")
-	#		return
-	#	rel_path = os.path.join(self.run_data['user_filename_input'],
-	#							self.run_data['user_filename_input'])	# TODO: change to sample_name
-	#	basedir = os.path.join(data_basedir, rel_path)	
-	#	if not os.path.isdir(basedir):
-	#		self.logger.error("Could not determine relative data path, base directory {} does not exist!".format(basedir))
-	#		return
-	#
-	#	if self.run_data['run_id']:
-	#		exp_id_substring = self.run_data['run_id'].split('-')[0]
-	#	else:
-	#		self.logger.warning("'run_id' is not set, therefore relative_path has to be guessed!")
-	#		exp_id_substring = None
-	#	
-	#	sub_dirs = [item for item in os.listdir(basedir) if os.path.isdir(os.path.join(basedir, item))]
-	#	if not sub_dirs:
-	#		self.logger.error("Could not determine relative data path, no sub directories in {}".format(basedir))
-	#		return
-	#	if exp_id_substring:
-	#		for sub_dir in sub_dirs:
-	#			if sub_dir.rstrip('/').endswith(exp_id_substring):
-	#				self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
-	#				return
-	#	# if no relative path was found by now, then it is probably the case that the run_id was not parsed correctly
-	#	# --> attempt to choose a subdirectory which belongs to the correct flowcell
-	#	if self.flowcell['flowcell_id']:
-	#		for sub_dir in sub_dirs:
-	#			if self.flowcell['flowcell_id'] in sub_dir:
-	#				self.update({"relative_path":os.path.join(rel_path, sub_dir)}, overwrite=True)
-	#				self.logger.warning("chose any sub directory that belongs to flowcell {}!".format(self.flowcell['flowcell_id']))
-	#				return
-	#	self.logger.error("Could not determine any relative data path!")
-	#	return
+		self.sequencing = False
 
 
 class WatchnchopScheduler(threading.Thread):
 
-	def __init__(self, data_basedir, relative_path, experiment, fastq_reads_per_file, bc_kws, stats_fp, channel, watchnchop_args):
+	def __init__(self, data_basedir, relative_path, experiment, sample_frequency, bc_kws, stats_fp, channel, watchnchop_args):
 		threading.Thread.__init__(self)
 		if getattr(self, 'daemon', None) is None:
 			self.daemon = True
@@ -645,13 +629,12 @@ class WatchnchopScheduler(threading.Thread):
 		self.cmd = [which('perl'),
 					which('watchnchop'),
 					'-o', stats_fp,
-					'-f', str(fastq_reads_per_file)]
+					'-f', str(sample_frequency)]
 		if watchnchop_args:
 			self.cmd.extend(watchnchop_args)
 		if len([kw for kw in bc_kws if kw in experiment]) > 0:
 			self.cmd.append('-b')
 		self.cmd.append(os.path.join(data_basedir, relative_path, ''))
-		#self.cmd = " ".join(self.cmd)
 		self.process = None
 
 	def run(self):
@@ -814,20 +797,16 @@ class Watcher():
 	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, output_dir, data_basedir, 
 				 statsparser_args, update_interval, watchnchop_args, bc_kws):
 		self.q = queue.PriorityQueue()
-		#self.watchnchop = not no_watchnchop
 		self.watchnchop_args = watchnchop_args
 		self.channel = channel
 		self.output_dir = output_dir
 		self.data_basedir = data_basedir
 		self.statsparser_args = statsparser_args
 		self.update_interval = update_interval
-		#self.watchnchop_path = watchnchop_path
 		self.bc_kws = bc_kws
-
 		self.observed_dir = os.path.join(minknow_log_basedir, "GA{}0000".format(channel+1))
 		self.event_handler = LogFilesEventHandler(self.q, ignore_file_modifications, channel)
 		self.observer = Observer()
-
 		self.observer.schedule(self.event_handler, 
 							   self.observed_dir, 
 							   recursive=False)
@@ -853,109 +832,135 @@ class Watcher():
 				self.parse_server_log_line(line)
 			elif origin == 'bream':
 				self.parse_bream_log_line(line)
-			elif origin == 'analyser':
-				self.parse_analyser_log_line(line)
+			#elif origin == 'analyser':
+			#	self.parse_analyser_log_line(line)
 
 	def parse_server_log_line(self, line):
-		global UPDATE_OVERVIEW
 		dict_content = {}
 		overwrite = False
+		timestamp = line[:23]
 
+		# fetch output_path, run_id, script_path, relative_path, protocol_start, flowcell_id [, experiment, sample]
 		if   	"protocol_started"										in line:
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 				dict_content[m.group(1)] = m.group(2)
 			overwrite = True
+			dict_content['relative_path'] = dict_content['output_path'].split("/./")[1].strip("/")
+			subdirs = dict_content['relative_path'].split('/')
+			if len(subdirs) == 3:
+				# case sequencing protocol
+				dict_content['experiment'] = subdirs[0]
+				dict_content['sample'] = subdirs[1]
+				dict_content['flowcell_id'] = subdirs[2].split('_')[3]
+			elif len(subdirs) == 1:
+				# case qc protocol
+				dict_content['flowcell_id'] = subdirs[0].split('_')[3]
 			self.logger.info("PROTOCOL START")
-			UPDATE_OVERVIEW = True
-			self.channel_status.run_data['protocol_start'] = line[:23]
+			set_update_overview()
+			self.channel_status.run_data['protocol_start'] = timestamp
 
+		# fetch protocol_end
 		elif	"protocol_finished" 									in line:
 			self.logger.info("PROTOCOL END")
-			UPDATE_OVERVIEW = True
-			self.channel_status.run_data['protocol_end'] = line[:23]
+			set_update_overview()
+			self.channel_status.run_data['protocol_end'] = timestamp
 			if self.channel_status.mux_scans:
 				self.save_logdata()
 			self.channel_status.reset_channel()
-			if self.spScheduler.is_alive() if self.spScheduler else None:
-				self.spScheduler.join(1.2)
-			self.spScheduler = None
-			if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
-				self.wcScheduler[-1].join(1.2)
-			#self.wcScheduler = None
+			#if self.spScheduler.is_alive() if self.spScheduler else None:
+			#	self.spScheduler.join(1.2)
+			self.stop_statsparser()
+			#self.spScheduler = None
+			#if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
+			#	self.wcScheduler[-1].join(1.2)
+			self.stop_watchnchop()
 
+		# 
 		elif	"[engine/info]: : flowcell_discovered" 					in line:
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 				dict_content[m.group(1)] = m.group(2)
 			overwrite = True
 			self.logger.info("FLOWCELL DISCOVERED")
-			UPDATE_OVERVIEW = True
+			set_update_overview()
 			self.channel_status.flowcell_disconnected()
-			if self.spScheduler.is_alive() if self.spScheduler else None:
-				self.spScheduler.join(1.2)
-			self.spScheduler = None
-			if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
-				self.wcScheduler[-1].join(1.2)
-			#self.wcScheduler = None
+			#if self.spScheduler.is_alive() if self.spScheduler else None:
+			#	self.spScheduler.join(1.2)
+			self.stop_statsparser()
+			#self.spScheduler = None
+			#if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
+			#	self.wcScheduler[-1].join(1.2)
+			self.stop_watchnchop()
 
-		elif   	"[engine/info]: : data_acquisition_started"				in line:# or \
+		elif   	"[engine/info]: : data_acquisition_started"				in line:
 			for m in re.finditer('([^\s,]+) = ([^\s,]+)', line):
 				dict_content[m.group(1)] = m.group(2)
 			overwrite = True
 
 		elif	"flowcell_disconnected"									in line:
 			self.logger.info("FLOWCELL DISCONNECTED")
-			UPDATE_OVERVIEW = True
+			set_update_overview()
 			self.channel_status.flowcell_disconnected()
 
+		elif 	"pores available for sequencing" 						in line:
+			active_pores = None
+			in_use = None
+			for m in re.finditer("has ([0-9]+) pores available for sequencing", line):
+				active_pores = m.group(1)
+			for m in re.finditer("Starting sequencing with ([0-9]+) pores", line):
+				in_use = m.group(1)
+			self.channel_status.add_mux_scan(timestamp, active_pores, in_use=in_use)
+			set_update_overview()
+			self.save_logdata()
 
 		if dict_content:
 			self.channel_status.update(dict_content, overwrite)
 
 	def parse_bream_log_line(self, line):
-		global UPDATE_OVERVIEW
 		dict_content = {}
 		overwrite = False
+		timestamp = line.split(" - ")[1]
 
-		if 		"root - INFO - argument"								in line:
-			for m in re.finditer("([^\s,]+) was set to (.+)", line): 
+		if 		"INFO - Attribute"								in line:
+			for m in re.finditer("([^\s,]+) set to (.+)", line): 
 				dict_content[m.group(1)] = m.group(2)
 
-		elif 	"INFO - Adding the following context_tags:" 			in line or \
-				"INFO - Context tags set to"							in line:
+		elif 	"INFO - Updating context tags in MinKNOW with" 	in line:
 			for m in re.finditer("'([^\s,]+)'[:,] u?'([^\s,]+)'", line):
 				dict_content[m.group(1)] = m.group(2)
-			if 'filename' in dict_content:
-				dict_content['flowcell_id'] = dict_content['filename'].split("_")[2]
+			#if 'filename' in dict_content:
+			#	dict_content['flowcell_id'] = dict_content['filename'].split("_")[2]
+			if 'sequencing_kit' in dict_content:
+				dict_content['sequencing_kit'] = dict_content['sequencing_kit'].upper()
 
-		elif	"bream.core.base.database - INFO - group"				in line:
-			for m in re.finditer("group ([0-9]+) has ([0-9]+) channels in mux ([0-9]+)", line):
-				self.channel_status.update_mux(m.group(1), m.group(2), m.group(3), line[:23])
-				UPDATE_OVERVIEW = True
+		#elif	"bream.core.base.database - INFO - group"				in line:
+		#	for m in re.finditer("group ([0-9]+) has ([0-9]+) channels in mux ([0-9]+)", line):
+		#		self.channel_status.update_mux(m.group(1), m.group(2), m.group(3), timestamp)
+		#		UPDATE_OVERVIEW = True
+		#
+		#elif	"[user message]--> group "								in line.lower():
+		#	for m in re.finditer("roup ([0-9]+) has ([0-9]+) active", line):
+		#		self.channel_status.update_mux_group_totals(m.group(1), m.group(2), timestamp)
+		#		UPDATE_OVERVIEW = True
+		#
+		#elif	"[user message]--> A total of"							in line:
+		#	for m in re.finditer("total of ([0-9]+) single pores", line):
+		#		self.channel_status.update_mux_group_totals("*", m.group(1), timestamp)
+		#		UPDATE_OVERVIEW = True
+		#
+		#elif	"INFO - [user message]--> Finished Mux Scan"			in line:
+		#	self.logger.info("MUX SCAN FINISHED")
+		#	UPDATE_OVERVIEW = True
+		#	self.channel_status.new_mux(timestamp)
+		#	self.save_logdata()
 
-		elif	"[user message]--> group "								in line.lower():
-			for m in re.finditer("roup ([0-9]+) has ([0-9]+) active", line):
-				self.channel_status.update_mux_group_totals(m.group(1), m.group(2), line[:23])
-				UPDATE_OVERVIEW = True
-
-		elif	"[user message]--> A total of"							in line:
-			for m in re.finditer("total of ([0-9]+) single pores", line):
-				self.channel_status.update_mux_group_totals("*", m.group(1), line[:23])
-				UPDATE_OVERVIEW = True
-
-		elif	"INFO - [user message]--> Finished Mux Scan"			in line:
-			self.logger.info("MUX SCAN FINISHED")
-			UPDATE_OVERVIEW = True
-			self.channel_status.new_mux(line[:23])
-			self.save_logdata()
-
-		elif	"platform_qc.PlatformQCExperiment'> finished"			in line:
+		elif	"platform_qc.report"			in line:
 			self.logger.info("QC FINISHED")
-			UPDATE_OVERVIEW = True
 
-		elif	"INFO - STARTING MAIN LOOP"								in line:
-			dict_content["sequencing_start_time"] = line[:23]
+		elif	"sequencing.start"										in line:
+			dict_content["sequencing_start_time"] = timestamp
 			self.logger.info("SEQUENCING STARTS")
-			UPDATE_OVERVIEW = True
+			self.channel_status.sequencing = True
+			set_update_overview()
 
 			self.start_watchnchop()
 			self.start_statsparser()
@@ -963,33 +968,38 @@ class Watcher():
 		if dict_content:
 			self.channel_status.update(dict_content, overwrite)
 
-	def parse_analyser_log_line(self, line):
-		global UPDATE_OVERVIEW
-		dict_content = {}
-		overwrite = True
-
-		if 		"preparing_to_write_analysis_summary_file"								in line:
-			for m in re.finditer("filename = (.+) ]", line): 
-				dict_content['relative_path'] = m.group(1).split("/./")[1].split("/sequencing_summary/")[0]
-				dict_content['experiment'] = dict_content['relative_path'].split('/')[0]
-				dict_content['sample'] = dict_content['relative_path'].split('/')[1]
-
-		if dict_content:
-			self.channel_status.update(dict_content, overwrite)
+	#def parse_analyser_log_line(self, line):
+	#	dict_content = {}
+	#	overwrite = True
+	#
+	#	if 		"preparing_to_write_analysis_summary_file"								in line:
+	#		for m in re.finditer("filename = (.+) ]", line): 
+	#			dict_content['relative_path'] = m.group(1).split("/./")[1].split("/sequencing_summary/")[0]
+	#			dict_content['experiment'] = dict_content['relative_path'].split('/')[0]
+	#			dict_content['sample'] = dict_content['relative_path'].split('/')[1]
+	#
+	#	if dict_content:
+	#		self.channel_status.update(dict_content, overwrite)
 
 	def save_logdata(self):
-		for key in ['experiment_type', 'run_id']:
-			if not self.channel_status.run_data[key]:
+		for key in ['experiment_type', 'run_id', 'experiment', 'sample', 'relative_path']:
+			if key not in self.channel_status.run_data:
+				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
+				return
+			elif not self.channel_status.run_data[key]:
 				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
 				return
 		for key in ['flowcell_id', 'asic_id_eeprom']:
-			if not self.channel_status.flowcell[key]:
+			if key not in self.channel_status.flowcell:
+				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because flowcell is missing crucial attribute '{}'".format(self.channel+1, key))
+				return
+			elif not self.channel_status.flowcell[key]:
 				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because flowcell is missing crucial attribute '{}'".format(self.channel+1, key))
 				return
 
 		fn = []
 		if "qc" in self.channel_status.run_data['experiment_type'].lower():
-			if self.channel_status.run_data['user_filename_input']:
+			if self.channel_status.run_data['sample']:
 				self.logger.warning("NOT SAVING REPORT for {} because it is not absolutely clear if it a qc or sequencing run".format(self.channel_status.run_data['run_id']))
 				return
 			fn.append("QC")
@@ -1032,13 +1042,15 @@ class Watcher():
 		ALL_RUNS_LOCK.release()
 
 	def start_watchnchop(self):
-		for key in ['experiment', 'sample', 'relative_path', 'run_id', 'fastq_reads_per_file']:
-			if not self.channel_status.run_data[key]:
+		for key in ['experiment', 'sample', 'relative_path', 'run_id', 'sample_frequency']:
+			if key not in self.channel_status.run_data:
+				self.logger.warning("NOT executing watchnchop because run_data is missing crucial attribute '{}'".format(key))
+				return
+			elif not self.channel_status.run_data[key]:
 				self.logger.warning("NOT executing watchnchop because run_data is missing crucial attribute '{}'".format(key))
 				return
 
-		if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
-			self.wcScheduler[-1].join(1.2)
+		self.stop_watchnchop()
 
 		stats_fp = os.path.join(self.output_dir,
 								'runs',
@@ -1048,7 +1060,7 @@ class Watcher():
 		self.wcScheduler.append(WatchnchopScheduler(self.data_basedir,
 													self.channel_status.run_data['relative_path'],
 													self.channel_status.run_data['experiment'],
-													self.channel_status.run_data['fastq_reads_per_file'],
+													self.channel_status.run_data['sample_frequency'],
 													self.bc_kws,
 													stats_fp,
 													self.channel,
@@ -1056,14 +1068,23 @@ class Watcher():
 		self.wcScheduler[-1].start()
 		return
 
+	def stop_watchnchop(self, timeout=1.2):
+		if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
+			if timeout:
+				self.wcScheduler[-1].join(timeout)
+			else:
+				self.wcScheduler[-1].join()
+
 	def start_statsparser(self):
 		for key in ['experiment', 'sample']:
-			if not self.channel_status.run_data[key]:
+			if not key in  self.channel_status.run_data:
+				self.logger.warning("NOT starting statsparser scheduler because run_data is missing crucial attribute '{}'".format(key))
+				return
+			elif not self.channel_status.run_data[key]:
 				self.logger.warning("NOT starting statsparser scheduler because run_data is missing crucial attribute '{}'".format(key))
 				return
 		#start creation of plots at regular time intervals
-		if self.spScheduler.is_alive() if self.spScheduler else None:
-			self.spScheduler.join(1.1)
+		self.stop_statsparser()
 		sample_dir = os.path.join(self.output_dir,
 								  'runs',
 								  self.channel_status.run_data['experiment'],
@@ -1074,6 +1095,13 @@ class Watcher():
 												self.statsparser_args, 
 												self.channel)
 		self.spScheduler.start()
+
+	def stop_statsparser(self, timeout=1.2):
+		if self.spScheduler.is_alive() if self.spScheduler else None:
+			if timeout:
+				self.spScheduler.join(timeout)
+			else:
+				self.spScheduler.join()
 
 class OpenedFilesHandler():
 	'''manages a set of opened files, reads their contents and 
@@ -1106,7 +1134,6 @@ class OpenedFilesHandler():
 			elif line.endswith("\n"):
 				line = (self.open_files[path][1] + line).strip()
 				if line:
-					#parent.process(line)
 					process_function(line)
 				self.open_files[path][1] = ""
 			else:
@@ -1115,7 +1142,8 @@ class OpenedFilesHandler():
 
 
 class LogFilesEventHandler(FileSystemEventHandler):
-	control_server_log, bream_log, analyser_log = None, None, None
+	#control_server_log, bream_log, analyser_log = None, None, None
+	control_server_log, bream_log = None, None
 
 	def __init__(self, q, ignore_file_modifications, channel):
 		super(LogFilesEventHandler, self).__init__()
@@ -1146,21 +1174,13 @@ class LogFilesEventHandler(FileSystemEventHandler):
 				self.control_server_log = event.src_path
 				self.logger.info("New control_server_log file {}".format(self.control_server_log))
 				process_function = self.enqueue_server_log_line
-			elif basename.startswith("bream"):
+			elif basename.startswith("bream") and basename.endswith(".log"):
 				if self.bream_log:
 					self.file_handler.close_file(event.src_path)
 					self.logger.info("Replacing current bream_log file {} with {}".format(self.bream_log, event.src_path))
 				self.bream_log = event.src_path
 				self.logger.info("New bream_log file {}".format(self.bream_log))
 				process_function = self.enqueue_bream_log_line
-				self.logger.info("NEW EXPERIMENT")
-			elif basename.startswith("analyser_log"):
-				if self.analyser_log:
-					self.file_handler.close_file(event.src_path)
-					self.logger.info("Replacing current analyser_log file {} with {}".format(self.analyser_log, event.src_path))
-				self.analyser_log = event.src_path
-				self.logger.info("New analyser_log file {}".format(self.analyser_log))
-				process_function = self.enqueue_analyser_log_line
 			else:
 				self.logger.debug("File {} is not of concern for this tool".format(event.src_path))
 				return
@@ -1180,12 +1200,8 @@ class LogFilesEventHandler(FileSystemEventHandler):
 			elif self.bream_log == event.src_path:
 				self.bream_log = None
 				self.logger.info("EARNING: Current bream_log file {} was deleted".format(event.src_path))
-			elif self.analyser_log == event.src_path:
-				self.analyser_log = None
-				self.logger.info("EARNING: Current analyser_log file {} was deleted".format(event.src_path))
 			else:
 				self.logger.debug("File {} is not opened and is therefore not closed.".format(event.src_path))
-				#return 
 			self.file_handler.close_file(event.src_path)
 
 	def on_modified(self, event):
@@ -1196,8 +1212,6 @@ class LogFilesEventHandler(FileSystemEventHandler):
 					self.file_handler.process_lines_until_EOF(self.enqueue_server_log_line, event.src_path)
 				elif self.bream_log == event.src_path:
 					self.file_handler.process_lines_until_EOF(self.enqueue_bream_log_line, event.src_path)
-				elif self.analyser_log == event.src_path:
-					self.file_handler.process_lines_until_EOF(self.enqueue_analyser_log_line, event.src_path)
 				else:
 					self.logger.warning("case not handled")
 					return
@@ -1216,20 +1230,14 @@ class LogFilesEventHandler(FileSystemEventHandler):
 	def enqueue_server_log_line(self, line):
 		try:
 			self.q.put( (dateutil.parser.parse(line[:23]), 'server', line) )
-		except ValueError:
+		except:
 			self.logger.debug("the timestamp of the following line in the server log file could not be parsed:\n{}".format(line))
 
 	def enqueue_bream_log_line(self, line):
 		try:
-			self.q.put( (dateutil.parser.parse(line[:23]), 'bream', line) )
-		except ValueError:
+			self.q.put( (dateutil.parser.parse(line.split(' - ')[1]), 'bream', line) )
+		except:
 			self.logger.debug("the timestamp of the following line in the bream log file could not be parsed:\n{}".format(line))
-
-	def enqueue_analyser_log_line(self, line):
-		try:
-			self.q.put( (dateutil.parser.parse(line[:23]), 'analyser', line) )
-		except ValueError:
-			self.logger.debug("the timestamp of the following line in the analyser log file could not be parsed:\n{}".format(line))
 
 
 class RunsDirsEventHandler(FileSystemEventHandler):
@@ -1243,7 +1251,6 @@ class RunsDirsEventHandler(FileSystemEventHandler):
 		if event.is_directory or (self.depth(event.src_path) == 3 and event.src_path.endswith('.json')):
 			self.logger.debug("moved {}, depth {}, \ndest {}".format(event.src_path, self.depth(event.src_path), event.dest_path))
 			if self.observed_dir in event.dest_path and self.depth(event.dest_path) == self.depth(event.src_path):
-				#self.logger.info("affected runs: {}".format(self.affected_runs(event.src_path)))
 				self.reload_runs()
 			else:
 				self.on_deleted(event)
@@ -1281,14 +1288,14 @@ class RunsDirsEventHandler(FileSystemEventHandler):
 		to_delete = []
 		for asic_id_eeprom in ALL_RUNS:
 			for run_id in ALL_RUNS[asic_id_eeprom]:
-				if 'equenc' in ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type']:
+				if 'qc' not in ALL_RUNS[asic_id_eeprom][run_id]['run_data']['experiment_type']:
 					to_delete.append( (asic_id_eeprom, run_id) )
 		for asic_id_eeprom, run_id in to_delete:
 			del ALL_RUNS[asic_id_eeprom][run_id]
 		#reload runs
 		import_runs(self.observed_dir)
-		UPDATE_OVERVIEW = True
 		ALL_RUNS_LOCK.release()
+		set_update_overview()
 		return
 
 if __name__ == "__main__":
