@@ -69,7 +69,7 @@
         <br>
         <table>
           <tr>
-            <th>run</th>
+            <th>experiment</th>
             <th>sample</th>
             <th>sequencing kit</th>
             <th>protocol start</th>

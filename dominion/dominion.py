@@ -57,8 +57,7 @@ class parse_statsparser_args(argparse.Action):
 		args = sp_parse_args(argument_parser, to_test)
 		setattr(namespace,self.dest,to_test)
 
-def main_and_args():
-	#### args #####
+def parse_args():
 	parser = argparse.ArgumentParser(description='''A tool for monitoring and protocoling sequencing runs 
 												 performed on the Oxford Nanopore Technologies GridION 
 												 sequencer and for automated post processing and transmission 
@@ -166,20 +165,28 @@ def main_and_args():
 
 	if not os.path.exists(args.identity_file):
 		print("Identity file {} does not exists. Please check key authentication settings or specify a different key with option -i.".format(args.identity_file))
+		exit()
 
-	watchnchop_args = []
+	args.watchnchop_args = []
 	if args.no_transfer:
-		watchnchop_args.append('-n')
+		args.watchnchop_args.append('-n')
 	if args.all_fast5:
-		watchnchop_args.append('-a')
+		args.watchnchop_args.append('-a')
 	if args.pass_only:
-		watchnchop_args.append('-p')
-	watchnchop_args.extend(['-l', str(args.min_length)])
-	watchnchop_args.extend(['-q', str(args.min_quality)])
-	watchnchop_args.extend(['-d', args.rsync_dest])
-	watchnchop_args.extend(['-i', args.identity_file])
+		args.watchnchop_args.append('-p')
+	args.watchnchop_args.extend(['-l', str(args.min_length)])
+	args.watchnchop_args.extend(['-q', str(args.min_quality)])
+	args.watchnchop_args.extend(['-d', args.rsync_dest])
+	args.watchnchop_args.extend(['-i', args.identity_file])
 
-	#### main #####
+	return args
+
+
+def main(args):
+	global ALL_RUNS
+	global ALL_RUNS_LOCK
+	global UPDATE_OVERVIEW
+	global logger
 
 	for p in [args.output_dir,
 			  os.path.join(args.output_dir, 'runs'),
@@ -188,7 +195,6 @@ def main_and_args():
 		if not os.path.exists(p):
 			os.makedirs(p)
 
-	global logger
 	if args.verbose:
 		loglvl = logging.DEBUG
 	elif args.quiet:
@@ -196,28 +202,20 @@ def main_and_args():
 	else:
 		loglvl = logging.INFO
 	if not args.logfile:
-		args.logfile = os.path.join(args.output_dir, 
-									'logs', 
-									"{}_{}_{}.log".format(datetime.now().strftime("%Y-%m-%d_%H:%M"),
-														  hostname,
-														  loglvl))
+		logs_filename = "{}_{}_{}.log".format(datetime.now().strftime("%Y-%m-%d_%H:%M"), hostname, loglvl)
+		args.logfile = os.path.join(args.output_dir, 'logs', logs_filename)
 	initLogger(logfile=args.logfile, level=loglvl)
 
 	logger = logging.getLogger(name='gw')
-
 	logger.info("##### starting dominION {} #####\n".format(__version__))
 
-	global UPDATE_OVERVIEW
+	
 	logger.info("setting up dominION status page environment")
 	if not os.path.exists(os.path.join(args.output_dir, 'res')):
 		os.makedirs(os.path.join(args.output_dir, 'res'))
 	for res_file in ['style.css', 'flowcell.png', 'no_flowcell.png']:
 		copyfile(os.path.join(resources_dir, res_file), 
 				 os.path.join(args.output_dir, 'res', res_file))
-
-	global ALL_RUNS
-	global ALL_RUNS_LOCK
-	global UPDATE_OVERVIEW
 
 	import_qcs(os.path.join(args.output_dir, "qc"))
 	import_runs(os.path.join(args.output_dir, "runs"))
@@ -241,13 +239,12 @@ def main_and_args():
 								args.data_basedir, 
 								args.statsparser_args,
 								args.update_interval,
-								watchnchop_args,
+								args.watchnchop_args,
 								args.bc_kws))
 
 	logger.info("initiating dominION overview page")
 	update_overview(watchers, args.output_dir)
 	webbrowser.open('file://' + os.path.realpath(os.path.join(args.output_dir, "{}_overview.html".format(hostname))))
-
 	logger.info("entering main loop")
 	try:
 		n = 0
@@ -266,7 +263,6 @@ def main_and_args():
 		for watcher in watchers:
 			watcher.observer.stop()
 			if watcher.spScheduler.is_alive() if watcher.spScheduler else None:
-				#watcher.spScheduler.join(timeout=0.05)
 				watcher.stop_statsparser(0.05)
 			for wcScheduler in watcher.wcScheduler:
 				if wcScheduler.is_alive() if wcScheduler else None:
@@ -714,29 +710,8 @@ class StatsparserScheduler(threading.Thread):
 		while not self.stoprequest.is_set() or self.exp_end.is_set():
 			last_time = time.time()
 
-			#stats_fns = [fn for fn in os.listdir(os.path.abspath(self.sample_dir)) if fn.endswith('stats.csv')] if os.path.exists(os.path.abspath(self.sample_dir)) else []
-			#if stats_fns:
-			#	cmd = [os.path.join(get_script_dir(),'statsparser'),
-			#		   self.sample_dir,
-			#		   '-q']
-			#	cmd.extend(self.statsparser_args)
-			#	cp = subprocess.run(cmd) # waits for process to complete
-			#	if cp.returncode == 0:
-			#		#self.logger.info("STATSPARSING COMPLETED")
-			#		if not page_opened:
-			#			basedir = os.path.abspath(self.sample_dir)
-			#			fp = os.path.join(basedir, 'report.html')
-			#			self.logger.info("OPENING " + fp)
-			#			webbrowser.open('file://' + os.path.realpath(fp))
-			#			page_opened = True
-			#	else:
-			#		self.logger.error("ERROR while running statsparser")
-			#else:
-			#	self.logger.warning("statsfile does not exist (yet?)")
 			if self.conditions_met():
 				self.update_report()
-			#else:
-			#	self.logger.warning("no stats file in {} (yet), statsparser was not started".format(self.sample_dir))
 
 			this_time = time.time()
 			while (this_time - last_time < self.update_interval) and not self.stoprequest.is_set() or self.exp_end.is_set():
@@ -772,7 +747,6 @@ class StatsparserScheduler(threading.Thread):
 		cmd.extend(self.statsparser_args)
 		cp = subprocess.run(cmd) # waits for process to complete
 		if cp.returncode == 0:
-			#self.logger.info("STATSPARSING COMPLETED")
 			if not self.page_opened:
 				basedir = os.path.abspath(self.sample_dir)
 				fp = os.path.join(basedir, 'report.html')
@@ -783,8 +757,6 @@ class StatsparserScheduler(threading.Thread):
 			self.logger.warning("statsparser returned with errorcode {} for directory {}".format(cp.returncode, self.sample_dir))
 
 	def join(self, timeout=None):
-		#self.stoprequest.set()
-		#super(StatsparserScheduler, self).join(timeout)
 		if timeout:
 			self.exp_end.set()
 		else:
@@ -811,8 +783,6 @@ class Watcher():
 							   self.observed_dir, 
 							   recursive=False)
 		self.observer.start()
-		#self.logfile = open(os.path.join(os.path.abspath(os.path.dirname(self.watchnchop_path)),
-		#								 "GA{}0000_watchnchop_log.txt".format(channel+1)), 'w')
 		self.channel_status = ChannelStatus("GA{}0000".format(channel+1), channel)
 		self.spScheduler = None
 		self.wcScheduler = []
@@ -927,31 +897,8 @@ class Watcher():
 		elif 	"INFO - Updating context tags in MinKNOW with" 	in line:
 			for m in re.finditer("'([^\s,]+)'[:,] u?'([^\s,]+)'", line):
 				dict_content[m.group(1)] = m.group(2)
-			#if 'filename' in dict_content:
-			#	dict_content['flowcell_id'] = dict_content['filename'].split("_")[2]
 			if 'sequencing_kit' in dict_content:
 				dict_content['sequencing_kit'] = dict_content['sequencing_kit'].upper()
-
-		#elif	"bream.core.base.database - INFO - group"				in line:
-		#	for m in re.finditer("group ([0-9]+) has ([0-9]+) channels in mux ([0-9]+)", line):
-		#		self.channel_status.update_mux(m.group(1), m.group(2), m.group(3), timestamp)
-		#		UPDATE_OVERVIEW = True
-		#
-		#elif	"[user message]--> group "								in line.lower():
-		#	for m in re.finditer("roup ([0-9]+) has ([0-9]+) active", line):
-		#		self.channel_status.update_mux_group_totals(m.group(1), m.group(2), timestamp)
-		#		UPDATE_OVERVIEW = True
-		#
-		#elif	"[user message]--> A total of"							in line:
-		#	for m in re.finditer("total of ([0-9]+) single pores", line):
-		#		self.channel_status.update_mux_group_totals("*", m.group(1), timestamp)
-		#		UPDATE_OVERVIEW = True
-		#
-		#elif	"INFO - [user message]--> Finished Mux Scan"			in line:
-		#	self.logger.info("MUX SCAN FINISHED")
-		#	UPDATE_OVERVIEW = True
-		#	self.channel_status.new_mux(timestamp)
-		#	self.save_logdata()
 
 		elif	"platform_qc.report"			in line:
 			self.logger.info("QC FINISHED")
@@ -967,19 +914,6 @@ class Watcher():
 
 		if dict_content:
 			self.channel_status.update(dict_content, overwrite)
-
-	#def parse_analyser_log_line(self, line):
-	#	dict_content = {}
-	#	overwrite = True
-	#
-	#	if 		"preparing_to_write_analysis_summary_file"								in line:
-	#		for m in re.finditer("filename = (.+) ]", line): 
-	#			dict_content['relative_path'] = m.group(1).split("/./")[1].split("/sequencing_summary/")[0]
-	#			dict_content['experiment'] = dict_content['relative_path'].split('/')[0]
-	#			dict_content['sample'] = dict_content['relative_path'].split('/')[1]
-	#
-	#	if dict_content:
-	#		self.channel_status.update(dict_content, overwrite)
 
 	def save_logdata(self):
 		for key in ['experiment_type', 'run_id', 'experiment', 'sample', 'relative_path']:
@@ -1142,7 +1076,6 @@ class OpenedFilesHandler():
 
 
 class LogFilesEventHandler(FileSystemEventHandler):
-	#control_server_log, bream_log, analyser_log = None, None, None
 	control_server_log, bream_log = None, None
 
 	def __init__(self, q, ignore_file_modifications, channel):
@@ -1199,7 +1132,7 @@ class LogFilesEventHandler(FileSystemEventHandler):
 				self.logger.warning("Current control_server_log file {} was deleted!".format(event.src_path))
 			elif self.bream_log == event.src_path:
 				self.bream_log = None
-				self.logger.info("EARNING: Current bream_log file {} was deleted".format(event.src_path))
+				self.logger.warning("Current bream_log file {} was deleted".format(event.src_path))
 			else:
 				self.logger.debug("File {} is not opened and is therefore not closed.".format(event.src_path))
 			self.file_handler.close_file(event.src_path)
@@ -1298,5 +1231,9 @@ class RunsDirsEventHandler(FileSystemEventHandler):
 		set_update_overview()
 		return
 
+def standalone():
+	args = parse_args()
+	main(args)
+
 if __name__ == "__main__":
-	main_and_args()
+	standalone()

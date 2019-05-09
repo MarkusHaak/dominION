@@ -75,21 +75,11 @@ def get_argument_parser():
 		main_options.add_argument('-r', '--recursive',
 								  action='store_true',
 								  help='''recursively search for directories containing stats files and corresponding logdata files''')
-	#main_options.add_argument('-o', '--outdir',
-	#						  action=w_dir,
-	#						  default=None,
-	#						  help='''Path to a directory in which the report files and folders will be saved
-	#							   (default: directory of input)''')
+
 	main_options.add_argument('--html_refresh_rate',
 							  type=int,
 							  default=120,
 							  help='refresh rate of the html page in seconds')
-	#if __name__ == '__main__':
-	#	main_options.add_argument('--resources_dir',
-	#							 action=r_dir,
-	#							 default=os.path.join(package_dir,'resources'),
-	#							 help='''directory containing template files for creating the results html page.
-	#							 	  (default: PACKAGE_DIR/resources)''')
 
 	plot_options = argument_parser.add_argument_group('Plotting options',
 													  'Arguments changing the appearance of plots')
@@ -112,30 +102,6 @@ def get_argument_parser():
 	plot_options.add_argument('--matplotlib_style',
 							  default='default',
 							  help='matplotlib style string that influences all colors and plot appearances')
-
-	# the following should only be set if statsparser is called directly:
-	#if __name__ == '__main__':
-	#	exp_options = argument_parser.add_argument_group('Experiment options',
-	#													 '''Arguments concerning the experiment. Either specify
-	#													 	a logdata file or all arguments individually.''')
-	#	exp_options.add_argument('--logdata_file',
-	#							 action=r_file,
-	#							 help='path to the report file of this sequencing run (default: <run_id>_stats.json)')
-	#	exp_options.add_argument('--user_filename_input',
-	#							 default='Run#####_MIN###_KIT###',
-	#							 help='run title')
-	#	exp_options.add_argument('--sample',
-	#							 default='Run#####_MIN###_KIT###',
-	#							 help='sample name')
-	#	exp_options.add_argument('--minion_id',
-	#							 default='GA#0000',
-	#							 help=' ')
-	#	exp_options.add_argument('--flowcell_id',
-	#							 default='FAK#####',
-	#							 help=' ')
-	#	exp_options.add_argument('--protocol_start',
-	#							 default='YYYY-MM-DD hh:mm:ss.ms',
-	#							 help=' ')
 
 	help_group = argument_parser.add_argument_group('Help')
 	help_group.add_argument('-h', '--help', 
@@ -192,7 +158,7 @@ def parse_args(argument_parser, ext_args=None):
 	if args.verbose:
 		loglvl = logging.DEBUG
 	elif args.quiet:
-		loglvl = logging.ERROR
+		loglvl = logging.WARNING
 	else:
 		loglvl = logging.INFO
 
@@ -209,122 +175,6 @@ def parse_args(argument_parser, ext_args=None):
 	args.input = input_dirs
 
 	return args
-	
-
-#def parse_args(argument_parser, ext_args=None):
-#	if ext_args:
-#		args = argument_parser.parse_args(ext_args)
-#	else:
-#		args = argument_parser.parse_args()
-#
-#	global logger
-#	if args.verbose:
-#		loglvl = logging.DEBUG
-#	elif args.quiet:
-#		loglvl = logging.ERROR
-#	else:
-#		loglvl = logging.INFO
-#
-#	initLogger(level=loglvl)
-#	logger = logging.getLogger(name='sp')
-#
-#	if not os.path.exists(args.input):
-#		logger.error('path {} does not exist'.format(args.input))
-#		exit()
-#	elif os.path.isfile(args.input):
-#		args.statsfiles = [ args.input ]
-#		args.run_ids = [ os.path.basename(args.input).split('_')[0] ]
-#	elif os.path.isdir(args.input):
-#		args.statsfiles = []
-#		args.run_ids = []
-#		for fn in [fn for fn in os.listdir(args.input) if fn.endswith('.csv')]:
-#			if os.path.isfile(os.path.join(args.input, fn)) and len(fn.split('_')) == 2:
-#				args.statsfiles.append(os.path.join(os.path.join(args.input, fn)))
-#				args.run_ids.append(fn.split('_')[0])
-#		if not args.statsfiles:
-#			logger.error('no statsfiles found in directory {}'.format(args.input))
-#			exit()
-#	logger.info('- statsfiles:          {}'.format(args.statsfiles))
-#
-#	if not input_dir:
-#		input_dir = os.path.abspath(os.path.dirname(args.statsfiles[0]))
-#		if not os.path.isdir(input_dir):
-#			logger.error('{} is not a valid directory'.format(input_dir))
-#			exit()
-#		if not os.access(input_dir, os.W_OK):
-#			logger.error('{} is not writeable'.format(to_test))
-#			exit()
-#
-#	if not os.path.isdir(os.path.join(input_dir, 'res', 'plots')):
-#		os.makedirs(os.path.join(input_dir, 'res', 'plots'))
-#
-#	template = os.path.join(resources_dir, "report.template")
-#	if not os.path.isfile(template):
-#		logger.error('file {} does not exist'.format(template))
-#		exit()
-#	args.time_intervals = [i*60 for i in args.time_intervals]
-#
-#
-#	base_dir = os.path.abspath(os.path.dirname(args.statsfiles[0]))
-#	args.user_filename_input = base_dir.split("/")[-2]
-#	args.sample = base_dir.split("/")[-1]
-#	if args.logdata_file:
-#		with open(args.logdata_file, "r") as f:
-#			flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)		
-#		args.minion_id = run_data['minion_id']
-#		args.flowcell_id = flowcell['flowcell_id']
-#		args.protocol_start = run_data['protocol_start']
-#
-#	else:
-#		# combine information of all logdata files found in directory
-#		#fp = os.path.join(base_dir, args.run_id + '_logdata.json')
-#		#if os.path.exists(fp):
-#		#	args.logdata_file = fp
-#		#	logger.info("guessed logdata file to {}".format(args.logdata_file))
-#		#else:
-#		#	logger.info("unable to find logdata file '{}'".format(fp))
-#		args.minion_id, args.flowcell_id, args.protocol_start = [], [], []
-#		for fp in [fp.replace('stats.csv', 'logdata.json') for fp in args.statsfiles]:
-#			if os.path.exists(fp):
-#				with open(fp, "r") as f:
-#					flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
-#				args.minion_id.append(run_data['minion_id'])
-#				args.flowcell_id.append(flowcell['flowcell_id'])
-#				args.protocol_start.append(run_data['protocol_start'])
-#		if args.minion_id and args.flowcell_id and args.protocol_start:
-#			args.minion_id = "/".join(set(args.minion_id))
-#			args.flowcell_id = "/".join(set(args.flowcell_id))
-#			args.protocol_start = min([dateutil.parser.parse(ts) for ts in args.protocol_start]).strftime("%Y-%m-%d %H:%M:%S")
-#		else:
-#			args.minion_id = 'GA#0000'
-#			args.flowcell_id = 'FAK#####'
-#			args.protocol_start = 'YYYY-MM-DD hh:mm:ss.ms'
-#	logger.info('- user_filename_input: {}'.format(args.user_filename_input))
-#	logger.info('- sample:              {}'.format(args.sample))
-#	logger.info('- minion_id:           {}'.format(args.minion_id))
-#	logger.info('- flowcell_id:         {}'.format(args.flowcell_id))
-#	logger.info('- protocol_start:      {}'.format(args.protocol_start))
-#	logger.info('- run_id:              {}'.format(args.run_ids))
-#
-#
-#	try:
-#		matplotlib.style.use(args.matplotlib_style)
-#	except:
-#		logger.error('{} is not a valid matplotlib style'.format(args.matplotlib_style))
-#		exit()
-#
-#	return args
-
-def standalone():
-	global __name__
-	__name__ = '__main__'
-	#argument_parser = get_argument_parser()
-	#args = parse_args(argument_parser)
-	#main(args)
-	argument_parser = get_argument_parser()
-	args = parse_args(argument_parser)
-	for input_dir in args.input:
-		main(args, input_dir)
 
 def get_input_files(input_dir):
 	files = [i for i in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, i))]
@@ -346,24 +196,30 @@ def parse_logdata_files(logdata_files):
 	for fp in logdata_files:
 		with open(fp, "r") as f:
 			flowcell, run_data, mux_scans = json.loads(f.read(), object_pairs_hook=OrderedDict)
-		logdata['minion_id'].append(run_data['minion_id'])
-		logdata['flowcell_id'].append(flowcell['flowcell_id'])
-		logdata['protocol_start'].append(run_data['protocol_start'])
-		logdata['run_id'].append(run_data['run_id'])
-		if run_data['experiment']:
-			logdata['experiment'].append(run_data['experiment'])
+		for key in ['minion_id', 'protocol_start', 'run_id', 'experiment', 'sample']:
+			if key in run_data:
+				if run_data[key]:
+					logdata[key].append(run_data[key])
+				elif key != 'protocol_start':
+					logdata[key].append('unknown')
+			elif key != 'protocol_start':
+				logdata[key].append('unknown')
+		if 'flowcell_id' in flowcell:
+			if flowcell['flowcell_id']:
+				logdata['flowcell_id'].append(flowcell['flowcell_id'])
+			else:
+				logdata['flowcell_id'].append('unknown')
 		else:
-			logdata['experiment'].append('unknown')
-		if run_data['sample']:
-			logdata['sample'].append(run_data['sample'])
-		else:
-			logdata['sample'].append('unknown')
+			logdata['flowcell_id'].append('unknown')
 
-	logdata['protocol_start'] = min([dateutil.parser.parse(ts) for ts in logdata['protocol_start']]).strftime("%Y-%m-%d %H:%M:%S")
-	logger.info("- {}: {}".format('protocol_start', logdata['protocol_start']))
+	if logdata['protocol_start']:
+		logdata['protocol_start'] = min([dateutil.parser.parse(ts) for ts in logdata['protocol_start']]).strftime("%Y-%m-%d %H:%M:%S")
+	else:
+		logdata['protocol_start'] = 'unknown'
+	logger.debug("- {}: {}".format('protocol_start', logdata['protocol_start']))
 	for key in ['minion_id', 'flowcell_id', 'experiment', 'sample', 'run_id']:
 		logdata[key] = " / ".join(set(logdata[key]))
-		logger.info("- {}: {}".format(key, logdata[key]))
+		logger.debug("- {}: {}".format(key, logdata[key]))
 
 	return logdata
 
@@ -373,7 +229,7 @@ def main(args, input_dir):
 	if not os.path.isdir(os.path.join(input_dir, 'res', 'plots')):
 		os.makedirs(os.path.join(input_dir, 'res', 'plots'))
 
-	logger.info("Parsing stats files")
+	logger.info("Parsing stats files from directory {}".format(input_dir))
 	stats_files, logdata_files = get_input_files(input_dir)
 
 	df = parse_stats(stats_files)
@@ -396,7 +252,7 @@ def main(args, input_dir):
 		bin_edges = get_bin_edges(sub_df['time'], interval)
 		for col in sub_df:
 			if col in ['bases','gc','qual']:
-				logger.info("...plotting {}, {}: {}".format(bc, subset, col))
+				logger.debug("...plotting {}, {}: {}".format(bc, subset, col))
 				bins = get_bins(sub_df[col], bin_edges)
 				intervals = [(offset+i)*interval for i in range(len(bins))]
 				boxplot(bins, 
@@ -415,7 +271,7 @@ def main(args, input_dir):
 																  sub_df['bases'].min(), 
 																  sub_df['bases'].max())
 		bin_edges = get_bin_edges(sub_df['bases'], interval)
-		logger.info("...plotting {}, {}".format(bc, subset))
+		logger.debug("...plotting {}, {}".format(bc, subset))
 		#bins = get_bins(sub_df['bases']/1000000., bin_edges)
 		bins = get_bins(sub_df['bases'], bin_edges)
 		intervals = [((offset+i)*interval)/1000. for i in range(len(bins))]
@@ -434,7 +290,7 @@ def main(args, input_dir):
 																  sub_df['gc'].min(), 
 																  sub_df['gc'].max())
 		bin_edges = get_bin_edges(sub_df['gc'], interval)
-		logger.info("...plotting {}, {}".format(bc, subset))
+		logger.debug("...plotting {}, {}".format(bc, subset))
 		#bins = get_bins(sub_df['bases']/1000000., bin_edges)
 		bins = get_bins(sub_df['bases'], bin_edges)
 		intervals = [(offset+i)*interval for i in range(len(bins))]
@@ -442,6 +298,8 @@ def main(args, input_dir):
 					intervals, 
 					interval,  
 					os.path.join(input_dir, 'res', "plots", "barplot_gc-bins_{}_{}".format(bc, subset)))
+
+	#######
 	
 	logger.info("Creating multi lineplots with one y-axis")
 	grouped = df.groupby(['barcode'])
@@ -463,7 +321,8 @@ def main(args, input_dir):
 					  sorted_bases_df,
 					  'all') )
 
-	for subset in set([j for i,j in indexes]):
+	ordered_subsets = get_ordered_subsets(indexes)
+	for subset in ordered_subsets:
 		sorted_df = subgrouped.get_group( ('All',subset) ).sort_values('time', axis=0, ascending=True)
 		reads_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
 						  pd.DataFrame({'count':range(1,sorted_df['time'].size+1)}),
@@ -471,40 +330,57 @@ def main(args, input_dir):
 		bases_dfs.append( (sorted_df['time']/SECS_TO_HOURS, 
 						  (sorted_df['bases']).expanding(1).sum(),
 						  subset) )
-	logger.info("...plotting {}".format('reads'))
+	logger.debug("...plotting {}".format('reads'))
 	lineplot_multi(reads_dfs, 
 				   "reads [{}]",
 				   os.path.join(input_dir, 'res', "plots", "multi_lineplot_{}".format('reads')),
 				   reads_scaling_factor,
-				   reads_unit
-				   )
-	logger.info("...plotting {}".format('bases'))
+				   reads_unit)
+	logger.debug("...plotting {}".format('bases'))
 	lineplot_multi(bases_dfs, 
 				   "bases [{}]",
 				   os.path.join(input_dir, 'res', "plots", "multi_lineplot_{}".format('bases')),
 				   bases_scaling_factor,
-				   bases_unit
-				   )
+				   bases_unit)
 
 	#######
 
 	logger.info("Parsing logdata files")
 	logdata = parse_logdata_files(logdata_files)
+	# if possible overwrite experiment name and sample name with directory names
+	try:
+		experiment, sample = os.path.abspath(input_dir).strip('/').split('/')[-2:]
+		if experiment != logdata['experiment']:
+			logger.warning("replacing experiment name {} with directory name {}".format(logdata['experiment'], experiment))
+			logdata['experiment'] = experiment
+		if sample != logdata['sample']:
+			logger.warning("replacing sample name {} with directory name {}".format(logdata['sample'], sample))
+			logdata['sample'] = sample
+	except:
+		pass
 
 	logger.info("Creating html file")
 	subset_grouped = df.groupby(['subset'])
 	subsets = list(pd.DataFrame(subset_grouped['bases'].count()).index)
-	logger.info(subsets)
 	
 	barcode_grouped = df.groupby(['barcode'])
 	barcodes = list(pd.DataFrame(barcode_grouped['bases'].count()).index)
-	logger.info(barcodes)
 	
 	create_html(input_dir, stats_df, logdata, args.html_refresh_rate, barcodes, subsets)
 
 	logger.info("Everything done")
-	exit()
 
+def get_ordered_subsets(indexes):
+	subsets = set([j for i,j in indexes])
+	ordered_subsets = []
+	for substring in ['all', 'length', 'pass', 'qual']:
+		for subset in set(subsets):
+			if substring in subset.lower():
+				subsets.remove(subset)
+				ordered_subsets.append(subset)
+				break
+	ordered_subsets.extend(list(subsets))
+	return ordered_subsets
 
 def create_html(outdir, stats_df, logdata, html_refresh_rate, barcodes, subsets):
 	
@@ -515,7 +391,7 @@ def create_html(outdir, stats_df, logdata, html_refresh_rate, barcodes, subsets)
 						"GA50000":"five",
 						"GA#0000":"unknown"}
 
-	logger.info("creating html stats table")
+	logger.debug("creating html stats table")
 	html_stats_df = make_html_table(stats_df).replace('valign="top"', 'valign="center"')
 
 	for bc in barcodes:
@@ -560,9 +436,6 @@ def lineplot_multi(time_dfs_lbls, y_label, dest, y_scaling_factor, y_unit):
 	ax1.legend(loc=2)
 	ax1.yaxis.grid(color="black", alpha=0.1)
 
-	#ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,.1f}".format(x)))
-
-	#fig.tight_layout()
 	plt.savefig(dest)
 	plt.close()
 
@@ -715,11 +588,6 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 def avgN50longest(series):
 	return series.nlargest(int(series.size/2)).mean()
 
-#def logger.info(*args, **kwargs):
-#	if not QUIET:
-#		print("["+strftime("%H:%M:%S", gmtime())+"] "+" ".join(map(str,args)), **kwargs)
-#	sys.stdout.flush()
-
 def stats_table(df):
 	subgrouped = df.groupby(['barcode', 'subset'])
 	grouped = df.groupby(['barcode'])
@@ -756,7 +624,6 @@ def stats_table(df):
 	grouped_output_df.index = index
 	concat_res = pd.concat([subgrouped_output_df,grouped_output_df])
 	concat_res = concat_res.sort_index(level=['barcode', 'subset'])
-	#concat_res = concat_res.reindex(['Passed','tooShort','BadQual','all'], level='subset') #TODO
 	return concat_res
 
 def make_html_table(df):
@@ -804,7 +671,6 @@ def choose_scaling_factor(max_value, scaling_factors, units):
 			return scaling_factor, units[i]
 	return scaling_factors[-1], units[-1]
 
-
 def get_lowest_possible_interval(intervals, max_bins, min_value, max_value):
 	interval = None
 	num_bins = None
@@ -836,8 +702,24 @@ def get_bins(df, bin_edges):
 		bins.append(list(df[bin_edges[i-1]:bin_edges[i]]))
 	return bins
 
-if __name__ == '__main__':
+def standalone():
+	global __name__
+	__name__ = '__main__'
 	argument_parser = get_argument_parser()
 	args = parse_args(argument_parser)
 	for input_dir in args.input:
 		main(args, input_dir)
+
+if __name__ == '__main__':
+	argument_parser = get_argument_parser()
+	args = parse_args(argument_parser)
+	if args.recursive:
+		# use exception ahndling in case of recursive
+		for input_dir in args.input:
+			try:
+				main(args, input_dir)
+			except:
+				logger.warning("failed to create report for {}".format(input_dir))
+	else:
+		for input_dir in args.input:
+			main(args, input_dir)

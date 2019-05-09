@@ -54,6 +54,6 @@ setup(name='dominion',
 	  install_requires=['watchdog', 'numpy', 'pandas', 'matplotlib', 'Jinja2'],
 	  include_package_data=True,
 	  zip_safe=False,
-	  entry_points={"console_scripts": ['dominion = dominion.dominion:main_and_args',
+	  entry_points={"console_scripts": ['dominion = dominion.dominion:standalone',
 	  									'statsparser = dominion.statsparser:standalone']},
 	  scripts=['bin/watchnchop'])
