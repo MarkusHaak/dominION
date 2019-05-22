@@ -39,12 +39,11 @@
               <p>
                 <u>Latest mux scan</u> ({{ channel.latest_qc.timestamp }}):
                 <ul>
-                <li>active : {{ channel.latest_qc.total }}</li>
+                <li>active pores : {{ channel.latest_qc.total }}</li>
                 {% if channel.latest_qc.in_use %}
-                <li>in use : {{ channel.latest_qc.in_use }}</li>
+                <li>pores in use : {{ channel.latest_qc.in_use }}</li>
                 {% endif %}
                 </ul>
-                <br>
               {% endif %}
               {% if channel.runs %}
               <p>

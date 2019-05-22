@@ -46,7 +46,7 @@ die "Please select either option -n or both options -d and -i\n" unless ($opt_n 
 
 unless ($opt_n) {
     system("touch /tmp/.dummy");
-    my $exit_state = system("rsync -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' /tmp/./.dummy $opt_d");
+    my $exit_state = system("nice -n +100 rsync -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' /tmp/./.dummy $opt_d");
     die "Something went wrong during the file transfer test. Please check that key authentication is set up correctly for the user and host in defaults.ini\n" if ($exit_state);
 }
 
@@ -101,7 +101,7 @@ while (1) {
     }
     closedir(DIR);
 
-    foreach my $file (keys(%seen)) {
+    foreach my $file (sort(keys(%seen))) {
         
         my $mtime = (stat("$entry_dir/fastq_$file"))[9];
 
@@ -116,7 +116,7 @@ while (1) {
             $pcout .= "  1> /dev/null 2> /dev/null" unless ($opt_v);
             my $systime = systime();
             print STDOUT "Watchnchop runs porechop and filtering on $systime\n" if ($opt_v);
-            system("porechop -i $entry_dir/fastq_$file $pcout");
+            system("nice -n +100 porechop -i $entry_dir/fastq_$file $pcout");
 
             opendir(DIR, "$outdir/porechop/$file");
             my @choppedfastqs = grep(/(.+)\.fastq$/,readdir(DIR));
@@ -175,7 +175,7 @@ while (1) {
 
             my $f5f = $file;
             $f5f =~ s/.fastq/.fast5/;
-            system("multi_to_multi_fast5 -i $entry_dir/fast5_$f5f -s $outdir -b $fast5splitfile");
+            system("nice -n +100 multi_to_multi_fast5 -i $entry_dir/fast5_$f5f -s $outdir -b $fast5splitfile");
             unlink $fast5splitfile;
             $processed{$file} = $mtime;
             delete $seen{$file};
@@ -188,7 +188,7 @@ while (1) {
     }
     remove_tree("$outdir/porechop/");
     print STDOUT "Watchnchop transfers processed data to remote client\n" if ($opt_v);
-    system("rsync --exclude '*.fast5' -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' $outdir $opt_d") unless ($opt_n);
+    system("nice -n +100 rsync --exclude '*.fast5' -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' $outdir $opt_d") unless ($opt_n);
 
     # terminate if all data has been processed and the process has received a TERM signal
     last if (!(keys %seen) && $$term_ref);
@@ -200,9 +200,9 @@ while (1) {
 print STDOUT "Watchnchop transfers raw data to remote client\n" if ($opt_v);
 # transfer the raw data to the remote client
 #remove_tree("$outdir/porechop/");
-system("rsync -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' $outdir $opt_d") unless ($opt_n);
+system("nice -n +100 rsync -Rruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' $outdir $opt_d") unless ($opt_n);
 remove_tree("$outdir");
-system("rsync -Rkruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' /data/./ARCHIVE/$basedir $opt_d") unless ($opt_n);
+system("nice -n +100 rsync -Rkruve 'ssh -o \"NumberOfPasswordPrompts 0\" -i $opt_i' /data/./ARCHIVE/$basedir $opt_d") unless ($opt_n);
 
 my $systime = systime();
 print STDOUT "Watchnchop died peacefully on $systime\n" if ($opt_v);

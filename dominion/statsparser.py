@@ -19,6 +19,7 @@ import numpy as np
 import dateutil.parser
 from datetime import datetime
 import sys
+import math
 import pandas as pd
 from collections import OrderedDict
 import functools
@@ -27,6 +28,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.lines as mlines
 import matplotlib.gridspec as gridspec
+import matplotlib.ticker as ticker
 import copy
 from mpl_toolkits import axes_grid1
 import re
@@ -98,10 +100,21 @@ def get_argument_parser():
 	plot_options.add_argument('--gc_interval',
 							  type=float,
 							  default=0.5,
-							  help='gc interval for binning reads based on mean gc content')
+							  help='gc interval for binning reads based on mean G+C content')
 	plot_options.add_argument('--matplotlib_style',
 							  default='default',
 							  help='matplotlib style string that influences all colors and plot appearances')
+	plot_options.add_argument('--dpi',
+							  type=int,
+							  default=150)
+	plot_options.add_argument('--width',
+							  type=float,
+							  default=6.4,
+							  help='width of figure in inches')
+	plot_options.add_argument('--height',
+							  type=float,
+							  default=4.8,
+							  help='height of figure in inches')
 
 	help_group = argument_parser.add_argument_group('Help')
 	help_group.add_argument('-h', '--help', 
@@ -133,7 +146,7 @@ def get_dir_list(input_path, recursive):
 	input_dirs = []
 	if not os.path.exists(input_path):
 		logger.error('path {} does not exist'.format(input_path))
-		exit()
+		exit(1)
 	elif os.path.isfile(input_path):
 		if contains_stats_and_logdata(os.path.dirname(input_path)):
 			input_dirs.append(os.path.dirname(input_path))
@@ -173,6 +186,11 @@ def parse_args(argument_parser, ext_args=None):
 			logger.warning("excluding directory {} due to missing write permissions".format(input_dir))
 			input_dirs.remove(input_dir)
 	args.input = input_dirs
+
+	global fig_dpi, fig_width, fig_height
+	fig_height = args.height
+	fig_width = args.width
+	fig_dpi = args.dpi
 
 	return args
 
@@ -251,14 +269,15 @@ def main(args, input_dir):
 																  sub_df['time'].max())
 		bin_edges = get_bin_edges(sub_df['time'], interval)
 		for col in sub_df:
-			if col in ['bases','gc','qual']:
-				logger.debug("...plotting {}, {}: {}".format(bc, subset, col))
+			if col.lower() in ['bases','gc','qual']:
+				ylbl = get_label(col)
+				logger.debug("...plotting {}, {}: {}".format(bc, subset, ylbl))
 				bins = get_bins(sub_df[col], bin_edges)
 				intervals = [(offset+i)*interval for i in range(len(bins))]
 				boxplot(bins, 
 						intervals, 
 						interval, 
-						col, 
+						ylbl, 
 						os.path.join(input_dir, 'res', "plots", "boxplot_{}_{}_{}".format(bc, subset, col)))
 
 	#######
@@ -301,6 +320,15 @@ def main(args, input_dir):
 
 	#######
 	
+	logger.info("Creating adapter-bin barplots")
+
+	subset_l, subset_q, subset_p, _ = get_subset_names(indexes)
+	bcs = list(set([bc for bc,_ in indexes]))
+	bcs.sort()
+	adapter_bin_barplots(stats_df, bcs, subset_l, subset_q, subset_p, os.path.join(input_dir, 'res', "plots", "adapter_bin_barplot.png"))
+
+	#######
+	
 	logger.info("Creating multi lineplots with one y-axis")
 	grouped = df.groupby(['barcode'])
 	
@@ -310,7 +338,7 @@ def main(args, input_dir):
 	sorted_df = grouped.get_group( 'All' ).sort_values('time', axis=0, ascending=True)
 
 	sorted_reads_df = pd.DataFrame({'count':range(1,sorted_df['time'].size+1)})
-	reads_scaling_factor, reads_unit = choose_scaling_factor(sorted_reads_df.iat[-1,-1], [10**3, 1], ['K', '-'])
+	reads_scaling_factor, reads_unit = choose_scaling_factor(sorted_reads_df.iat[-1,-1], [10**6 ,10**3, 1], ['M', 'k', '-'])
 	sorted_bases_df = (sorted_df['bases']).expanding(1).sum()
 	bases_scaling_factor, bases_unit = choose_scaling_factor(sorted_bases_df.iat[-1], [10**9, 10**6, 10**3], ['Gb', 'Mb', 'kb'])
 
@@ -413,18 +441,11 @@ def create_html(outdir, stats_df, logdata, html_refresh_rate, barcodes, subsets)
 		print(template.render(render_dict), file=outfile)
 	copyfile(os.path.join(resources_dir, 'style.css'), os.path.join(outdir, 'res', 'style.css'))
 
-
-def pore_heatmap(max_pore_index, pore_bases, pore_indexes, dest):
-	f = plt.figure()
-	fig = plt.gcf()
-	gs0 = gridspec.GridSpec(1, 1)
-	ax1 = plt.subplot(gs0[0, 0])
-	x_dim = 32
-	data = []
-
 def lineplot_multi(time_dfs_lbls, y_label, dest, y_scaling_factor, y_unit):
 	f = plt.figure()
 	fig = plt.gcf()
+	fig.set_size_inches(fig_width, fig_height)
+	fig.set_dpi(fig_dpi)
 	gs0 = gridspec.GridSpec(1, 1)
 	ax1 = plt.subplot(gs0[0, 0])
 
@@ -445,6 +466,8 @@ def lineplot_2y(time, bases, dest):
 
 	f = plt.figure()
 	fig = plt.gcf()
+	fig.set_size_inches(fig_width, fig_height)
+	fig.set_dpi(fig_dpi)
 	gs0 = gridspec.GridSpec(1, 1)
 	ax1 = plt.subplot(gs0[0, 0])
 	ax2 = ax1.twinx()
@@ -464,10 +487,43 @@ def lineplot_2y(time, bases, dest):
 	plt.savefig(dest)
 	plt.close()
 
+def adapter_bin_barplots(stats_df, bcs, subset_l, subset_q, subset_p, dest):
+	f = plt.figure()
+	fig = plt.gcf()
+	fig.set_size_inches(fig_width, fig_height)
+	fig.set_dpi(fig_dpi)
+	gs0 = gridspec.GridSpec(1, 1)
+	ax1 = plt.subplot(gs0[0, 0])
+
+	x = np.array(list(range(len(bcs)-1)))
+	max_val = float(stats_df.drop(['All'], axis=0)[['Mb']].max())
+	bases_scaling_factor, bases_unit = choose_scaling_factor(max_val, [10**3, 1], ['Gb', 'Mb'])
+
+	data = {}
+	for subset in [subset_p, subset_l, subset_q]:
+		if subset:
+			df = stats_df.xs(subset, level='subset')[['Mb']]
+			df = df.reindex(bcs).drop(['All'], axis=0).fillna(0)
+			data[subset] = np.array(df['Mb'])/bases_scaling_factor
+
+	ax1.yaxis.grid(color="black", alpha=0.1)
+	ax1.set_ylabel('bases [{}]'.format(bases_unit))
+
+	for i, subset in enumerate([subset_l, subset_p, subset_q]):
+		if subset:
+			ax1.bar(x+(-0.2+i*0.2), data[subset], width=0.2, color='C{}'.format(i+1), align='center', label=subset)
+	ax1.legend()
+
+	ax1.set_xticks(list(range(len(df))))
+	ax1.set_xticklabels(list(df.index), rotation=45)
+
+	plt.savefig(dest)
+	plt.close()
+
 def barplot(bins, intervals, interval, dest):
 	reads = np.array([len(i) for i in bins])
 	bases = np.array([sum(i) for i in bins])
-	reads_scaling_factor, reads_unit = choose_scaling_factor(np.max(reads), [10**3, 1], ['K', '-'])
+	reads_scaling_factor, reads_unit = choose_scaling_factor(np.max(reads), [10**6 ,10**3, 1], ['M', 'k', '-'])
 	bases_scaling_factor, bases_unit = choose_scaling_factor(np.max(bases), [10**9, 10**6, 10**3], ['Gb', 'Mb', 'kb'])
 	reads = reads/reads_scaling_factor
 	bases = bases/bases_scaling_factor
@@ -475,19 +531,22 @@ def barplot(bins, intervals, interval, dest):
 
 	f = plt.figure()
 	fig = plt.gcf()
+	fig.set_size_inches(fig_width, fig_height)
+	fig.set_dpi(fig_dpi)
 	gs0 = gridspec.GridSpec(1, 1)
 	ax1 = plt.subplot(gs0[0, 0])
 	ax2 = ax1.twinx()
 
-	ax1.bar(x-0.15, reads, width=0.3, color='C1', align='center', label = 'reads')
-	ax2.bar(x+0.15, bases, width=0.3, color='C2', align='center', label = 'bases')
-
+	ax1.set_ylim([0, ceil_msp(max(reads))])
+	ax2.set_ylim([0, ceil_msp(max(bases))])
+	ax1.set_yticks(get_yticks(max(reads)))
+	ax2.set_yticks(get_yticks(max(bases)))
+	ax1.yaxis.grid(color="black", alpha=0.1)
+	ax2.yaxis.grid(color="black", alpha=0.1)
 	ax1.set_ylabel('reads [{}]'.format(reads_unit))
 	if max(reads) >= 1000.:
 		ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
 	ax2.set_ylabel('bases [{}]'.format(bases_unit))
-	ax1.legend(loc=1, bbox_to_anchor=(1., 1.))
-	ax2.legend(loc=1, bbox_to_anchor=(1., 0.92))
 
 	ax1.set_xticks(list(range(len(intervals)+1)))
 	xticklabels = ["" for i in intervals]
@@ -501,6 +560,11 @@ def barplot(bins, intervals, interval, dest):
 	ax1.set_xticklabels(xticklabels)
 	ax1.set_xlabel("{} kb bins".format(interval))
 
+	ax1.bar(x-0.15, reads, width=0.3, color='C1', align='center', label = 'reads')
+	ax1.legend(loc=1, bbox_to_anchor=(1., 1.))
+	ax2.bar(x+0.15, bases, width=0.3, color='C2', align='center', label = 'bases')
+	ax2.legend(loc=1, bbox_to_anchor=(1., 0.92))
+
 	#fig.tight_layout()
 	plt.savefig(dest)
 	plt.close()
@@ -509,7 +573,7 @@ def barplot(bins, intervals, interval, dest):
 def gc_lineplot(bins, intervals, interval, dest):
 	reads = np.array([len(i) for i in bins])
 	bases = np.array([sum(i) for i in bins])
-	reads_scaling_factor, reads_unit = choose_scaling_factor(np.max(reads), [10**3, 1], ['K', '-'])
+	reads_scaling_factor, reads_unit = choose_scaling_factor(np.max(reads), [10**6 ,10**3, 1], ['M', 'k', '-'])
 	bases_scaling_factor, bases_unit = choose_scaling_factor(np.max(bases), [10**9, 10**6, 10**3], ['Gb', 'Mb', 'kb'])
 	reads = reads/reads_scaling_factor
 	bases = bases/bases_scaling_factor
@@ -517,6 +581,8 @@ def gc_lineplot(bins, intervals, interval, dest):
 
 	f = plt.figure()
 	fig = plt.gcf()
+	fig.set_size_inches(fig_width, fig_height)
+	fig.set_dpi(fig_dpi)
 	gs0 = gridspec.GridSpec(1, 1)
 	ax1 = plt.subplot(gs0[0, 0])
 	ax2 = ax1.twinx()
@@ -529,7 +595,7 @@ def gc_lineplot(bins, intervals, interval, dest):
 	ax1.legend(loc=1, bbox_to_anchor=(1., 1.))
 	ax2.legend(loc=1, bbox_to_anchor=(1., 0.92))
 
-	ax1.set_xlabel("gc content ({} % bins)".format(interval))
+	ax1.set_xlabel("G+C content ({} % bins)".format(interval))
 	if max(reads) >= 1000.:
 		ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
 
@@ -540,6 +606,8 @@ def gc_lineplot(bins, intervals, interval, dest):
 def boxplot(bins, intervals, interval, ylabel, dest):
 	f = plt.figure()
 	fig = plt.gcf()
+	fig.set_size_inches(fig_width, fig_height)
+	fig.set_dpi(fig_dpi)
 	gs0 = gridspec.GridSpec(2, 1, width_ratios=[1], height_ratios=[0.3,1])
 	gs0.update(wspace=0.05, hspace=0.05)
 	ax0 = plt.subplot(gs0[0, 0])
@@ -567,18 +635,23 @@ def boxplot(bins, intervals, interval, ylabel, dest):
 		ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
 	ax1.set_axisbelow(True)
 
-	reads = [len(i) for i in bins]
+	#reads = [len(i) for i in bins]
+	reads = np.array([len(i) for i in bins])
+	reads_scaling_factor, reads_unit = choose_scaling_factor(np.max(reads), [10**6 ,10**3, 1], ['M', 'k', '-'])
+	reads = reads/reads_scaling_factor
 	ax0.bar([i for i in range(len(bins))], reads, align='center', color='grey', width=0.4)
 
 	ax0.set_xlim([-0.5, len(bins)-0.5])
-	ax0.set_ylim([0,max(reads)*1.2])
+	ax0.set_ylim([0,np.max(reads)*1.2])
+	#ax0.set_ylim([0,max(reads)*1.2])
 	ax0.tick_params(top=False, bottom=False, left=True, right=False,
 				   labeltop=False, labelbottom=False)
-	ax0.set_ylabel("reads")
-	ax0.set_xticklabels([])
-	ax0.yaxis.grid(color="black", alpha=0.1)
+	#ax0.set_ylabel("reads")
+	ax0.set_ylabel('reads [{}]'.format(reads_unit))
 	if max(reads) >= 1000.:
 		ax0.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, loc: "{:,}".format(int(x))))
+	ax0.set_xticklabels([])
+	ax0.yaxis.grid(color="black", alpha=0.1)
 	ax0.set_axisbelow(True)
 
 	#fig.tight_layout()
@@ -594,33 +667,30 @@ def stats_table(df):
 
 	# keys equal headers in html
 	subgrouped_output_df = pd.DataFrame(
-		OrderedDict((('reads',							 	subgrouped['bases'].count()), 
-					 ('Mb',								 	subgrouped['bases'].sum()/1000000.), 
-					 ('mean quality',					 	subgrouped['qual'].mean()), 
-					 ('mean GC [%]',					 	subgrouped['gc'].mean()),
-					 ('mean length [kb]',				 	subgrouped['bases'].mean()/1000.),
-					 ('median length [kb]' ,			 	subgrouped['bases'].median()/1000.),
-					 ('mean length longest N50 [kb]',	 	subgrouped['bases'].agg(avgN50longest)/1000.),
-					 ('longest [kb]',					 	subgrouped['bases'].max()/1000.)
+		OrderedDict((('reads',							subgrouped['bases'].count()), 
+					 ('Mb',								subgrouped['bases'].sum()/1000000.), 
+					 ('mean quality',					subgrouped['qual'].mean()), 
+					 ('mean G+C content [%]',			subgrouped['gc'].mean()),
+					 ('mean length [kb]',				subgrouped['bases'].mean()/1000.),
+					 ('median length [kb]' ,			subgrouped['bases'].median()/1000.),
+					 ('mean length longest N50 [kb]',	subgrouped['bases'].agg(avgN50longest)/1000.),
+					 ('longest [kb]',					subgrouped['bases'].max()/1000.)
 					 )))
 	grouped_output_df = pd.DataFrame(
-		OrderedDict((('reads',								grouped['bases'].count()), 
-					 ('Mb',									grouped['bases'].sum()/1000000.), 
-					 ('mean quality',						grouped['qual'].mean()), 
-					 ('mean GC [%]',						grouped['gc'].mean()),
-					 ('mean length [kb]',					grouped['bases'].mean()/1000.),
-					 ('median length [kb]',					grouped['bases'].median()/1000.),
-					 ('mean length longest N50 [kb]',		grouped['bases'].agg(avgN50longest)/1000.),
-					 ('longest [kb]',						grouped['bases'].max()/1000.)
+		OrderedDict((('reads',							grouped['bases'].count()), 
+					 ('Mb',								grouped['bases'].sum()/1000000.), 
+					 ('mean quality',					grouped['qual'].mean()), 
+					 ('mean G+C content [%]',			grouped['gc'].mean()),
+					 ('mean length [kb]',				grouped['bases'].mean()/1000.),
+					 ('median length [kb]',				grouped['bases'].median()/1000.),
+					 ('mean length longest N50 [kb]',	grouped['bases'].agg(avgN50longest)/1000.),
+					 ('longest [kb]',					grouped['bases'].max()/1000.)
 					 )))
 
 	# concat both to one DataFrame, sorted by the indexes
 	index = pd.MultiIndex.from_tuples(list(zip(list(grouped_output_df.index), 
-											   ['all' for i in grouped_output_df.index]
-											   )
-										   ), 
-									  names=['barcode', 'subset']
-									 )
+											   ['all' for i in grouped_output_df.index])), 
+									  names=['barcode', 'subset'])
 	grouped_output_df.index = index
 	concat_res = pd.concat([subgrouped_output_df,grouped_output_df])
 	concat_res = concat_res.sort_index(level=['barcode', 'subset'])
@@ -652,7 +722,7 @@ def parse_stats(fps):
 
 	if df.empty:
 		logger.error("no data in csv file{} {}".format('s' if len(fps)>1 else '', fps))
-		exit()
+		exit(1)
 
 	start_time = df['time'].min()
 	df['time'] = (df['time'] - start_time).dt.total_seconds()
@@ -696,23 +766,50 @@ def get_bin_edges(sorted_df, interval):
 	edges.append(sorted_df.size)
 	return edges
 
+def get_label(colomn_lbl):
+	if colomn_lbl.lower() == 'gc':
+		return 'G+C content'
+	elif colomn_lbl.lower() == 'qual':
+		return 'quality'
+	elif colomn_lbl.lower() == 'bases':
+		return 'read length'
+	return colomn_lbl
+
 def get_bins(df, bin_edges):
 	bins = []
 	for i in range(1,len(bin_edges)):
 		bins.append(list(df[bin_edges[i-1]:bin_edges[i]]))
 	return bins
+ 
+def get_subset_names(indexes):
+	subset_l, subset_q, subset_p, subset_a = None, None, None, None
+	for bc, subset in indexes:
+		if 'len' in subset.lower():
+			subset_l = subset
+		elif 'qual' in subset.lower():
+			subset_q = subset
+		elif 'pass' in subset.lower():
+			subset_p = subset
+		elif 'all' in subset:
+			subset_a = subset
+	return subset_l, subset_q, subset_p, subset_a
+
+def ceil_msp(x):
+	factor = 10**math.floor(math.log10(abs(x)))
+	return math.ceil(x/factor)*factor
+
+def get_yticks(max_val, nticks=11):
+	vmax = ceil_msp(max_val)
+	tickspace = vmax/10
+	return np.arange(0, vmax+tickspace, tickspace)
 
 def standalone():
 	global __name__
 	__name__ = '__main__'
 	argument_parser = get_argument_parser()
 	args = parse_args(argument_parser)
-	for input_dir in args.input:
-		main(args, input_dir)
-
-if __name__ == '__main__':
-	argument_parser = get_argument_parser()
-	args = parse_args(argument_parser)
+	logger.info("Start processing the following directories:")
+	logger.info("\n".join(args.input))
 	if args.recursive:
 		# use exception ahndling in case of recursive
 		for input_dir in args.input:
@@ -723,3 +820,6 @@ if __name__ == '__main__':
 	else:
 		for input_dir in args.input:
 			main(args, input_dir)
+
+if __name__ == '__main__':
+	standalone()

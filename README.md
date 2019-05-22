@@ -22,7 +22,7 @@ sudo apt-get -y install git
 git clone --recurse-submodules https://github.com/MarkusHaak/dominION.git
 ```
 
-3. Run the setup script located in the directory dominION/script/setup
+3. Run the setup script located in the directory dominION/script/setup :
 
 > ***Info*** : Please **replace USER, HOST and DEST** with the information specific to the server to which the sequencing data shall be transmitted. *HOST* is either the remote server's ip address or, more commonly, its domain hostname. *USER* needs to be replaced with a username on that remote server, and *DEST* is the full path of a directory on the remote server where the transmitted files and folders shall be saved.
 
@@ -155,18 +155,35 @@ echo "if [ -f ~/.dominION/bin/activate ]; then . ~/.dominION/bin/activate; fi" >
 
 Optionally, you can change the startup page of Firefox to the dominION overview html file /data/dominION/HOSTNAME_overview.html .
 
-## Advanced Usage
+## Basic Usage
+
+DominION is intended to be run as a background process. If the quick setup was performed or the steps under recommended configuration were followed, dominion will start automatically as a cron job in a screen session on system startup. The command line options can be modified by editing the crontab list with ```crontab -e```.
+
+As an alternative to installing a cron job, dominion is started in a console after activating the python virtual environment:
+
+```bash
+. ~/.dominion/bin/activate
+dominion
+```
+
+All available command line options are listed and described in the section **Command Line Options**. Once started, no manual interaction with the dominion agent is necessary.
+
+> ***Info*** : Please make sure that dominION is running before starting a sequencing experiment.
+
+DominION automatically detects platform qc and sequencing experiments started in MinKNOW and updates the overview html page accordingly. The default path for all collected information and reports is `/data/dominion/`.
+
+## Command Line Options
 
 ### dominion
 
 ```
-usage: dominion [-o OUTPUT_DIR] [--data_basedir DATA_BASEDIR]
+usage: dominion [-n] [-a] [-p] [-l MIN_LENGTH] [-r MIN_LENGTH_RNA]
+                [-q MIN_QUALITY] [-d RSYNC_DEST] [-i IDENTITY_FILE]
+                [--bc_kws [BC_KWS [BC_KWS ...]]] [-u UPDATE_INTERVAL] [-m]
+                [-o OUTPUT_DIR] [--data_basedir DATA_BASEDIR]
                 [--minknow_log_basedir MINKNOW_LOG_BASEDIR]
-                [--logfile LOGFILE] [--bc_kws [BC_KWS [BC_KWS ...]]] [-n] [-a]
-                [-p] [-l MIN_LENGTH] [-q MIN_QUALITY] [-d RSYNC_DEST]
-                [-u UPDATE_INTERVAL] [-m]
-                [--statsparser_args STATSPARSER_ARGS] [-h] [--version] [-v]
-                [--quiet]
+                [--logfile LOGFILE] [--statsparser_args STATSPARSER_ARGS] [-h]
+                [--version] [-v] [--quiet]
 
 A tool for monitoring and protocoling sequencing runs performed on the Oxford
 Nanopore Technologies GridION sequencer and for automated post processing and
@@ -178,26 +195,39 @@ experiments.
 General arguments:
   arguments for advanced control of the program's behavior
 
-  --bc_kws [BC_KWS [BC_KWS ...]]
-                        if at least one of these key words is a substring of
-                        the run name, porechop is used to demultiplex the
-                        fastq data (default: ['RBK', 'NBD', 'RAB', 'LWB',
-                        'PBK', 'RPB', 'arcod'])
   -n, --no_transfer     no data transfer to the remote host (default: False)
   -a, --all_fast5       also put fast5 files of reads removed by length and
                         quality filtering into barcode bins (default: False)
   -p, --pass_only       use data from fastq_pass only (default: False)
   -l MIN_LENGTH, --min_length MIN_LENGTH
                         minimal length to pass filter (default: 1000)
+  -r MIN_LENGTH_RNA, --min_length_rna MIN_LENGTH_RNA
+                        minimal length to pass filter for rna libraries
+                        (default: 50)
   -q MIN_QUALITY, --min_quality MIN_QUALITY
                         minimal quality to pass filter (default: 5)
   -d RSYNC_DEST, --rsync_dest RSYNC_DEST
                         destination for data transfer with rsync, format
                         USER@HOST[:DEST]. Key authentication for the specified
-                        destination must be set up, otherwise data transfer
-                        will fail. Default value is parsed from setting file
+                        destination must be set up (see option -i), otherwise
+                        data transfer will fail. Default value is parsed from
+                        setting file /home/grid/.dominION/lib/python3.5/site-p
+                        ackages/dominion-0.4.2-py3.5.egg/dominion/resources/de
+                        faults.ini (default: cruecker@porta.cebitec.uni-
+                        bielefeld.de:/vol/nanopore/GridION_Runs/)
+  -i IDENTITY_FILE, --identity_file IDENTITY_FILE
+                        file from which the identity (private key) for public
+                        key authentication is read. Default value is parsed
+                        from setting file
                         /home/grid/.dominION/lib/python3.5/site-packages/domin
-                        ion-0.3.9-py3.5.egg/dominion/resources/defaults.ini
+                        ion-0.4.2-py3.5.egg/dominion/resources/defaults.ini
+                        (default: /home/grid/.ssh/id_dominion_85285851bbb872d7
+                        3158c65e9478f3bef61eb917)
+  --bc_kws [BC_KWS [BC_KWS ...]]
+                        if at least one of these key words is a substring of
+                        the run name, porechop is used to demultiplex the
+                        fastq data (default: ['RBK', 'NBD', 'RAB', 'LWB',
+                        'PBK', 'RPB', 'arcod'])
   -u UPDATE_INTERVAL, --update_interval UPDATE_INTERVAL
                         minimum time interval in seconds for updating the
                         content of a report page (default: 300)
@@ -241,15 +271,11 @@ Help:
 ### statsparser (standalone)
 
 ```
-usage: statsparser [-o OUTDIR] [--html_refresh_rate HTML_REFRESH_RATE]
+usage: statsparser [-r] [--html_refresh_rate HTML_REFRESH_RATE]
                    [--max_bins MAX_BINS] [--time_intervals TIME_INTERVALS]
                    [--kb_intervals KB_INTERVALS] [--gc_interval GC_INTERVAL]
-                   [--matplotlib_style MATPLOTLIB_STYLE]
-                   [--logdata_file LOGDATA_FILE]
-                   [--user_filename_input USER_FILENAME_INPUT]
-                   [--sample SAMPLE] [--minion_id MINION_ID]
-                   [--flowcell_id FLOWCELL_ID]
-                   [--protocol_start PROTOCOL_START] [-h] [--version] [-v]
+                   [--matplotlib_style MATPLOTLIB_STYLE] [--dpi DPI]
+                   [--width WIDTH] [--height HEIGHT] [-h] [--version] [-v]
                    [-q]
                    input
 
@@ -257,15 +283,14 @@ Parses a csv file containing statistics about a nanopore sequencing run and
 creates an in-depth report file including informative plots.
 
 Main options:
-  input                 Stats file containing read information, or
-                        a directory containing several such files. Requires
-                        CSV files with " " as seperator, no header and the
-                        following columns in given order: read_id, length,
-                        qscore, mean_gc, Passed/tooShort, read_number,
-                        pore_index, timestamp, barcode
-  -o OUTDIR, --outdir OUTDIR
-                        Path to a directory in which the report files and
-                        folders will be saved (default: directory of input)
+  input                 Stats file containing read information or a directory
+                        containing several such files. Requires CSV files with
+                        " " as seperator, no header and the following columns
+                        in given order: read_id, length, qscore, mean_gc,
+                        Passed/tooShort, read_number, pore_index, timestamp,
+                        barcode
+  -r, --recursive       recursively search for directories containing stats
+                        files and corresponding logdata files (default: False)
   --html_refresh_rate HTML_REFRESH_RATE
                         refresh rate of the html page in seconds (default:
                         120)
@@ -281,28 +306,14 @@ Plotting options:
                         kb intervals available for binning (default: [0.5,
                         1.0, 2.0, 5.0])
   --gc_interval GC_INTERVAL
-                        gc interval for binning reads based on mean gc content
-                        (default: 0.5)
+                        gc interval for binning reads based on mean G+C
+                        content (default: 0.5)
   --matplotlib_style MATPLOTLIB_STYLE
                         matplotlib style string that influences all colors and
                         plot appearances (default: default)
-
-Experiment options:
-  Arguments concerning the experiment. Either specify a logdata file or all
-  arguments individually.
-
-  --logdata_file LOGDATA_FILE
-                        path to the report file of this sequencing run
-                        (default: <run_id>_stats.json)
-  --user_filename_input USER_FILENAME_INPUT
-                        run title (default: Run#####_MIN###_KIT###)
-  --sample SAMPLE       sample name (default: Run#####_MIN###_KIT###)
-  --minion_id MINION_ID
-                        (default: GA#0000)
-  --flowcell_id FLOWCELL_ID
-                        (default: FAK#####)
-  --protocol_start PROTOCOL_START
-                        (default: YYYY-MM-DD hh:mm:ss.ms)
+  --dpi DPI
+  --width WIDTH         width of figure in inches (default: 6.4)
+  --height HEIGHT       height of figure in inches (default: 4.8)
 
 Help:
   -h, --help            Show this help message and exit

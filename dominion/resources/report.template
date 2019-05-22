@@ -53,6 +53,12 @@
           </div>
         </div>
 
+        <div class="contentline">
+          <div class="figure fifty">
+            <img class="figure image" src="res/plots/adapter_bin_barplot.png">
+          </div>
+        </div>
+
         {{ html_stats_df }}
 
         <br>

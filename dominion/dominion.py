@@ -85,6 +85,10 @@ def parse_args():
 							   type=int,
 							   default=1000,
 							   help='''minimal length to pass filter''')
+	general_group.add_argument('-r', '--min_length_rna',
+							   type=int,
+							   default=50,
+							   help='''minimal length to pass filter for rna libraries''')
 	general_group.add_argument('-q', '--min_quality',
 							   type=int,
 							   default=5,
@@ -174,7 +178,8 @@ def parse_args():
 		args.watchnchop_args.append('-a')
 	if args.pass_only:
 		args.watchnchop_args.append('-p')
-	args.watchnchop_args.extend(['-l', str(args.min_length)])
+	#args.watchnchop_args.extend(['-l', str(args.min_length)])
+	#args.watchnchop_args.extend(['-r', str(args.min_length_rna)])
 	args.watchnchop_args.extend(['-q', str(args.min_quality)])
 	args.watchnchop_args.extend(['-d', args.rsync_dest])
 	args.watchnchop_args.extend(['-i', args.identity_file])
@@ -240,6 +245,8 @@ def main(args):
 								args.statsparser_args,
 								args.update_interval,
 								args.watchnchop_args,
+								args.min_length,
+								args.min_length_rna,
 								args.bc_kws))
 
 	logger.info("initiating dominION overview page")
@@ -412,7 +419,7 @@ def get_latest(runs):
 	return latest_qc
 
 def update_overview(watchers, output_dir):
-	channel_to_css = {0:"GA10000", 1:"GA20000", 2:"GA30000", 3:"GA40000", 4:"GA50000"}
+	channel_to_css = {0:"one", 1:"two", 2:"three", 3:"four", 4:"five"}
 	render_dict = {"version"		:	__version__,
 				   "dateTimeNow"	:	datetime.now().strftime("%Y-%m-%d_%H:%M"),
 				   "channels"		: 	[],
@@ -609,8 +616,8 @@ class ChannelStatus():
 
 
 class WatchnchopScheduler(threading.Thread):
-
-	def __init__(self, data_basedir, relative_path, experiment, sample_frequency, bc_kws, stats_fp, channel, watchnchop_args):
+	def __init__(self, data_basedir, relative_path, experiment, sequencing_kit, fastq_reads_per_file,
+				 bc_kws, stats_fp, channel, watchnchop_args, min_length, min_length_rna):
 		threading.Thread.__init__(self)
 		if getattr(self, 'daemon', None) is None:
 			self.daemon = True
@@ -625,11 +632,18 @@ class WatchnchopScheduler(threading.Thread):
 		self.cmd = [which('perl'),
 					which('watchnchop'),
 					'-o', stats_fp,
-					'-f', str(sample_frequency)]
+					'-f', str(fastq_reads_per_file)]
 		if watchnchop_args:
 			self.cmd.extend(watchnchop_args)
-		if len([kw for kw in bc_kws if kw in experiment]) > 0:
-			self.cmd.append('-b')
+		for kw in bc_kws:
+			if kw.lower() in experiment.lower() or kw.lower() in sequencing_kit.lower():
+				self.cmd.append('-b')
+				break
+		self.cmd.append('-l')
+		if 'rna' in experiment.lower() or 'rna' in sequencing_kit.lower():
+			self.cmd.append(str(min_length_rna))
+		else:
+			self.cmd.append(str(min_length))
 		self.cmd.append(os.path.join(data_basedir, relative_path, ''))
 		self.process = None
 
@@ -637,7 +651,7 @@ class WatchnchopScheduler(threading.Thread):
 		self.logger.info("STARTED watchnchop scheduler")
 		while not (self.stoprequest.is_set() or self.exp_end.is_set()):
 			if self.conditions_met():
-				self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+				self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.IDLE_PRIORITY_CLASS)
 				self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(self.cmd))
 				break
 			time.sleep(1)
@@ -662,7 +676,7 @@ class WatchnchopScheduler(threading.Thread):
 					return
 				time.sleep(1)
 			if self.conditions_met():
-				self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+				self.process = subprocess.Popen(self.cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.IDLE_PRIORITY_CLASS)
 				self.logger.info("STARTED WATCHNCHOP with arguments: {}".format(self.cmd))
 			else:
 				self.logger.error("watchnchop NOT STARTED: directory {} still does not exist or contains no fastq files".format(self.observed_dir))
@@ -751,7 +765,10 @@ class StatsparserScheduler(threading.Thread):
 				basedir = os.path.abspath(self.sample_dir)
 				fp = os.path.join(basedir, 'report.html')
 				self.logger.info("OPENING " + fp)
-				webbrowser.open('file://' + os.path.realpath(fp))
+				try:
+					webbrowser.open('file://' + os.path.realpath(fp))
+				except:
+					pass
 				self.page_opened = True
 		else:
 			self.logger.warning("statsparser returned with errorcode {} for directory {}".format(cp.returncode, self.sample_dir))
@@ -767,9 +784,11 @@ class StatsparserScheduler(threading.Thread):
 class Watcher():
 
 	def __init__(self, minknow_log_basedir, channel, ignore_file_modifications, output_dir, data_basedir, 
-				 statsparser_args, update_interval, watchnchop_args, bc_kws):
+				 statsparser_args, update_interval, watchnchop_args, min_length, min_length_rna, bc_kws):
 		self.q = queue.PriorityQueue()
 		self.watchnchop_args = watchnchop_args
+		self.min_length = min_length
+		self.min_length_rna = min_length_rna
 		self.channel = channel
 		self.output_dir = output_dir
 		self.data_basedir = data_basedir
@@ -837,12 +856,7 @@ class Watcher():
 			if self.channel_status.mux_scans:
 				self.save_logdata()
 			self.channel_status.reset_channel()
-			#if self.spScheduler.is_alive() if self.spScheduler else None:
-			#	self.spScheduler.join(1.2)
 			self.stop_statsparser()
-			#self.spScheduler = None
-			#if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
-			#	self.wcScheduler[-1].join(1.2)
 			self.stop_watchnchop()
 
 		# 
@@ -853,12 +867,7 @@ class Watcher():
 			self.logger.info("FLOWCELL DISCOVERED")
 			set_update_overview()
 			self.channel_status.flowcell_disconnected()
-			#if self.spScheduler.is_alive() if self.spScheduler else None:
-			#	self.spScheduler.join(1.2)
 			self.stop_statsparser()
-			#self.spScheduler = None
-			#if self.wcScheduler[-1].is_alive() if self.wcScheduler else None:
-			#	self.wcScheduler[-1].join(1.2)
 			self.stop_watchnchop()
 
 		elif   	"[engine/info]: : data_acquisition_started"				in line:
@@ -878,6 +887,7 @@ class Watcher():
 				active_pores = m.group(1)
 			for m in re.finditer("Starting sequencing with ([0-9]+) pores", line):
 				in_use = m.group(1)
+			self.logger.info("new mux scan result: {} active, {} in use".format(active_pores, in_use))
 			self.channel_status.add_mux_scan(timestamp, active_pores, in_use=in_use)
 			set_update_overview()
 			self.save_logdata()
@@ -893,6 +903,11 @@ class Watcher():
 		if 		"INFO - Attribute"								in line:
 			for m in re.finditer("([^\s,]+) set to (.+)", line): 
 				dict_content[m.group(1)] = m.group(2)
+
+		elif 	"INFO - Asked to start protocol"				in line:
+			for m in re.finditer("'--([^\s,]+)=([^\s,]+)'", line):
+				dict_content[m.group(1)] = m.group(2)
+				overwrite = True
 
 		elif 	"INFO - Updating context tags in MinKNOW with" 	in line:
 			for m in re.finditer("'([^\s,]+)'[:,] u?'([^\s,]+)'", line):
@@ -915,39 +930,43 @@ class Watcher():
 		if dict_content:
 			self.channel_status.update(dict_content, overwrite)
 
+	def check_attributes(self, attributes):
+		for key in attributes:
+			if key in self.channel_status.run_data:
+				if self.channel_status.run_data[key]:
+					continue
+				else:
+					return key
+			elif key in self.channel_status.flowcell:
+				if self.channel_status.flowcell[key]:
+					continue
+				else:
+					return key
+			else:
+				return key
+		return None
+
+
 	def save_logdata(self):
-		for key in ['experiment_type', 'run_id', 'experiment', 'sample', 'relative_path']:
-			if key not in self.channel_status.run_data:
-				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
-				return
-			elif not self.channel_status.run_data[key]:
-				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because run_data is missing crucial attribute '{}'".format(self.channel+1, key))
-				return
-		for key in ['flowcell_id', 'asic_id_eeprom']:
-			if key not in self.channel_status.flowcell:
-				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because flowcell is missing crucial attribute '{}'".format(self.channel+1, key))
-				return
-			elif not self.channel_status.flowcell[key]:
-				self.logger.warning("NOT SAVING REPORT for channel GA{}0000 because flowcell is missing crucial attribute '{}'".format(self.channel+1, key))
-				return
+		missing_key = self.check_attributes(['experiment_type', 'run_id', 'flowcell_id', 'asic_id_eeprom'])
+		if missing_key:
+			self.logger.warning("NOT SAVING REPORT for {} because the crucial attribute '{}' is missing".format(self.channel_status.run_data['run_id'], missing_key))
+			return
 
 		fn = []
 		if "qc" in self.channel_status.run_data['experiment_type'].lower():
-			if self.channel_status.run_data['sample']:
-				self.logger.warning("NOT SAVING REPORT for {} because it is not absolutely clear if it a qc or sequencing run".format(self.channel_status.run_data['run_id']))
+			missing_key = self.check_attributes(['experiment', 'sample'])
+			if not missing_key:
+				self.logger.warning("NOT SAVING REPORT for {} because it is not certain that this is a qc run".format(self.channel_status.run_data['run_id']))
 				return
-			fn.append("QC")
-			fn.append(self.channel_status.flowcell['flowcell_id'])
-			fn.append(self.channel_status.run_data['run_id'])
-			target_dir = os.path.join(self.output_dir, 
-									  'qc')
+			fn.extend(["QC", self.channel_status.flowcell['flowcell_id'], self.channel_status.run_data['run_id']])
+			target_dir = os.path.join(self.output_dir, 'qc')
 		else:
-			for key in ['experiment', 'sample']:
-				if not self.channel_status.run_data[key]:
-					self.logger.warning("NOT SAVING LOG DATA because run_data is missing crucial attribute '{}'".format(key))
-					return
-			fn.append(self.channel_status.run_data['run_id'])
-			fn.append('logdata')
+			missing_key = self.check_attributes(['experiment', 'sample'])
+			if missing_key:
+				self.logger.warning("NOT SAVING REPORT for {} because the crucial attribute '{}' is missing".format(self.channel_status.run_data['run_id'], missing_key))
+				return
+			fn.extend([self.channel_status.run_data['run_id'], 'logdata'])
 			target_dir = os.path.join(self.output_dir,
 									  'runs', 
 									  self.channel_status.run_data['experiment'], 
@@ -976,13 +995,10 @@ class Watcher():
 		ALL_RUNS_LOCK.release()
 
 	def start_watchnchop(self):
-		for key in ['experiment', 'sample', 'relative_path', 'run_id', 'sample_frequency']:
-			if key not in self.channel_status.run_data:
-				self.logger.warning("NOT executing watchnchop because run_data is missing crucial attribute '{}'".format(key))
-				return
-			elif not self.channel_status.run_data[key]:
-				self.logger.warning("NOT executing watchnchop because run_data is missing crucial attribute '{}'".format(key))
-				return
+		missing_key = self.check_attributes(['experiment', 'sample', 'sequencing_kit', 'run_id', 'fastq_reads_per_file', 'relative_path'])
+		if missing_key:
+			self.logger.warning("NOT executing watchnchop because the crucial attribute '{}' is missing".format(missing_key))
+			return
 
 		self.stop_watchnchop()
 
@@ -994,11 +1010,14 @@ class Watcher():
 		self.wcScheduler.append(WatchnchopScheduler(self.data_basedir,
 													self.channel_status.run_data['relative_path'],
 													self.channel_status.run_data['experiment'],
-													self.channel_status.run_data['sample_frequency'],
+													self.channel_status.run_data['sequencing_kit'],
+													self.channel_status.run_data['fastq_reads_per_file'],
 													self.bc_kws,
 													stats_fp,
 													self.channel,
-													self.watchnchop_args))
+													self.watchnchop_args,
+													self.min_length,
+													self.min_length_rna))
 		self.wcScheduler[-1].start()
 		return
 
@@ -1010,13 +1029,11 @@ class Watcher():
 				self.wcScheduler[-1].join()
 
 	def start_statsparser(self):
-		for key in ['experiment', 'sample']:
-			if not key in  self.channel_status.run_data:
-				self.logger.warning("NOT starting statsparser scheduler because run_data is missing crucial attribute '{}'".format(key))
-				return
-			elif not self.channel_status.run_data[key]:
-				self.logger.warning("NOT starting statsparser scheduler because run_data is missing crucial attribute '{}'".format(key))
-				return
+		missing_key = self.check_attributes(['experiment', 'sample'])
+		if missing_key:
+			self.logger.warning("NOT starting statsparser scheduler because the crucial attribute '{}' is missing".format(missing_key))
+			return
+
 		#start creation of plots at regular time intervals
 		self.stop_statsparser()
 		sample_dir = os.path.join(self.output_dir,
